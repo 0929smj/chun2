@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { AttendanceRecord, Member, AttendanceType } from '../types';
 import { getWeeklyStats, getGroupStats } from '../services/dataService';
-import { SUNDAYS_2024 } from '../services/mockData';
+import { SUNDAYS_2026 } from '../services/mockData';
 
 interface DashboardProps {
   members: Member[];
@@ -21,7 +21,7 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ members, records }) => {
-  const weeklyStats = useMemo(() => getWeeklyStats(records, SUNDAYS_2024), [records]);
+  const weeklyStats = useMemo(() => getWeeklyStats(records, SUNDAYS_2026), [records]);
   const groupStats = useMemo(() => getGroupStats(members, records), [members, records]);
 
   // Calculate totals
@@ -33,7 +33,7 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records }) => {
     <div className="space-y-8">
       <header className="mb-8">
         <h2 className="text-3xl font-bold text-slate-800">대시보드</h2>
-        <p className="text-slate-500">2024년 전체 출석 통계 현황입니다.</p>
+        <p className="text-slate-500">2026년 전체 출석 통계 현황입니다.</p>
       </header>
 
       {/* Stats Cards */}

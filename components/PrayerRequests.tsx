@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Member, PrayerRecord } from '../types';
 import { Quote, AlertCircle, Calendar, User, Search } from 'lucide-react';
-import { SUNDAYS_2024 } from '../services/mockData';
+import { SUNDAYS_2026 } from '../services/mockData';
 
 interface PrayerRequestsProps {
   members: Member[];
@@ -10,7 +10,7 @@ interface PrayerRequestsProps {
 
 const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords }) => {
   const [viewMode, setViewMode] = useState<'member' | 'date'>('date');
-  const [selectedDate, setSelectedDate] = useState<string>(SUNDAYS_2024[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(SUNDAYS_2026[0]);
   const [searchTerm, setSearchTerm] = useState('');
 
   // View 1: By Date - Group by Small Group/Wool directly (Flattened)
@@ -83,7 +83,7 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords 
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
           >
-            {SUNDAYS_2024.slice().reverse().map(d => ( // Show newest first
+            {SUNDAYS_2026.slice().reverse().map(d => ( // Show newest first
               <option key={d} value={d}>{d}</option>
             ))}
           </select>

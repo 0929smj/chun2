@@ -18,7 +18,7 @@ export const getSundays = (year: number) => {
   return sundays;
 };
 
-export const SUNDAYS_2024 = getSundays(2024);
+export const SUNDAYS_2026 = getSundays(2026);
 
 // Generate Members
 export const generateMembers = (): Member[] => {
@@ -48,25 +48,25 @@ export const generateMembers = (): Member[] => {
 export const generateMeetingStatus = (): MeetingStatus[] => {
   const statuses: MeetingStatus[] = [];
   // Example: No Wool meeting on the first Sunday
-  if (SUNDAYS_2024.length > 0) {
+  if (SUNDAYS_2026.length > 0) {
     statuses.push({
-      date: SUNDAYS_2024[0],
+      date: SUNDAYS_2026[0],
       type: AttendanceType.Wool,
       isCanceled: true
     });
   }
   // Example: No Gathering on the 4th Sunday
-  if (SUNDAYS_2024.length > 3) {
+  if (SUNDAYS_2026.length > 3) {
     statuses.push({
-      date: SUNDAYS_2024[3],
+      date: SUNDAYS_2026[3],
       type: AttendanceType.Gathering,
       isCanceled: true
     });
   }
   // Example: No Wool on the 5th Sunday
-  if (SUNDAYS_2024.length > 4) {
+  if (SUNDAYS_2026.length > 4) {
     statuses.push({
-      date: SUNDAYS_2024[4],
+      date: SUNDAYS_2026[4],
       type: AttendanceType.Wool,
       isCanceled: true
     });
@@ -79,7 +79,7 @@ export const INITIAL_MEETING_STATUS = generateMeetingStatus();
 // Generate Attendance
 export const generateAttendance = (members: Member[], year: number): AttendanceRecord[] => {
   const records: AttendanceRecord[] = [];
-  const sundays = SUNDAYS_2024;
+  const sundays = SUNDAYS_2026;
   let idCounter = 1;
 
   sundays.forEach(date => {
@@ -117,7 +117,7 @@ export const generatePrayerRecords = (members: Member[]): PrayerRecord[] => {
   let idCounter = 1;
   
   // Generate distinct requests for random sundays
-  SUNDAYS_2024.forEach((date, idx) => {
+  SUNDAYS_2026.forEach((date, idx) => {
     // Only generate for past/current dates (simulated by index < 10 for demo)
     if (idx < 10) { 
       members.forEach(member => {
@@ -146,5 +146,5 @@ export const generatePrayerRecords = (members: Member[]): PrayerRecord[] => {
 };
 
 export const INITIAL_MEMBERS = generateMembers();
-export const INITIAL_ATTENDANCE = generateAttendance(INITIAL_MEMBERS, 2024);
+export const INITIAL_ATTENDANCE = generateAttendance(INITIAL_MEMBERS, 2026);
 export const INITIAL_PRAYER_RECORDS = generatePrayerRecords(INITIAL_MEMBERS);

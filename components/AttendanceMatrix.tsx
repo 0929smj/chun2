@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Member, AttendanceRecord, AttendanceType, MeetingStatus } from '../types';
-import { SUNDAYS_2024 } from '../services/mockData';
+import { SUNDAYS_2026 } from '../services/mockData';
 import { Check } from 'lucide-react';
 
 interface AttendanceMatrixProps {
@@ -19,7 +19,7 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
 
   // Filter Sundays for the selected month
   const currentMonthSundays = useMemo(() => {
-    return SUNDAYS_2024.filter(date => new Date(date).getMonth() === selectedMonth);
+    return SUNDAYS_2026.filter(date => new Date(date).getMonth() === selectedMonth);
   }, [selectedMonth]);
 
   // Filter Members

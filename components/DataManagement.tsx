@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Member, AttendanceRecord, AttendanceType, MeetingStatus } from '../types';
 import { Plus, Edit2, Save, Trash2, X, Phone, ArrowUpDown, Settings, Link as LinkIcon, AlertCircle, Copy, Check } from 'lucide-react';
-import { SUNDAYS_2024 } from '../services/mockData';
+import { SUNDAYS_2026 } from '../services/mockData';
 import { getScriptUrl, setScriptUrl, fetchSheetData } from '../services/sheetService';
 
 interface DataManagementProps {
@@ -96,7 +96,7 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
   const [sortConfig, setSortConfig] = useState<{ key: keyof Member; direction: 'asc' | 'desc' } | null>(null);
 
   // Attendance Filter States
-  const [selectedDate, setSelectedDate] = useState<string>(SUNDAYS_2024[SUNDAYS_2024.length - 1]);
+  const [selectedDate, setSelectedDate] = useState<string>(SUNDAYS_2026[SUNDAYS_2026.length - 1]);
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<string>('all');
 
   const allGroups = useMemo(() => Array.from(new Set(members.map(m => m.group))).sort(), [members]);
@@ -357,7 +357,7 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
                 >
-                  {SUNDAYS_2024.map(d => (
+                  {SUNDAYS_2026.map(d => (
                     <option key={d} value={d}>{d}</option>
                   ))}
                 </select>
