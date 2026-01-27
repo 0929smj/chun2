@@ -15,18 +15,44 @@ interface DataManagementProps {
 
 const GAS_CODE_SNIPPET = `
 /* 
- [구글 스프레드시트 연결 스크립트 v2.0]
+ [구글 스프레드시트 연결 스크립트 v2.2]
  
- 1. 확장 프로그램 > Apps Script 에 붙여넣기
- 2. [배포] > [새 배포]
-    - 설명: "v1" 등 입력
-    - 다음 사용자 등으로서 실행: **'나(웹 앱 소유자)'** (중요!)
-    - 액세스 권한 승인: **'모든 사용자'** (중요! 구글 로그인 없이 접근 가능해야 함)
- 3. 배포 후 '웹 앱 URL' 복사 (https://script.google.com/.../exec)
+ 1. 스프레드시트 메뉴: 확장 프로그램 > Apps Script 클릭
+ 2. [Code.gs] 내용 모두 지우고 이 코드 붙여넣기
+ 3. (중요) 스크립트를 만든 시트와 데이터 시트가 다르다면 
+    아래 'TARGET_SPREADSHEET_ID'에 해당 시트 ID 입력
+ 4. [배포] > [새 배포] > '모든 사용자' 권한 설정 후 URL 복사
 */
 
+// ▼▼▼ 설정 영역 ▼▼▼
+
+// 만약 스크립트가 있는 파일과 데이터가 있는 파일이 다르다면,
+// 데이터가 있는 스프레드시트의 ID(URL 중간의 긴 문자열)를 따옴표 안에 넣으세요.
+// 예: "1LoEMB6uQXQ_qW40IKGNQMaFL9dKd5X-5c8TFrRtq1Ys"
+const TARGET_SPREADSHEET_ID = ""; 
+
+// ▲▲▲ 설정 영역 끝 ▲▲▲
+
+function getDB() {
+  if (TARGET_SPREADSHEET_ID && TARGET_SPREADSHEET_ID.length > 10) {
+    try {
+      return SpreadsheetApp.openById(TARGET_SPREADSHEET_ID);
+    } catch (e) {
+      console.error("Invalid Spreadsheet ID or Permission denied: " + e.toString());
+    }
+  }
+  return SpreadsheetApp.getActiveSpreadsheet();
+}
+
 function doGet(e) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getDB();
+  
+  if (!ss) {
+    return ContentService.createTextOutput(JSON.stringify({
+      status: 'error',
+      message: 'Cannot access spreadsheet. Check ID or Permissions.'
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
   
   // 시트 이름 대소문자 무시하고 찾기
   // 필수 시트: members, SessionConfig, attendance
@@ -97,12 +123,38 @@ function doGet(e) {
     attendance: attendance,
     prayers: prayers,
     meetingStatus: meetingStatus,
-    debug_sheets: availableSheets
+    debug_sheets: availableSheets,
+    connected_id: ss.getId()
   })).setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
-  // 데이터 쓰기 로직 (간소화)
+  const ss = getDB();
+  let request;
+  try {
+    request = JSON.parse(e.postData.contents);
+  } catch(e) {
+    return ContentService.createTextOutput(JSON.stringify({status: 'error', message: 'Invalid JSON'}))
+       .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  const { action, payload } = request;
+  const lock = LockService.getScriptLock();
+  lock.tryLock(10000);
+
+  try {
+    if (action === 'UPDATE_ATTENDANCE') {
+      updateAttendance(ss, payload);
+    } else if (action === 'ADD_MEMBER') {
+      appendRow(ss, 'members', payload);
+    }
+  } catch(err) {
+    return ContentService.createTextOutput(JSON.stringify({status: 'error', message: err.toString()}))
+       .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
+  }
+  
   return ContentService.createTextOutput(JSON.stringify({result: 'success'}))
     .setMimeType(ContentService.MimeType.JSON);
 }
@@ -146,6 +198,77 @@ function isChecked(val) {
     return v === 'TRUE' || v === 'O' || v === 'Y' || v === 'YES';
   }
   return false;
+}
+
+function updateAttendance(ss, { memberId, date, type, isAdd }) {
+  // 1. Attendance 시트 찾기 또는 생성
+  let sheet = ss.getSheets().find(s => s.getName().toLowerCase() === 'attendance');
+  if (!sheet) {
+    sheet = ss.insertSheet('attendance');
+    sheet.appendRow(['Date', 'MemberID', 'Worship', 'Gathering', 'Wool', 'PrayerRequest']);
+  }
+  
+  // 2. 데이터가 없으면 헤더 추가
+  if (sheet.getLastRow() === 0) {
+      sheet.appendRow(['Date', 'MemberID', 'Worship', 'Gathering', 'Wool', 'PrayerRequest']);
+  }
+
+  // 3. 헤더 매핑
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+                  .map(h => String(h).toLowerCase().replace(/\\s/g, ''));
+  
+  const dateIdx = headers.indexOf('date');
+  const idIdx = headers.indexOf('memberid');
+  
+  // 타입에 따른 컬럼명 매핑 (한글/영어 모두 지원)
+  let typeColName = '';
+  if (type === '예배') typeColName = 'worship';
+  else if (type === '집회') typeColName = 'gathering';
+  else if (type === '울모임') typeColName = 'wool';
+  
+  let typeIdx = headers.indexOf(typeColName);
+  
+  // 컬럼이 없으면 에러 혹은 무시 (여기서는 무시)
+  if (dateIdx === -1 || idIdx === -1 || typeIdx === -1) return;
+
+  // 4. 기존 데이터 검색 (역순 탐색)
+  // 단순화를 위해 Date + MemberID 가 일치하는 마지막 행을 찾음
+  const data = sheet.getDataRange().getValues();
+  let foundRowIndex = -1;
+
+  for (let i = data.length - 1; i >= 1; i--) {
+    const rowDate = formatDate(data[i][dateIdx]);
+    const rowId = String(data[i][idIdx]);
+    
+    if (rowDate === date && rowId === memberId) {
+      foundRowIndex = i + 1; // 1-based index
+      break;
+    }
+  }
+
+  // 5. 업데이트 또는 추가
+  if (foundRowIndex > 0) {
+    // 기존 행 업데이트
+    sheet.getRange(foundRowIndex, typeIdx + 1).setValue(isAdd);
+  } else if (isAdd) {
+    // 새 행 추가 (존재하지 않고, isAdd가 true일 때만)
+    const newRow = new Array(headers.length).fill('');
+    newRow[dateIdx] = date;
+    newRow[idIdx] = memberId;
+    newRow[typeIdx] = true;
+    sheet.appendRow(newRow);
+  }
+}
+
+function appendRow(ss, sheetName, dataObj) {
+  let sheet = ss.getSheets().find(s => s.getName().toLowerCase() === sheetName.toLowerCase());
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+    sheet.appendRow(Object.keys(dataObj));
+  }
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const row = headers.map(h => dataObj[h.toLowerCase()] || dataObj[h] || '');
+  sheet.appendRow(row);
 }
 `;
 
@@ -241,7 +364,9 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
       .then((data) => {
         // Check if data is empty (potential sheet name mismatch)
         if (data.members.length === 0) {
-           alert("연결은 성공했으나 멤버 데이터를 가져오지 못했습니다.\n스프레드시트에 'Members' 시트가 있는지 확인해주세요.");
+           const sheetNames = data.debug_sheets ? data.debug_sheets.join(', ') : '알 수 없음';
+           const connectedId = (data as any).connected_id || '알 수 없음';
+           alert(`연결은 성공했으나 'members' 데이터를 가져오지 못했습니다.\n\n[진단 정보]\n연결된 시트 ID: ${connectedId}\n발견된 시트 목록: [ ${sheetNames} ]\n\n[해결 방법]\n1. 스크립트 코드 최상단의 'TARGET_SPREADSHEET_ID'에 연결하려는 시트의 ID가 올바르게 입력되었는지 확인하세요.\n2. 해당 시트에 'Members' 탭이 있는지 확인하세요.`);
         }
         setConnectionStatus('success');
         setTimeout(() => {
@@ -463,6 +588,9 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
 
             <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6">
               <h4 className="font-bold text-slate-700 mb-2">1단계: 스크립트 복사 및 배포</h4>
+              <p className="text-sm text-slate-600 mb-2">
+                 아래 코드를 복사하여 Google Spreadsheet &gt; 확장 프로그램 &gt; Apps Script 의 <strong>Code.gs</strong> 파일 내용을 모두 지우고 붙여넣으세요.
+              </p>
               <div className="relative group">
                 <pre className="bg-slate-800 text-slate-200 p-4 rounded-lg text-xs overflow-x-auto h-48 custom-scrollbar font-mono">
                   {GAS_CODE_SNIPPET}
@@ -474,6 +602,9 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
                 >
                   {copySuccess ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
                 </button>
+              </div>
+              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-800">
+                <strong>주의:</strong> 스크립트를 생성한 파일과 데이터가 있는 파일이 다르다면, 위 코드 맨 윗부분의 <code>TARGET_SPREADSHEET_ID</code> 변수에 데이터 파일의 ID를 꼭 입력해야 합니다.
               </div>
             </div>
 
