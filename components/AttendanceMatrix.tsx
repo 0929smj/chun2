@@ -7,14 +7,14 @@ interface AttendanceMatrixProps {
   members: Member[];
   records: AttendanceRecord[];
   meetingStatus: MeetingStatus[];
+  availableGroups: string[];
   onToggleAttendance: (memberId: string, date: string, type: AttendanceType) => void;
 }
 
-const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, meetingStatus, onToggleAttendance }) => {
+const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, meetingStatus, availableGroups, onToggleAttendance }) => {
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth()); // 0-11
   const [filterGroup, setFilterGroup] = useState<string>('all');
 
-  const groups = useMemo(() => Array.from(new Set(members.map(m => m.group))), [members]);
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
   // Filter Sundays for the selected month
@@ -45,17 +45,34 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
   };
 
   const calculateTotal = (memberId: string, type: AttendanceType) => {
-    // Only count if meeting was NOT canceled
+    // Count records regardless of 'canceled' status (Actual data takes precedence)
     return records.filter(r => {
-      const canceled = isMeetingCanceled(r.date, type);
-      return !canceled && r.memberId === memberId && currentMonthSundays.includes(r.date) && r.types.includes(type);
+      return r.memberId === memberId && currentMonthSundays.includes(r.date) && r.types.includes(type);
     }).length;
   };
 
   // Render Cell Logic
   const renderCell = (memberId: string, date: string, type: AttendanceType, activeColorClass: string, hoverClass: string) => {
+    const attended = getStatus(memberId, date, type);
     const canceled = isMeetingCanceled(date, type);
     
+    // Priority: If attended, show CHECK (even if config says canceled). 
+    // If not attended, check if canceled.
+    
+    if (attended) {
+       return (
+        <td 
+          key={`${memberId}-${date}-${type}`} 
+          onClick={() => onToggleAttendance(memberId, date, type)}
+          className={`px-2 py-2 border border-slate-200 text-center cursor-pointer transition-colors ${hoverClass}`}
+        >
+          <div className={`flex justify-center ${activeColorClass}`}>
+             <Check size={16} strokeWidth={3} />
+          </div>
+        </td>
+       );
+    }
+
     if (canceled) {
       return (
         <td key={`${memberId}-${date}-${type}`} className="px-2 py-2 border border-slate-200 text-center bg-slate-100 text-slate-400">
@@ -64,19 +81,12 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
       );
     }
 
-    const attended = getStatus(memberId, date, type);
-
     return (
       <td 
         key={`${memberId}-${date}-${type}`} 
         onClick={() => onToggleAttendance(memberId, date, type)}
         className={`px-2 py-2 border border-slate-200 text-center cursor-pointer transition-colors ${hoverClass}`}
       >
-        {attended && (
-          <div className={`flex justify-center ${activeColorClass}`}>
-             <Check size={16} strokeWidth={3} />
-          </div>
-        )}
       </td>
     );
   };
@@ -106,7 +116,7 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
               onChange={(e) => setFilterGroup(e.target.value)}
             >
               <option value="all">전체 소그룹/울</option>
-              {groups.map(g => (
+              {availableGroups.map(g => (
                 <option key={g} value={g}>{g}</option>
               ))}
             </select>

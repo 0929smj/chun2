@@ -15,6 +15,7 @@ const App: React.FC = () => {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [prayerRecords, setPrayerRecords] = useState<PrayerRecord[]>([]);
   const [meetingStatus, setMeetingStatus] = useState<MeetingStatus[]>([]);
+  const [groups, setGroups] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [usingMock, setUsingMock] = useState(false);
 
@@ -30,6 +31,15 @@ const App: React.FC = () => {
         setRecords(data.attendance || []);
         setPrayerRecords(data.prayers || []);
         setMeetingStatus(data.meetingStatus || []);
+        
+        // If groups are returned from API, use them. Otherwise derive from members.
+        if (data.groups && data.groups.length > 0) {
+          setGroups(data.groups);
+        } else {
+          const derivedGroups = Array.from(new Set((data.members || []).map(m => m.group))).sort();
+          setGroups(derivedGroups);
+        }
+
         setUsingMock(false);
       } catch (e) {
         console.error("Failed to load live data, falling back to mock", e);
@@ -50,6 +60,9 @@ const App: React.FC = () => {
     setRecords(INITIAL_ATTENDANCE);
     setPrayerRecords(INITIAL_PRAYER_RECORDS);
     setMeetingStatus(INITIAL_MEETING_STATUS);
+    // Derive groups for mock data
+    const mockGroups = Array.from(new Set(INITIAL_MEMBERS.map(m => m.group))).sort();
+    setGroups(mockGroups);
   };
 
   useEffect(() => {
@@ -130,11 +143,21 @@ const App: React.FC = () => {
                 members={members} 
                 records={records} 
                 meetingStatus={meetingStatus}
+                availableGroups={groups}
                 onToggleAttendance={toggleAttendance}
               />
             } 
           />
-          <Route path="/prayer" element={<PrayerRequests members={members} prayerRecords={prayerRecords} />} />
+          <Route 
+            path="/prayer" 
+            element={
+              <PrayerRequests 
+                members={members} 
+                prayerRecords={prayerRecords} 
+                availableGroups={groups}
+              />
+            } 
+          />
           <Route 
             path="/manage" 
             element={
@@ -143,6 +166,7 @@ const App: React.FC = () => {
                 setMembers={setMembers} 
                 records={records}
                 meetingStatus={meetingStatus}
+                availableGroups={groups}
                 onToggleAttendance={toggleAttendance}
                 refreshData={loadData}
               />

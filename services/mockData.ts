@@ -6,13 +6,22 @@ const NAMES = ['김철수', '이영희', '박지성', '최동원', '정우성', 
 
 // Helper to generate Sundays
 export const getSundays = (year: number) => {
-  const date = new Date(year, 0, 1);
   const sundays: string[] = [];
+  const date = new Date(year, 0, 1);
+  
+  // Find the first Sunday
   while (date.getDay() !== 0) {
     date.setDate(date.getDate() + 1);
   }
+
+  // Loop through the year
   while (date.getFullYear() === year) {
-    sundays.push(date.toISOString().split('T')[0]);
+    // Manually format YYYY-MM-DD to avoid UTC timezone shifts causing "Saturday" issues
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    sundays.push(`${y}-${m}-${d}`);
+    
     date.setDate(date.getDate() + 7);
   }
   return sundays;
@@ -20,22 +29,24 @@ export const getSundays = (year: number) => {
 
 export const SUNDAYS_2026 = getSundays(2026);
 
-// Generate Members
+// Generate Members with Mxxxx IDs
 export const generateMembers = (): Member[] => {
   const members: Member[] = [];
-  let idCounter = 1;
+  let idCounter = 1000;
 
   GROUPS.forEach(group => {
     // 3-5 members per group
     const memberCount = Math.floor(Math.random() * 3) + 3;
     for (let i = 0; i < memberCount; i++) {
-      const name = NAMES[Math.floor(Math.random() * NAMES.length)] + idCounter;
+      const name = NAMES[Math.floor(Math.random() * NAMES.length)] + (i + 1);
       members.push({
-        id: `m-${idCounter}`,
+        id: `M${idCounter}`,
         name: name,
         group: group,
-        wool: group, // Syncing wool with group as they are the same concept now
+        wool: group,
         phoneNumber: `010-${Math.floor(Math.random()*9000)+1000}-${Math.floor(Math.random()*9000)+1000}`,
+        role: '성도',
+        status: 'ACTIVE',
         specialNotes: Math.random() > 0.8 ? '최근 이사함' : '',
       });
       idCounter++;

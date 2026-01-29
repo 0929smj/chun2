@@ -10,6 +10,8 @@ export interface Member {
   group: string; // 소그룹/울 (Combined concept)
   wool: string; // Kept for internal structure if needed, but treated same as group in UI
   phoneNumber?: string; // 연락처
+  role?: string; // 직분 (e.g. 성도, 집사, etc.)
+  status?: string; // 상태 (e.g. ACTIVE)
   specialNotes?: string;
   latestPrayerRequest?: string; 
 }
@@ -19,6 +21,7 @@ export interface PrayerRecord {
   memberId: string;
   date: string; // YYYY-MM-DD
   content: string;
+  note?: string; // Date-specific special note from attendance sheet
 }
 
 export interface AttendanceRecord {

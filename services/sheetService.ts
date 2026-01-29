@@ -10,6 +10,7 @@ interface SheetDataResponse {
   attendance: AttendanceRecord[];
   prayers: PrayerRecord[];
   meetingStatus: MeetingStatus[];
+  groups: string[]; // Added groups
   status: 'success' | 'error';
   debug_sheets?: string[];
 }
