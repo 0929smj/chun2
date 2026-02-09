@@ -50,6 +50,13 @@ export interface WeeklyStats {
   woolCount: number;
 }
 
+export interface MonthlyStats {
+  month: string;
+  worshipAverage: number;
+  gatheringAverage: number;
+  woolAverage: number;
+}
+
 export interface GroupStats {
   groupName: string;
   totalWorship: number;

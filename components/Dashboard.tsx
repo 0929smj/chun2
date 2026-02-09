@@ -12,7 +12,7 @@ import {
   Legend
 } from 'recharts';
 import { AttendanceRecord, Member, AttendanceType } from '../types';
-import { getWeeklyStats, getGroupStats } from '../services/dataService';
+import { getWeeklyStats, getGroupStats, getMonthlyStats } from '../services/dataService';
 import { SUNDAYS_2026 } from '../services/mockData';
 
 interface DashboardProps {
@@ -22,6 +22,7 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ members, records }) => {
   const weeklyStats = useMemo(() => getWeeklyStats(records, SUNDAYS_2026), [records]);
+  const monthlyStats = useMemo(() => getMonthlyStats(records, SUNDAYS_2026), [records]);
   const groupStats = useMemo(() => getGroupStats(members, records), [members, records]);
 
   // Calculate totals
@@ -123,6 +124,65 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records }) => {
                 <td className="px-4 py-2 font-bold text-emerald-600 border bg-slate-50">울모임</td>
                 {weeklyStats.map(stat => (
                   <td key={stat.date} className="px-2 py-2 border">{stat.woolCount}</td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Monthly Average Chart */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <h3 className="text-lg font-bold text-slate-800 mb-6">월별 평균 출석 현황</h3>
+        <div className="h-80 w-full mb-8">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={monthlyStats} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+              <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} />
+              <YAxis stroke="#94a3b8" fontSize={12} />
+              <Tooltip 
+                cursor={{ fill: '#f1f5f9' }}
+                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+              />
+              <Legend />
+              <Bar dataKey="worshipAverage" name="예배 평균" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="gatheringAverage" name="집회 평균" fill="#6366f1" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="woolAverage" name="울모임 평균" fill="#10b981" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        
+        {/* Monthly Stats Table */}
+        <div className="overflow-x-auto custom-scrollbar border-t border-slate-100 pt-6">
+          <h4 className="text-sm font-bold text-slate-600 mb-4">월별 상세 데이터 (평균)</h4>
+          <table className="w-full text-sm text-center text-slate-500">
+            <thead className="text-xs text-slate-700 uppercase bg-slate-50">
+              <tr>
+                <th scope="col" className="px-4 py-2 border rounded-tl-lg">구분</th>
+                {monthlyStats.map(stat => (
+                  <th key={stat.month} scope="col" className="px-2 py-2 border min-w-[50px]">
+                    {stat.month}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="bg-white border-b">
+                <td className="px-4 py-2 font-bold text-blue-600 border bg-slate-50">예배</td>
+                {monthlyStats.map(stat => (
+                  <td key={stat.month} className="px-2 py-2 border">{stat.worshipAverage}</td>
+                ))}
+              </tr>
+              <tr className="bg-white border-b">
+                <td className="px-4 py-2 font-bold text-indigo-600 border bg-slate-50">집회</td>
+                {monthlyStats.map(stat => (
+                  <td key={stat.month} className="px-2 py-2 border">{stat.gatheringAverage}</td>
+                ))}
+              </tr>
+              <tr className="bg-white border-b">
+                <td className="px-4 py-2 font-bold text-emerald-600 border bg-slate-50">울모임</td>
+                {monthlyStats.map(stat => (
+                  <td key={stat.month} className="px-2 py-2 border">{stat.woolAverage}</td>
                 ))}
               </tr>
             </tbody>

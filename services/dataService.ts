@@ -1,4 +1,4 @@
-import { AttendanceRecord, Member, WeeklyStats, AttendanceType, GroupStats } from '../types';
+import { AttendanceRecord, Member, WeeklyStats, AttendanceType, GroupStats, MonthlyStats } from '../types';
 
 export const getWeeklyStats = (records: AttendanceRecord[], dates: string[]): WeeklyStats[] => {
   return dates.map(date => {
@@ -10,6 +10,45 @@ export const getWeeklyStats = (records: AttendanceRecord[], dates: string[]): We
       woolCount: dailyRecords.filter(r => r.types.includes(AttendanceType.Wool)).length,
     };
   });
+};
+
+export const getMonthlyStats = (records: AttendanceRecord[], dates: string[]): MonthlyStats[] => {
+  const stats: MonthlyStats[] = [];
+  
+  for (let i = 1; i <= 12; i++) {
+    const monthName = `${i}월`;
+    
+    // Get sundays in this month using string manipulation (YYYY-MM-DD) to avoid timezone issues
+    const sundaysInMonth = dates.filter(date => {
+      const m = parseInt(date.substring(5, 7), 10);
+      return m === i;
+    });
+
+    if (sundaysInMonth.length === 0) {
+      stats.push({ month: monthName, worshipAverage: 0, gatheringAverage: 0, woolAverage: 0 });
+      continue;
+    }
+
+    let sumWorship = 0;
+    let sumGathering = 0;
+    let sumWool = 0;
+
+    sundaysInMonth.forEach(date => {
+       const dailyRecords = records.filter(r => r.date === date);
+       sumWorship += dailyRecords.filter(r => r.types.includes(AttendanceType.Worship)).length;
+       sumGathering += dailyRecords.filter(r => r.types.includes(AttendanceType.Gathering)).length;
+       sumWool += dailyRecords.filter(r => r.types.includes(AttendanceType.Wool)).length;
+    });
+
+    stats.push({
+      month: monthName,
+      worshipAverage: parseFloat((sumWorship / sundaysInMonth.length).toFixed(1)),
+      gatheringAverage: parseFloat((sumGathering / sundaysInMonth.length).toFixed(1)),
+      woolAverage: parseFloat((sumWool / sundaysInMonth.length).toFixed(1))
+    });
+  }
+  
+  return stats;
 };
 
 export const getGroupStats = (members: Member[], records: AttendanceRecord[]): GroupStats[] => {

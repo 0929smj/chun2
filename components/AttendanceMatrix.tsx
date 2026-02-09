@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Member, AttendanceRecord, AttendanceType, MeetingStatus } from '../types';
 import { SUNDAYS_2026 } from '../services/mockData';
-import { Check } from 'lucide-react';
+import { Check, Search } from 'lucide-react';
 
 interface AttendanceMatrixProps {
   members: Member[];
@@ -12,20 +12,39 @@ interface AttendanceMatrixProps {
 }
 
 const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, meetingStatus, availableGroups, onToggleAttendance }) => {
-  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth()); // 0-11
+  // Store selectedMonth as string to handle 'all'
+  const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth())); 
   const [filterGroup, setFilterGroup] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
-  // Filter Sundays for the selected month
+  // Filter Sundays for the selected month or all year
   const currentMonthSundays = useMemo(() => {
-    return SUNDAYS_2026.filter(date => new Date(date).getMonth() === selectedMonth);
+    if (selectedMonth === 'all') {
+      return SUNDAYS_2026;
+    }
+    const monthIndex = parseInt(selectedMonth, 10);
+    return SUNDAYS_2026.filter(date => new Date(date).getMonth() === monthIndex);
   }, [selectedMonth]);
 
   // Filter Members
   const filteredMembers = useMemo(() => {
-    return filterGroup === 'all' ? members : members.filter(m => m.group === filterGroup);
-  }, [members, filterGroup]);
+    let result = members;
+
+    // Filter by Group
+    if (filterGroup !== 'all') {
+      result = result.filter(m => m.group === filterGroup);
+    }
+
+    // Filter by Search Query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      result = result.filter(m => m.name.toLowerCase().includes(query));
+    }
+
+    return result;
+  }, [members, filterGroup, searchQuery]);
 
   // Sorting: Group -> Name
   const sortedMembers = useMemo(() => {
@@ -99,12 +118,27 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
           <p className="text-slate-500">클릭하여 출석 상태를 바로 수정할 수 있습니다. (회색 칸은 모임 없음)</p>
         </div>
         
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-4 items-center">
+            {/* Search Input */}
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                <Search size={16} className="text-slate-400" />
+              </div>
+              <input 
+                type="text" 
+                className="bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-40 pl-10 p-2.5" 
+                placeholder="이름 검색" 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+
             <select
               className="bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-32 p-2.5"
               value={selectedMonth}
-              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+              onChange={(e) => setSelectedMonth(e.target.value)}
             >
+              <option value="all">1년 전체</option>
               {months.map((m, idx) => (
                 <option key={m} value={idx}>{m}월</option>
               ))}

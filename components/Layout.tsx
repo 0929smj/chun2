@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, CalendarDays, BookOpen, Users, Menu, X } from 'lucide-react';
+import { LayoutDashboard, CalendarDays, BookOpen, Users, Menu, X, UserSearch } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -15,6 +15,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { to: '/', icon: LayoutDashboard, label: '통계 대시보드' },
     { to: '/attendance', icon: CalendarDays, label: '출석 현황' },
     { to: '/prayer', icon: BookOpen, label: '기도 제목' },
+    { to: '/profile', icon: UserSearch, label: '개인별 현황' },
     { to: '/manage', icon: Users, label: '데이터 관리' },
   ];
 

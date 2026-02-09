@@ -5,19 +5,13 @@ import { SUNDAYS_2026 } from '../services/mockData';
 import { getScriptUrl, setScriptUrl, fetchSheetData, sendAction } from '../services/sheetService';
 import { getClosestSunday } from '../services/utils';
 
-interface DataManagementProps {
-  members: Member[];
-  setMembers: React.Dispatch<React.SetStateAction<Member[]>>;
-  records: AttendanceRecord[];
-  meetingStatus: MeetingStatus[];
-  availableGroups: string[];
-  onToggleAttendance: (memberId: string, date: string, type: AttendanceType) => void;
-  refreshData: () => void;
-}
+// Default URL provided for the application
+const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby7PkkkXjoilb2yEqO0z7JdYXXmJgsIbwS7XLRHZrpsVkqTsRCodVGFL39DiQC_lLXOKg/exec";
 
 const GAS_CODE_SNIPPET = `
 /* 
- [구글 스프레드시트 연결 스크립트 v3.4]
+ [구글 스프레드시트 연결 스크립트 v3.5]
+ - 업데이트: 체크 해제 시 빈 값이 아닌 'ABSENT' 저장
  - 버그 수정: 새 출석 행 추가 시 recordId와 submittedAt 자동 생성
  - 날짜 처리: getDisplayValues() 사용으로 타임존 문제 완벽 해결
  - 컬럼 인식: meeting, hasWorship 등 다양한 컬럼명 지원
@@ -294,12 +288,13 @@ function updateAttendance(ss, { memberId, date, type, isAdd }) {
     }
   }
 
-  const valToWrite = isAdd ? 'PRESENT' : '';
+  // [v3.5] 체크 해제 시 ABSENT 저장
+  const valToWrite = isAdd ? 'PRESENT' : 'ABSENT';
 
   if (foundRowIndex > 0) {
     sheet.getRange(foundRowIndex, typeIdx + 1).setValue(valToWrite);
-  } else if (isAdd) {
-    // [v3.4] 새 행 추가 시 recordId와 submittedAt 생성
+  } else {
+    // [v3.5] 행이 없어도(foundRowIndex == -1), isAdd 여부와 관계없이 행 생성 (ABSENT 기록 위해)
     const newRow = new Array(headers.length).fill('');
     newRow[dateIdx] = date;
     newRow[idIdx] = memberId;
@@ -346,12 +341,22 @@ function addMember(ss, payload) {
 }
 `;
 
+interface DataManagementProps {
+  members: Member[];
+  setMembers: React.Dispatch<React.SetStateAction<Member[]>>;
+  records: AttendanceRecord[];
+  meetingStatus: MeetingStatus[];
+  availableGroups: string[];
+  onToggleAttendance: (memberId: string, date: string, type: AttendanceType) => void;
+  refreshData: () => void;
+}
+
 const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, records, meetingStatus, availableGroups, onToggleAttendance, refreshData }) => {
   const [activeTab, setActiveTab] = useState<'members' | 'attendance' | 'settings'>('members');
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   
   // Settings State
-  const [scriptUrl, setLocalScriptUrl] = useState(getScriptUrl());
+  const [scriptUrl, setLocalScriptUrl] = useState(getScriptUrl() || DEFAULT_SCRIPT_URL);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);

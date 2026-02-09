@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Member, PrayerRecord } from '../types';
-import { Quote, AlertCircle, Calendar, User, Search, FileText } from 'lucide-react';
+import { Quote, AlertCircle, Calendar, User, Search, FileText, X } from 'lucide-react';
 import { SUNDAYS_2026 } from '../services/mockData';
 import { getClosestSunday } from '../services/utils';
 
@@ -17,18 +17,14 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
   // Member View State
   const [selectedGroup, setSelectedGroup] = useState<string>('');
   const [selectedMemberId, setSelectedMemberId] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Initial load effect
   useEffect(() => {
     setSelectedDate(getClosestSunday());
   }, []);
 
-  // When group changes, reset member selection
-  useEffect(() => {
-    setSelectedMemberId('');
-  }, [selectedGroup]);
-
-  // Filter members based on selected group
+  // Filter members based on selected group (for dropdown)
   const membersInGroup = useMemo(() => {
     if (!selectedGroup) return [];
     return members.filter(m => m.group === selectedGroup).sort((a, b) => a.name.localeCompare(b.name));
@@ -51,20 +47,30 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
     return groups;
   }, [selectedDate, prayerRecords, members]);
 
-  // View 2: By Member - Single Member History OR All in Group History
+  // View 2: By Member - Search Query OR Single Member OR All in Group
   const memberHistoryData = useMemo(() => {
-    // Determine which members to show
     let targetMembers: Member[] = [];
-    if (selectedMemberId) {
+
+    // Priority 1: Search Query
+    if (searchQuery.trim()) {
+       const query = searchQuery.toLowerCase().trim();
+       targetMembers = members.filter(m => m.name.toLowerCase().includes(query));
+    }
+    // Priority 2: Specific Member Selected via Dropdown
+    else if (selectedMemberId) {
       const m = members.find(m => m.id === selectedMemberId);
       if (m) targetMembers = [m];
-    } else if (selectedGroup) {
-      targetMembers = membersInGroup;
-    } else {
+    } 
+    // Priority 3: Group Selected
+    else if (selectedGroup) {
+      targetMembers = members.filter(m => m.group === selectedGroup).sort((a, b) => a.name.localeCompare(b.name));
+    } 
+    else {
       return null;
     }
 
-    if (targetMembers.length === 0) return null;
+    // Return empty array if search yields no results (distinct from null which means "no selection made")
+    if (targetMembers.length === 0) return [];
 
     // Build data for each target member
     return targetMembers.map(member => {
@@ -73,7 +79,28 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
        return { member, records: myRecords };
     });
-  }, [selectedMemberId, selectedGroup, membersInGroup, members, prayerRecords]);
+  }, [searchQuery, selectedMemberId, selectedGroup, members, prayerRecords]);
+
+  // Handlers to ensure mutual exclusivity between Search vs Dropdowns
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setSearchQuery(val);
+    if (val) {
+      setSelectedGroup('');
+      setSelectedMemberId('');
+    }
+  };
+
+  const handleGroupChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedGroup(e.target.value);
+    setSelectedMemberId(''); // Reset member when group changes
+    setSearchQuery(''); // Reset search when using dropdowns
+  };
+
+  const handleMemberChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedMemberId(e.target.value);
+    setSearchQuery(''); // Reset search when using dropdowns
+  };
 
   return (
     <div className="space-y-6">
@@ -125,33 +152,66 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
 
       {/* Member View Controls */}
       {viewMode === 'member' && (
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-             <label className="block text-xs font-bold text-slate-700 mb-1">1. 소그룹/울 선택</label>
-             <select
-               className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-slate-50 focus:ring-indigo-500 focus:border-indigo-500"
-               value={selectedGroup}
-               onChange={(e) => setSelectedGroup(e.target.value)}
-             >
-               <option value="">소그룹을 선택하세요</option>
-               {availableGroups.map(g => (
-                 <option key={g} value={g}>{g}</option>
-               ))}
-             </select>
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4 md:space-y-0 md:flex md:gap-6 items-end">
+          {/* Search Box */}
+          <div className="flex-1 w-full">
+            <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center text-indigo-700">
+              <Search size={14} className="mr-1" /> 이름 직접 검색 (추천)
+            </label>
+            <div className="relative">
+              <input 
+                type="text" 
+                className="w-full border border-indigo-200 rounded-lg pl-10 pr-4 py-2.5 text-sm focus:ring-indigo-500 focus:border-indigo-500 bg-indigo-50/30"
+                placeholder="이름을 입력하세요 (예: 김철수)"
+                value={searchQuery}
+                onChange={handleSearchChange}
+              />
+              <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-indigo-400">
+                <Search size={18} />
+              </div>
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
           </div>
-          <div className="flex-1">
-             <label className="block text-xs font-bold text-slate-700 mb-1">2. 울원(멤버) 선택 (선택 안 함: 전체 보기)</label>
-             <select
-               className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-slate-50 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-slate-100 disabled:text-slate-400"
-               value={selectedMemberId}
-               onChange={(e) => setSelectedMemberId(e.target.value)}
-               disabled={!selectedGroup}
-             >
-               <option value="">전체 보기</option>
-               {membersInGroup.map(m => (
-                 <option key={m.id} value={m.id}>{m.name}</option>
-               ))}
-             </select>
+
+          <div className="hidden md:flex items-center justify-center pb-3 px-2 text-slate-300 font-bold text-sm">OR</div>
+          <div className="md:hidden text-center text-xs text-slate-400 my-2">- 또는 소그룹으로 찾기 -</div>
+
+          {/* Dropdowns */}
+          <div className="flex-1 w-full flex gap-3">
+            <div className="flex-1">
+               <label className="block text-xs font-bold text-slate-500 mb-2">소그룹 선택</label>
+               <select
+                 className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-slate-50 focus:ring-indigo-500 focus:border-indigo-500"
+                 value={selectedGroup}
+                 onChange={handleGroupChange}
+               >
+                 <option value="">선택 안 함</option>
+                 {availableGroups.map(g => (
+                   <option key={g} value={g}>{g}</option>
+                 ))}
+               </select>
+            </div>
+            <div className="flex-1">
+               <label className="block text-xs font-bold text-slate-500 mb-2">멤버 선택</label>
+               <select
+                 className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-slate-50 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-slate-100 disabled:text-slate-400"
+                 value={selectedMemberId}
+                 onChange={handleMemberChange}
+                 disabled={!selectedGroup}
+               >
+                 <option value="">전체 보기</option>
+                 {membersInGroup.map(m => (
+                   <option key={m.id} value={m.id}>{m.name}</option>
+                 ))}
+               </select>
+            </div>
           </div>
         </div>
       )}
@@ -221,7 +281,12 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
             {!memberHistoryData ? (
                <div className="bg-white rounded-xl shadow-sm border border-slate-200 min-h-[400px] flex flex-col items-center justify-center p-12 text-slate-400">
                   <Search size={48} className="mb-4 opacity-10" />
-                  <p>소그룹과 멤버를 선택하여 기록을 확인하세요.</p>
+                  <p>위에서 이름을 검색하거나, 소그룹을 선택하여 기록을 확인하세요.</p>
+               </div>
+            ) : memberHistoryData.length === 0 ? (
+               <div className="bg-white rounded-xl shadow-sm border border-slate-200 min-h-[300px] flex flex-col items-center justify-center p-12 text-slate-400">
+                  <AlertCircle size={48} className="mb-4 opacity-10" />
+                  <p>검색 결과가 없습니다.</p>
                </div>
             ) : (
                memberHistoryData.map(({ member, records }) => (
