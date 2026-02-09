@@ -60,13 +60,32 @@ export const generateMeetingStatus = (): MeetingStatus[] => {
   const statuses: MeetingStatus[] = [];
   
   SUNDAYS_2026.forEach((date, idx) => {
-    // Determine Event Name randomly matching user's spreadsheet example
     let eventName = '';
     
-    // Updated to match screenshot:
-    if (idx === 0) eventName = '울 미편성';  // 01-04
-    else if (idx === 6) eventName = '설연휴';  // 02-15 (Approx 7th Sunday)
-    else if (idx === 12) eventName = '봄 수련회'; // 03-29
+    // Cancellation Flags
+    let wCanceled = false; // Worship
+    let gCanceled = false; // Gathering
+    let lCanceled = false; // Wool (Small Group)
+
+    // Specific Logic based on User Request
+    if (idx === 0) { // 01-04
+       eventName = '울 미편성';
+       wCanceled = true;
+       gCanceled = true;
+       lCanceled = true;
+    }
+    else if (idx === 6) { // 02-15
+       eventName = '설연휴';
+       gCanceled = true; 
+       lCanceled = true;
+       // Worship exists
+    }
+    else if (idx === 12) { // 03-29
+       eventName = '봄 수련회';
+       gCanceled = true; 
+       lCanceled = true;
+       // Worship exists
+    }
     else if (idx === 14) eventName = '부활절';
     else if (idx === 26) eventName = '전교인수련회';
     else if (idx === 48) eventName = '성탄절';
@@ -75,7 +94,7 @@ export const generateMeetingStatus = (): MeetingStatus[] => {
     statuses.push({
       date: date,
       type: AttendanceType.Wool,
-      isCanceled: idx === 0 || idx === 6, // Canceled on '울 미편성' and '설연휴'
+      isCanceled: lCanceled,
       event: eventName
     });
 
@@ -83,7 +102,7 @@ export const generateMeetingStatus = (): MeetingStatus[] => {
     statuses.push({
       date: date,
       type: AttendanceType.Gathering,
-      isCanceled: idx === 6, // Canceled on '설연휴'
+      isCanceled: gCanceled,
       event: eventName
     });
     
@@ -91,7 +110,7 @@ export const generateMeetingStatus = (): MeetingStatus[] => {
     statuses.push({
       date: date,
       type: AttendanceType.Worship,
-      isCanceled: false,
+      isCanceled: wCanceled,
       event: eventName
     });
   });
@@ -113,9 +132,13 @@ export const generateAttendance = (members: Member[], year: number): AttendanceR
       const types: AttendanceType[] = [];
       
       // Check if meeting is canceled before adding attendance
-      const isWorshipCanceled = INITIAL_MEETING_STATUS.some(s => s.date === date && s.type === AttendanceType.Worship && s.isCanceled);
-      const isGatheringCanceled = INITIAL_MEETING_STATUS.some(s => s.date === date && s.type === AttendanceType.Gathering && s.isCanceled);
-      const isWoolCanceled = INITIAL_MEETING_STATUS.some(s => s.date === date && s.type === AttendanceType.Wool && s.isCanceled);
+      const wStatus = INITIAL_MEETING_STATUS.find(s => s.date === date && s.type === AttendanceType.Worship);
+      const gStatus = INITIAL_MEETING_STATUS.find(s => s.date === date && s.type === AttendanceType.Gathering);
+      const lStatus = INITIAL_MEETING_STATUS.find(s => s.date === date && s.type === AttendanceType.Wool);
+      
+      const isWorshipCanceled = wStatus?.isCanceled;
+      const isGatheringCanceled = gStatus?.isCanceled;
+      const isWoolCanceled = lStatus?.isCanceled;
 
       if (!isWorshipCanceled && Math.random() > 0.2) types.push(AttendanceType.Worship);
       if (!isGatheringCanceled && Math.random() > 0.4) types.push(AttendanceType.Gathering);

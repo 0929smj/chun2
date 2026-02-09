@@ -24,10 +24,36 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
     setSelectedDate(getClosestSunday());
   }, []);
 
+  // Sort function to be reused
+  const sortMembers = (a: Member, b: Member) => {
+    // Priority: Leader -> Alphabetical
+    
+    // 1. Leader Check
+    // Normalize role to Uppercase to handle 'Leader', 'LEADER', 'leader' etc.
+    const roleA = (a.role || '').toString().toUpperCase().trim();
+    const roleB = (b.role || '').toString().toUpperCase().trim();
+    
+    // Check for 'LEADER' (English) or '리더' (Korean)
+    const isALeader = roleA === 'LEADER' || roleA === '리더';
+    const isBLeader = roleB === 'LEADER' || roleB === '리더';
+
+    if (isALeader && !isBLeader) return -1;
+    if (!isALeader && isBLeader) return 1;
+
+    // 2. Alphabetical Check
+    // Remove '*' from name for sorting comparison
+    const nameA = a.name.replace(/\*/g, '').trim();
+    const nameB = b.name.replace(/\*/g, '').trim();
+
+    return nameA.localeCompare(nameB);
+  };
+
   // Filter members based on selected group (for dropdown)
   const membersInGroup = useMemo(() => {
     if (!selectedGroup) return [];
-    return members.filter(m => m.group === selectedGroup).sort((a, b) => a.name.localeCompare(b.name));
+    return members
+      .filter(m => m.group === selectedGroup)
+      .sort(sortMembers);
   }, [members, selectedGroup]);
 
   // View 1: By Date - Group by Small Group/Wool directly (Flattened)
@@ -63,7 +89,9 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
     } 
     // Priority 3: Group Selected
     else if (selectedGroup) {
-      targetMembers = members.filter(m => m.group === selectedGroup).sort((a, b) => a.name.localeCompare(b.name));
+      targetMembers = members
+        .filter(m => m.group === selectedGroup)
+        .sort(sortMembers);
     } 
     else {
       return null;

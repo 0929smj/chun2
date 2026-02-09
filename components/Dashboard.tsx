@@ -170,10 +170,10 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
         {/* Monthly Stats Table */}
         <div className="overflow-x-auto custom-scrollbar border-t border-slate-100 pt-6">
           <h4 className="text-sm font-bold text-slate-600 mb-4">월별 상세 데이터 (평균)</h4>
-          <table className="w-full text-sm text-center text-slate-500">
+          <table className="w-full text-sm text-center text-slate-500 border-collapse">
             <thead className="text-xs text-slate-700 uppercase bg-slate-50">
               <tr>
-                <th scope="col" className="px-4 py-2 border rounded-tl-lg">구분</th>
+                <th scope="col" className="px-4 py-2 border sticky left-0 bg-slate-50 z-20 min-w-[80px]">구분</th>
                 {monthlyStats.map(stat => (
                   <th key={stat.month} scope="col" className="px-2 py-2 border min-w-[50px]">
                     {stat.month}
@@ -183,19 +183,19 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
             </thead>
             <tbody>
               <tr className="bg-white border-b">
-                <td className="px-4 py-2 font-bold text-blue-600 border bg-slate-50">예배</td>
+                <td className="px-4 py-2 font-bold text-blue-600 border sticky left-0 bg-slate-50 z-10 whitespace-nowrap">예배</td>
                 {monthlyStats.map(stat => (
                   <td key={stat.month} className="px-2 py-2 border">{Math.round(stat.worshipAverage)}</td>
                 ))}
               </tr>
               <tr className="bg-white border-b">
-                <td className="px-4 py-2 font-bold text-indigo-600 border bg-slate-50">집회</td>
+                <td className="px-4 py-2 font-bold text-indigo-600 border sticky left-0 bg-slate-50 z-10 whitespace-nowrap">집회</td>
                 {monthlyStats.map(stat => (
                   <td key={stat.month} className="px-2 py-2 border">{Math.round(stat.gatheringAverage)}</td>
                 ))}
               </tr>
               <tr className="bg-white border-b">
-                <td className="px-4 py-2 font-bold text-emerald-600 border bg-slate-50">울모임</td>
+                <td className="px-4 py-2 font-bold text-emerald-600 border sticky left-0 bg-slate-50 z-10 whitespace-nowrap">울모임</td>
                 {monthlyStats.map(stat => (
                   <td key={stat.month} className="px-2 py-2 border">{Math.round(stat.woolAverage)}</td>
                 ))}
