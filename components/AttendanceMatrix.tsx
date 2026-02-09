@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Member, AttendanceRecord, AttendanceType, MeetingStatus } from '../types';
 import { SUNDAYS_2026 } from '../services/mockData';
-import { Check, Search } from 'lucide-react';
+import { Check, Search, MessageSquare } from 'lucide-react';
 
 interface AttendanceMatrixProps {
   members: Member[];
@@ -61,6 +61,10 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
 
   const isMeetingCanceled = (date: string, type: AttendanceType) => {
     return meetingStatus.some(s => s.date === date && s.type === type && s.isCanceled);
+  };
+  
+  const getEventName = (date: string) => {
+    return meetingStatus.find(s => s.date === date)?.event || '';
   };
 
   const calculateTotal = (memberId: string, type: AttendanceType) => {
@@ -167,7 +171,12 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
                 <th scope="col" className="px-2 py-3 w-16 border border-slate-200 text-center">구분</th>
                 {currentMonthSundays.map(date => (
                   <th key={date} scope="col" className="px-2 py-3 text-center border border-slate-200 min-w-[50px]">
-                    {date.substring(5)}
+                    <div className="flex flex-col items-center">
+                      <span>{date.substring(5)}</span>
+                      {getEventName(date) && (
+                        <span className="text-[10px] text-slate-400 font-normal mt-1 truncate max-w-[50px]">{getEventName(date)}</span>
+                      )}
+                    </div>
                   </th>
                 ))}
                 <th scope="col" className="px-2 py-3 text-center border border-slate-200 min-w-[50px]">계</th>
@@ -178,8 +187,22 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
                 <React.Fragment key={member.id}>
                   {/* Row 1: Worship */}
                   <tr className="bg-white border-b hover:bg-slate-50">
-                    <td rowSpan={3} className={`px-4 py-3 font-medium text-slate-900 sticky left-0 bg-white z-10 border border-slate-200 ${mIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
-                      {member.name}
+                    <td rowSpan={3} className={`px-4 py-3 font-medium text-slate-900 sticky left-0 bg-white z-10 border border-slate-200 ${mIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} group relative`}>
+                      <span className="cursor-default decoration-dotted underline underline-offset-4 decoration-slate-300">{member.name}</span>
+                      
+                      {/* Modern Tooltip for Memo */}
+                      {member.specialNotes && (
+                        <div className="absolute left-full top-0 ml-2 w-56 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+                           <div className="bg-slate-800 text-white text-xs rounded-lg py-2 px-3 shadow-xl">
+                              <div className="flex items-center gap-1.5 mb-1 text-slate-300 font-bold border-b border-slate-600 pb-1">
+                                 <MessageSquare size={10} /> 비고 (Memo)
+                              </div>
+                              <p className="leading-relaxed">{member.specialNotes}</p>
+                              {/* Arrow */}
+                              <div className="absolute top-4 -left-1 w-2 h-2 bg-slate-800 transform rotate-45"></div>
+                           </div>
+                        </div>
+                      )}
                     </td>
                     <td rowSpan={3} className="px-4 py-3 border border-slate-200">
                       <div className="font-semibold text-slate-700">{member.group}</div>

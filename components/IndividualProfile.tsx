@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Member, AttendanceRecord, PrayerRecord, AttendanceType, MeetingStatus } from '../types';
-import { Search, User, Phone, Briefcase, Calendar, Quote, Check, X, TrendingUp, AlertCircle, FileText } from 'lucide-react';
+import { Search, User, Phone, Briefcase, Calendar, Quote, Check, X, TrendingUp, AlertCircle, FileText, StickyNote } from 'lucide-react';
 import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Tooltip as RechartsTooltip } from 'recharts';
 import { SUNDAYS_2026 } from '../services/mockData';
 
@@ -251,9 +251,12 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
                          <span>{targetMember.phoneNumber || '연락처 없음'}</span>
                       </div>
                       {targetMember.specialNotes && (
-                        <div className="flex items-start text-sm text-rose-600 bg-rose-50 p-2 rounded">
-                           <AlertCircle size={16} className="mr-2 mt-0.5 flex-shrink-0" />
-                           <span>{targetMember.specialNotes}</span>
+                        <div className="flex items-start text-sm text-slate-700 bg-slate-100 p-3 rounded-lg mt-2 border border-slate-200">
+                           <StickyNote size={16} className="mr-2 mt-0.5 flex-shrink-0 text-slate-500" />
+                           <div className="flex-1">
+                              <span className="font-bold text-xs text-slate-500 block mb-1">비고 (Memo)</span>
+                              <span>{targetMember.specialNotes}</span>
+                           </div>
                         </div>
                       )}
                       
@@ -348,13 +351,20 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
                              const dateStr = date.substring(5); // MM-DD
                              
                              // Check for cancellations to show visual indicator
-                             const wCanceled = meetingStatus.some(s => s.date === date && s.type === AttendanceType.Worship && s.isCanceled);
-                             const gCanceled = meetingStatus.some(s => s.date === date && s.type === AttendanceType.Gathering && s.isCanceled);
-                             const lCanceled = meetingStatus.some(s => s.date === date && s.type === AttendanceType.Wool && s.isCanceled);
+                             const meetingInfo = meetingStatus.find(s => s.date === date);
+                             const wCanceled = meetingInfo?.type === AttendanceType.Worship && meetingInfo?.isCanceled;
+                             const gCanceled = meetingInfo?.type === AttendanceType.Gathering && meetingInfo?.isCanceled;
+                             const lCanceled = meetingInfo?.type === AttendanceType.Wool && meetingInfo?.isCanceled;
+                             const eventName = meetingInfo?.event;
 
                              return (
                                <div key={date} className="flex items-center justify-between text-sm">
-                                  <span className="text-slate-400 font-mono text-xs">{dateStr}</span>
+                                  <div className="flex items-center">
+                                    <span className="text-slate-400 font-mono text-xs">{dateStr}</span>
+                                    {eventName && (
+                                       <span className="ml-1.5 text-[10px] text-indigo-400 font-medium truncate max-w-[50px]">{eventName}</span>
+                                    )}
+                                  </div>
                                   <div className="flex gap-1">
                                      <span className={`w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold ${
                                         types.includes(AttendanceType.Worship) ? 'bg-blue-100 text-blue-600' : 

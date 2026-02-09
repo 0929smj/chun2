@@ -36,6 +36,7 @@ export interface MeetingStatus {
   date: string;
   type: AttendanceType;
   isCanceled: boolean;
+  event?: string; // Name of the ministry event (e.g., 부활절, 수련회)
 }
 
 export interface JoinedRecord extends Member {

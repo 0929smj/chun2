@@ -11,16 +11,17 @@ import {
   Bar,
   Legend
 } from 'recharts';
-import { AttendanceRecord, Member, AttendanceType } from '../types';
+import { AttendanceRecord, Member, AttendanceType, MeetingStatus } from '../types';
 import { getWeeklyStats, getGroupStats, getMonthlyStats } from '../services/dataService';
 import { SUNDAYS_2026 } from '../services/mockData';
 
 interface DashboardProps {
   members: Member[];
   records: AttendanceRecord[];
+  meetingStatus?: MeetingStatus[]; // Optional prop to avoid breaking if not passed yet
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ members, records }) => {
+const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus = [] }) => {
   const weeklyStats = useMemo(() => getWeeklyStats(records, SUNDAYS_2026), [records]);
   const monthlyStats = useMemo(() => getMonthlyStats(records, SUNDAYS_2026), [records]);
   const groupStats = useMemo(() => getGroupStats(members, records), [members, records]);
@@ -29,6 +30,10 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records }) => {
   const totalWorship = records.filter(r => r.types.includes(AttendanceType.Worship)).length;
   const totalGathering = records.filter(r => r.types.includes(AttendanceType.Gathering)).length;
   const totalWool = records.filter(r => r.types.includes(AttendanceType.Wool)).length;
+
+  const getEventName = (date: string) => {
+    return meetingStatus.find(s => s.date === date)?.event || '';
+  };
 
   return (
     <div className="space-y-8">
@@ -96,32 +101,42 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records }) => {
         {/* Weekly Stats Table */}
         <div className="overflow-x-auto custom-scrollbar border-t border-slate-100 pt-6">
           <h4 className="text-sm font-bold text-slate-600 mb-4">주별 상세 데이터</h4>
-          <table className="w-full text-sm text-center text-slate-500">
+          <table className="w-full text-sm text-center text-slate-500 border-collapse">
             <thead className="text-xs text-slate-700 uppercase bg-slate-50">
               <tr>
-                <th scope="col" className="px-4 py-2 border rounded-tl-lg">날짜</th>
+                <th scope="col" className="px-4 py-3 border sticky left-0 bg-slate-50 z-20 min-w-[80px]">구분</th>
                 {weeklyStats.map(stat => (
-                  <th key={stat.date} scope="col" className="px-2 py-2 border min-w-[60px]">
-                    {stat.date.substring(5)}
+                  <th key={stat.date} scope="col" className="px-2 py-3 border min-w-[70px]">
+                    <span className="font-bold text-slate-600">{stat.date.substring(5)}</span>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
+              {/* Ministry Event Row - Highlighted */}
               <tr className="bg-white border-b">
-                <td className="px-4 py-2 font-bold text-blue-600 border bg-slate-50">예배</td>
+                <td className="px-4 py-2 font-bold text-indigo-700 border sticky left-0 bg-indigo-50 z-10">사역</td>
+                {weeklyStats.map(stat => (
+                  <td key={stat.date} className="px-2 py-2 border text-xs text-indigo-600 font-bold bg-indigo-50/30 whitespace-normal break-keep align-middle">
+                    {getEventName(stat.date)}
+                  </td>
+                ))}
+              </tr>
+              {/* Stats Rows */}
+              <tr className="bg-white border-b">
+                <td className="px-4 py-2 font-bold text-blue-600 border sticky left-0 bg-white z-10">예배</td>
                 {weeklyStats.map(stat => (
                   <td key={stat.date} className="px-2 py-2 border">{stat.worshipCount}</td>
                 ))}
               </tr>
               <tr className="bg-white border-b">
-                <td className="px-4 py-2 font-bold text-indigo-600 border bg-slate-50">집회</td>
+                <td className="px-4 py-2 font-bold text-indigo-600 border sticky left-0 bg-white z-10">집회</td>
                 {weeklyStats.map(stat => (
                   <td key={stat.date} className="px-2 py-2 border">{stat.gatheringCount}</td>
                 ))}
               </tr>
               <tr className="bg-white border-b">
-                <td className="px-4 py-2 font-bold text-emerald-600 border bg-slate-50">울모임</td>
+                <td className="px-4 py-2 font-bold text-emerald-600 border sticky left-0 bg-white z-10">울모임</td>
                 {weeklyStats.map(stat => (
                   <td key={stat.date} className="px-2 py-2 border">{stat.woolCount}</td>
                 ))}
@@ -170,19 +185,19 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records }) => {
               <tr className="bg-white border-b">
                 <td className="px-4 py-2 font-bold text-blue-600 border bg-slate-50">예배</td>
                 {monthlyStats.map(stat => (
-                  <td key={stat.month} className="px-2 py-2 border">{stat.worshipAverage}</td>
+                  <td key={stat.month} className="px-2 py-2 border">{Math.round(stat.worshipAverage)}</td>
                 ))}
               </tr>
               <tr className="bg-white border-b">
                 <td className="px-4 py-2 font-bold text-indigo-600 border bg-slate-50">집회</td>
                 {monthlyStats.map(stat => (
-                  <td key={stat.month} className="px-2 py-2 border">{stat.gatheringAverage}</td>
+                  <td key={stat.month} className="px-2 py-2 border">{Math.round(stat.gatheringAverage)}</td>
                 ))}
               </tr>
               <tr className="bg-white border-b">
                 <td className="px-4 py-2 font-bold text-emerald-600 border bg-slate-50">울모임</td>
                 {monthlyStats.map(stat => (
-                  <td key={stat.month} className="px-2 py-2 border">{stat.woolAverage}</td>
+                  <td key={stat.month} className="px-2 py-2 border">{Math.round(stat.woolAverage)}</td>
                 ))}
               </tr>
             </tbody>

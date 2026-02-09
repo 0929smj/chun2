@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
@@ -20,6 +20,29 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [usingMock, setUsingMock] = useState(false);
 
+  // Filter only Active members for the app views (except DataManagement)
+  const activeMembers = useMemo(() => {
+    return members.filter(m => m.status !== 'INACTIVE');
+  }, [members]);
+
+  // Function to clean attendance records based on meeting status
+  // This ensures that if a meeting is canceled (FALSE in DB), any accidental 'Present' record is ignored.
+  const cleanAttendanceData = (rawRecords: AttendanceRecord[], rawStatus: MeetingStatus[]): AttendanceRecord[] => {
+    return rawRecords.map(record => {
+      // Filter out types that are marked as canceled in the meeting status
+      const validTypes = record.types.filter(type => {
+        const statusForDateAndType = rawStatus.find(s => s.date === record.date && s.type === type);
+        // If status exists and isCanceled is true, drop this attendance type
+        if (statusForDateAndType && statusForDateAndType.isCanceled) {
+          return false;
+        }
+        return true;
+      });
+
+      return { ...record, types: validTypes };
+    }).filter(record => record.types.length > 0); // Remove records that became empty
+  };
+
   // Load data function
   const loadData = async () => {
     setLoading(true);
@@ -28,16 +51,26 @@ const App: React.FC = () => {
     if (scriptUrl) {
       try {
         const data = await fetchSheetData();
-        setMembers(data.members || []);
-        setRecords(data.attendance || []);
-        setPrayerRecords(data.prayers || []);
-        setMeetingStatus(data.meetingStatus || []);
+        
+        const fetchedMembers = data.members || [];
+        const fetchedMeetingStatus = data.meetingStatus || [];
+        const fetchedRecords = data.attendance || [];
+        const fetchedPrayers = data.prayers || [];
+
+        // 1. Set Basic Data
+        setMembers(fetchedMembers);
+        setMeetingStatus(fetchedMeetingStatus);
+        setPrayerRecords(fetchedPrayers);
+
+        // 2. Clean Attendance Records (Requirement 1: Strict consistency)
+        const cleanedRecords = cleanAttendanceData(fetchedRecords, fetchedMeetingStatus);
+        setRecords(cleanedRecords);
         
         // If groups are returned from API, use them. Otherwise derive from members.
         if (data.groups && data.groups.length > 0) {
           setGroups(data.groups);
         } else {
-          const derivedGroups = Array.from(new Set((data.members || []).map(m => m.group))).sort();
+          const derivedGroups = Array.from(new Set(fetchedMembers.map(m => m.group))).sort();
           setGroups(derivedGroups);
         }
 
@@ -45,8 +78,6 @@ const App: React.FC = () => {
       } catch (e) {
         console.error("Failed to load live data, falling back to mock", e);
         loadMockData();
-        // Keep usingMock false if we want to show error? No, fallback to mock means using mock.
-        // But maybe we want to alert the user.
         setUsingMock(true); 
       }
     } else {
@@ -58,9 +89,12 @@ const App: React.FC = () => {
 
   const loadMockData = () => {
     setMembers(INITIAL_MEMBERS);
-    setRecords(INITIAL_ATTENDANCE);
-    setPrayerRecords(INITIAL_PRAYER_RECORDS);
     setMeetingStatus(INITIAL_MEETING_STATUS);
+    setPrayerRecords(INITIAL_PRAYER_RECORDS);
+    // Even for mock data, apply cleaning logic for consistency
+    const cleanedMockRecords = cleanAttendanceData(INITIAL_ATTENDANCE, INITIAL_MEETING_STATUS);
+    setRecords(cleanedMockRecords);
+    
     // Derive groups for mock data
     const mockGroups = Array.from(new Set(INITIAL_MEMBERS.map(m => m.group))).sort();
     setGroups(mockGroups);
@@ -136,12 +170,12 @@ const App: React.FC = () => {
           </div>
         )}
         <Routes>
-          <Route path="/" element={<Dashboard members={members} records={records} />} />
+          <Route path="/" element={<Dashboard members={activeMembers} records={records} meetingStatus={meetingStatus} />} />
           <Route 
             path="/attendance" 
             element={
               <AttendanceMatrix 
-                members={members} 
+                members={activeMembers} 
                 records={records} 
                 meetingStatus={meetingStatus}
                 availableGroups={groups}
@@ -153,7 +187,7 @@ const App: React.FC = () => {
             path="/prayer" 
             element={
               <PrayerRequests 
-                members={members} 
+                members={activeMembers} 
                 prayerRecords={prayerRecords} 
                 availableGroups={groups}
               />
@@ -163,7 +197,7 @@ const App: React.FC = () => {
             path="/profile" 
             element={
               <IndividualProfile 
-                members={members} 
+                members={activeMembers} 
                 records={records} 
                 prayerRecords={prayerRecords}
                 meetingStatus={meetingStatus}
@@ -182,6 +216,8 @@ const App: React.FC = () => {
                 availableGroups={groups}
                 onToggleAttendance={toggleAttendance}
                 refreshData={loadData}
+                // @ts-ignore: Prop drilling for export functionality
+                prayerRecords={prayerRecords} 
               />
             } 
           />

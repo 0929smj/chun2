@@ -55,33 +55,47 @@ export const generateMembers = (): Member[] => {
   return members;
 };
 
-// Generate Meeting Status (Simulate some canceled meetings)
+// Generate Meeting Status (Simulate some canceled meetings and Events)
 export const generateMeetingStatus = (): MeetingStatus[] => {
   const statuses: MeetingStatus[] = [];
-  // Example: No Wool meeting on the first Sunday
-  if (SUNDAYS_2026.length > 0) {
+  
+  SUNDAYS_2026.forEach((date, idx) => {
+    // Determine Event Name randomly matching user's spreadsheet example
+    let eventName = '';
+    
+    // Updated to match screenshot:
+    if (idx === 0) eventName = '울 미편성';  // 01-04
+    else if (idx === 6) eventName = '설연휴';  // 02-15 (Approx 7th Sunday)
+    else if (idx === 12) eventName = '봄 수련회'; // 03-29
+    else if (idx === 14) eventName = '부활절';
+    else if (idx === 26) eventName = '전교인수련회';
+    else if (idx === 48) eventName = '성탄절';
+
+    // 1. Wool
     statuses.push({
-      date: SUNDAYS_2026[0],
+      date: date,
       type: AttendanceType.Wool,
-      isCanceled: true
+      isCanceled: idx === 0 || idx === 6, // Canceled on '울 미편성' and '설연휴'
+      event: eventName
     });
-  }
-  // Example: No Gathering on the 4th Sunday
-  if (SUNDAYS_2026.length > 3) {
+
+    // 2. Gathering
     statuses.push({
-      date: SUNDAYS_2026[3],
+      date: date,
       type: AttendanceType.Gathering,
-      isCanceled: true
+      isCanceled: idx === 6, // Canceled on '설연휴'
+      event: eventName
     });
-  }
-  // Example: No Wool on the 5th Sunday
-  if (SUNDAYS_2026.length > 4) {
+    
+    // 3. Worship
     statuses.push({
-      date: SUNDAYS_2026[4],
-      type: AttendanceType.Wool,
-      isCanceled: true
+      date: date,
+      type: AttendanceType.Worship,
+      isCanceled: false,
+      event: eventName
     });
-  }
+  });
+
   return statuses;
 };
 

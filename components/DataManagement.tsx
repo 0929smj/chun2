@@ -1,20 +1,20 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Member, AttendanceRecord, AttendanceType, MeetingStatus } from '../types';
-import { Plus, Edit2, Save, Trash2, X, Phone, ArrowUpDown, Settings, Link as LinkIcon, AlertCircle, Copy, Check, HelpCircle, Filter, Loader2 } from 'lucide-react';
+import { Member, AttendanceRecord, AttendanceType, MeetingStatus, PrayerRecord } from '../types';
+import { Plus, Edit2, Save, Trash2, X, Phone, ArrowUpDown, Settings, Link as LinkIcon, AlertCircle, Copy, Check, HelpCircle, Filter, Loader2, StickyNote, Search, Download, Calendar } from 'lucide-react';
 import { SUNDAYS_2026 } from '../services/mockData';
 import { getScriptUrl, setScriptUrl, fetchSheetData, sendAction } from '../services/sheetService';
 import { getClosestSunday } from '../services/utils';
+import { exportDataToExcel } from '../services/excelService';
 
 // Default URL provided for the application
 const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby7PkkkXjoilb2yEqO0z7JdYXXmJgsIbwS7XLRHZrpsVkqTsRCodVGFL39DiQC_lLXOKg/exec";
 
 const GAS_CODE_SNIPPET = `
 /* 
- [구글 스프레드시트 연결 스크립트 v3.5]
- - 업데이트: 체크 해제 시 빈 값이 아닌 'ABSENT' 저장
- - 버그 수정: 새 출석 행 추가 시 recordId와 submittedAt 자동 생성
- - 날짜 처리: getDisplayValues() 사용으로 타임존 문제 완벽 해결
- - 컬럼 인식: meeting, hasWorship 등 다양한 컬럼명 지원
+ [구글 스프레드시트 연결 스크립트 v4.1]
+ - 업데이트: 멤버 정보 수정(UPDATE_MEMBER) 기능 추가
+ - 업데이트: 멤버 상태 변경(INACTIVE) 처리 로직 추가
+ - 업데이트: SessionConfig에서 사역(ministryEvent) 정보 가져오기 추가
  
  1. 스프레드시트 메뉴: 확장 프로그램 > Apps Script 클릭
  2. [Code.gs] 내용 모두 지우고 이 코드 붙여넣기
@@ -23,7 +23,7 @@ const GAS_CODE_SNIPPET = `
 
 // ▼▼▼ 설정 영역 ▼▼▼
 
-// 데이터가 있는 스프레드시트의 ID
+// 데이터가 있는 스프레드시트의 ID (본인의 시트 ID로 변경 가능)
 const TARGET_SPREADSHEET_ID = "1LoEMB6uQXQ_qW40IKGNQMaFL9dKd5X-5c8TFrRtq1Ys"; 
 
 // ▲▲▲ 설정 영역 끝 ▲▲▲
@@ -60,7 +60,7 @@ function doGet(e) {
     phoneNumber: m['phone'] || m['phonenumber'] || m['연락처'] || '',
     role: m['role'] || m['직분'] || '성도',
     status: m['status'] || m['상태'] || 'ACTIVE',
-    specialNotes: m['notes'] || m['비고'] || m['specialnotes'] || ''
+    specialNotes: m['notes'] || m['비고'] || m['specialnotes'] || m['memo'] || m['메모'] || ''
   })).filter(m => m.name);
 
   // 2. 소그룹 목록 가져오기 (시트명: groups, 컬럼: woolName)
@@ -76,18 +76,23 @@ function doGet(e) {
     const date = formatDate(row['date'] || row['날짜']);
     if (!date) return;
     
-    // 다양한 컬럼명 지원 (hasWorship, hasAssembly, hasWoorl 등)
+    // 사역/행사 이름 가져오기
+    const eventName = row['ministryevent'] || row['event'] || row['사역'] || row['행사'] || '';
+
     // 예배
     const wVal = row['worship'] || row['예배'] || row['hasworship'];
-    if (!isChecked(wVal)) meetingStatus.push({ date: date, type: '예배', isCanceled: true });
+    if (!isChecked(wVal)) meetingStatus.push({ date: date, type: '예배', isCanceled: true, event: eventName });
+    else meetingStatus.push({ date: date, type: '예배', isCanceled: false, event: eventName });
     
     // 집회
     const gVal = row['gathering'] || row['meeting'] || row['집회'] || row['hasassembly'] || row['assembly'];
-    if (!isChecked(gVal)) meetingStatus.push({ date: date, type: '집회', isCanceled: true });
+    if (!isChecked(gVal)) meetingStatus.push({ date: date, type: '집회', isCanceled: true, event: eventName });
+    else meetingStatus.push({ date: date, type: '집회', isCanceled: false, event: eventName });
     
     // 울모임
     const woolVal = row['wool'] || row['울모임'] || row['haswool'] || row['haswoorl'];
-    if (!isChecked(woolVal)) meetingStatus.push({ date: date, type: '울모임', isCanceled: true });
+    if (!isChecked(woolVal)) meetingStatus.push({ date: date, type: '울모임', isCanceled: true, event: eventName });
+    else meetingStatus.push({ date: date, type: '울모임', isCanceled: false, event: eventName });
   });
 
   // 4. 출석 및 기도제목 (시트명: attendance)
@@ -102,9 +107,7 @@ function doGet(e) {
 
     const types = [];
     if (isChecked(row['worship'] || row['예배'] || row['hasworship'])) types.push('예배');
-    
     if (isChecked(row['gathering'] || row['meeting'] || row['집회'] || row['hasassembly'] || row['assembly'])) types.push('집회');
-    
     if (isChecked(row['wool'] || row['울모임'] || row['haswool'] || row['haswoorl'])) types.push('울모임');
 
     if (types.length > 0) {
@@ -164,6 +167,8 @@ function doPost(e) {
       updateAttendance(ss, payload);
     } else if (action === 'ADD_MEMBER') {
       addMember(ss, payload);
+    } else if (action === 'UPDATE_MEMBER') {
+      updateMember(ss, payload);
     }
   } catch(err) {
     return errorResponse(err.toString());
@@ -183,57 +188,30 @@ function errorResponse(msg) {
 function getSheetData(ss, sheetName) {
   const sheets = ss.getSheets();
   const sheet = sheets.find(s => s.getName().toLowerCase() === sheetName.toLowerCase());
-  
   if (!sheet) return [];
   const range = sheet.getDataRange();
-  
-  // [중요] getValues() 대신 getDisplayValues()를 사용하여 
-  // 셀에 보이는 텍스트 그대로 가져옴 (날짜 타임존 문제 해결)
   const values = range.getDisplayValues();
-  
   if (values.length < 2) return [];
-  
   const headers = values[0].map(h => String(h).toLowerCase().replace(/\\s/g, ''));
   const data = values.slice(1);
-  
   return data.map(row => {
     let obj = {};
-    headers.forEach((h, i) => {
-      obj[h] = row[i];
-    });
+    headers.forEach((h, i) => { obj[h] = row[i]; });
     return obj;
   });
 }
 
 function formatDate(dateObj) {
   if (!dateObj) return null;
-  
-  // getDisplayValues()로 가져왔으므로 대부분 문자열입니다.
-  // '2026-01-11' 형식이거나 '2026. 1. 11' 형식일 수 있습니다.
   let s = String(dateObj).trim();
-  
   try {
-    // 이미 YYYY-MM-DD 형식이면 그대로 반환
     if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return s;
-
-    // '26. 1. 24' 등 처리
-    s = s.replace(/년/g, '-')
-         .replace(/월/g, '-')
-         .replace(/일/g, '')
-         .replace(/\\./g, '-')
-         .replace(/\\s/g, '');
-      
-    // '26-1-24' 처럼 연도가 2자리인 경우 '20'을 붙여줌
+    s = s.replace(/년/g, '-').replace(/월/g, '-').replace(/일/g, '').replace(/\\./g, '-').replace(/\\s/g, '');
     if (/^\\d{2}-/.test(s)) s = '20' + s;
-    
-    // 날짜 객체로 변환해서 포맷팅 (유효성 검사 겸)
     const d = new Date(s);
     if (isNaN(d.getTime())) return null;
-
     return Utilities.formatDate(d, 'Asia/Seoul', 'yyyy-MM-dd');
-  } catch (e) { 
-    return null; 
-  }
+  } catch (e) { return null; }
 }
 
 function isChecked(val) {
@@ -259,59 +237,41 @@ function updateAttendance(ss, { memberId, date, type, isAdd }) {
   
   let typeColName = '';
   if (type === '예배') typeColName = 'worship';
-  else if (type === '집회') {
-     // 집회의 경우 gathering이 없으면 meeting을 찾음
-     typeColName = headers.includes('gathering') ? 'gathering' : 'meeting';
-  }
+  else if (type === '집회') typeColName = headers.includes('gathering') ? 'gathering' : 'meeting';
   else if (type === '울모임') typeColName = 'wool';
   
   const typeIdx = headers.indexOf(typeColName);
   
   if (dateIdx === -1 || idIdx === -1 || typeIdx === -1) {
-     if (typeIdx === -1 && typeColName) {
-        sheet.getRange(1, headers.length + 1).setValue(typeColName);
-     }
+     if (typeIdx === -1 && typeColName) sheet.getRange(1, headers.length + 1).setValue(typeColName);
      return;
   }
 
-  // 업데이트 시에는 값을 비교해야 하므로 getDisplayValues 사용
   const data = sheet.getDataRange().getDisplayValues();
   let foundRowIndex = -1;
 
   for (let i = data.length - 1; i >= 1; i--) {
     const rowDate = formatDate(data[i][dateIdx]);
     const rowId = String(data[i][idIdx]);
-    
     if (rowDate === date && rowId === memberId) {
       foundRowIndex = i + 1;
       break;
     }
   }
 
-  // [v3.5] 체크 해제 시 ABSENT 저장
   const valToWrite = isAdd ? 'PRESENT' : 'ABSENT';
 
   if (foundRowIndex > 0) {
     sheet.getRange(foundRowIndex, typeIdx + 1).setValue(valToWrite);
   } else {
-    // [v3.5] 행이 없어도(foundRowIndex == -1), isAdd 여부와 관계없이 행 생성 (ABSENT 기록 위해)
     const newRow = new Array(headers.length).fill('');
     newRow[dateIdx] = date;
     newRow[idIdx] = memberId;
     newRow[typeIdx] = valToWrite;
-    
-    // recordId 생성 (날짜_아이디)
     const recordIdIdx = headers.indexOf('recordid');
-    if (recordIdIdx !== -1) {
-       newRow[recordIdIdx] = date + '_' + memberId;
-    }
-
-    // submittedAt 생성
+    if (recordIdIdx !== -1) newRow[recordIdIdx] = date + '_' + memberId;
     const submittedAtIdx = headers.indexOf('submittedat');
-    if (submittedAtIdx !== -1) {
-       newRow[submittedAtIdx] = new Date().toISOString();
-    }
-    
+    if (submittedAtIdx !== -1) newRow[submittedAtIdx] = new Date().toISOString();
     sheet.appendRow(newRow);
   }
 }
@@ -333,11 +293,53 @@ function addMember(ss, payload) {
     if (header === 'phone' || header === 'phonenumber' || header === '연락처') return payload.phoneNumber;
     if (header === 'role' || header === '직분') return payload.role; 
     if (header === 'status' || header === '상태') return payload.status;
-    if (header === 'notes' || header === '비고' || header === 'specialnotes') return payload.specialNotes;
+    if (header === 'notes' || header === '비고' || header === 'specialnotes' || header === 'memo') return payload.specialNotes;
     return '';
   });
   
   sheet.appendRow(newRow);
+}
+
+function updateMember(ss, payload) {
+  let sheet = ss.getSheets().find(s => s.getName().toLowerCase() === 'members');
+  if (!sheet) return;
+
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).toLowerCase().replace(/\\s/g, ''));
+  const idIdx = headers.indexOf('memberid') !== -1 ? headers.indexOf('memberid') : headers.indexOf('id');
+  if (idIdx === -1) return;
+
+  const data = sheet.getDataRange().getDisplayValues();
+  let foundRowIndex = -1;
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idIdx]) === String(payload.id)) {
+      foundRowIndex = i + 1;
+      break;
+    }
+  }
+
+  if (foundRowIndex > 0) {
+     // Loop through payload keys and update corresponding columns
+     // We map common payload keys to potential header names
+     const map = {
+       'name': ['name', '이름'],
+       'group': ['group', '소그룹', 'wool', 'woolname'],
+       'phoneNumber': ['phone', 'phonenumber', '연락처'],
+       'role': ['role', '직분'],
+       'status': ['status', '상태'],
+       'specialNotes': ['notes', '비고', 'specialnotes', 'memo', '메모']
+     };
+
+     Object.keys(payload).forEach(key => {
+       if (map[key]) {
+         const possibleHeaders = map[key];
+         const colIdx = headers.findIndex(h => possibleHeaders.includes(h));
+         if (colIdx !== -1) {
+           sheet.getRange(foundRowIndex, colIdx + 1).setValue(payload[key]);
+         }
+       }
+     });
+  }
 }
 `;
 
@@ -349,11 +351,22 @@ interface DataManagementProps {
   availableGroups: string[];
   onToggleAttendance: (memberId: string, date: string, type: AttendanceType) => void;
   refreshData: () => void;
+  prayerRecords?: PrayerRecord[];
 }
 
-const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, records, meetingStatus, availableGroups, onToggleAttendance, refreshData }) => {
-  const [activeTab, setActiveTab] = useState<'members' | 'attendance' | 'settings'>('members');
+const DataManagement: React.FC<DataManagementProps> = ({ 
+  members, 
+  setMembers, 
+  records, 
+  meetingStatus, 
+  availableGroups, 
+  onToggleAttendance, 
+  refreshData, 
+  prayerRecords = [] 
+}) => {
+  const [activeTab, setActiveTab] = useState<'members' | 'attendance' | 'settings' | 'export'>('members');
   const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [deletingMember, setDeletingMember] = useState<Member | null>(null); // For delete confirmation
   
   // Settings State
   const [scriptUrl, setLocalScriptUrl] = useState(getScriptUrl() || DEFAULT_SCRIPT_URL);
@@ -362,17 +375,21 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
   const [copySuccess, setCopySuccess] = useState(false);
 
   // New Member State
-  const [newMember, setNewMember] = useState<Partial<Member>>({ group: '', name: '', phoneNumber: '' });
+  const [newMember, setNewMember] = useState<Partial<Member>>({ group: '', name: '', phoneNumber: '', specialNotes: '' });
   const [isAddingMember, setIsAddingMember] = useState(false);
   const [showAddSuccess, setShowAddSuccess] = useState(false);
   
-  // Sorting State
+  // Sorting & Filtering State
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
-
-  // Filter States
   const [memberFilterGroup, setMemberFilterGroup] = useState<string>('all');
+  const [memberSearchQuery, setMemberSearchQuery] = useState<string>('');
+  
   const [attendanceFilterGroup, setAttendanceFilterGroup] = useState<string>('all');
   const [selectedDate, setSelectedDate] = useState<string>(getClosestSunday());
+
+  // Export State
+  const [exportStartDate, setExportStartDate] = useState<string>('2026-01-01');
+  const [exportEndDate, setExportEndDate] = useState<string>('2026-12-31');
 
   // Update selected date if tab changes to attendance or on mount
   useEffect(() => {
@@ -380,6 +397,11 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
       setSelectedDate(getClosestSunday());
     }
   }, [activeTab]);
+  
+  // Helper to get event name for selected date in Attendance tab
+  const getEventName = (date: string) => {
+    return meetingStatus.find(s => s.date === date)?.event || '';
+  };
 
   const handleUpdateMember = (id: string, field: keyof Member, value: string) => {
     setMembers(prev => prev.map(m => m.id === id ? { ...m, [field]: value } : m));
@@ -413,7 +435,7 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
       role: 'MEMBER', 
       status: 'ACTIVE', 
       latestPrayerRequest: '', 
-      specialNotes: '' 
+      specialNotes: newMember.specialNotes || '' 
     };
 
     try {
@@ -424,10 +446,47 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
       setMembers(prev => [...prev, memberToAdd]);
 
       // 3. Reset Form & Show Success
-      setNewMember({ group: '', name: '', phoneNumber: '' });
+      setNewMember({ group: '', name: '', phoneNumber: '', specialNotes: '' });
       setShowAddSuccess(true);
     } catch (e) {
       alert("멤버 추가 중 오류가 발생했습니다.");
+    } finally {
+      setIsAddingMember(false);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingMember) return;
+    setIsAddingMember(true); // Reuse loading state
+
+    try {
+      // Update in Google Sheets
+      await sendAction('UPDATE_MEMBER', editingMember);
+
+      // Update Local State
+      setMembers(prev => prev.map(m => m.id === editingMember.id ? editingMember : m));
+      setEditingMember(null);
+    } catch (e) {
+      alert("정보 수정 중 오류가 발생했습니다.");
+    } finally {
+      setIsAddingMember(false);
+    }
+  };
+
+  const handleDeleteMember = async () => {
+    if (!deletingMember) return;
+    setIsAddingMember(true); // Reuse loading state
+
+    try {
+      // Soft Delete: Set status to INACTIVE
+      const inactiveMember = { ...deletingMember, status: 'INACTIVE' };
+      await sendAction('UPDATE_MEMBER', inactiveMember);
+
+      // Update Local State: Do NOT remove, just update status
+      setMembers(prev => prev.map(m => m.id === deletingMember.id ? inactiveMember : m));
+      setDeletingMember(null);
+    } catch (e) {
+      alert("삭제 중 오류가 발생했습니다.");
     } finally {
       setIsAddingMember(false);
     }
@@ -447,9 +506,14 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
   const processedMembers = useMemo(() => {
     let items = [...members];
 
-    // Filter
+    // Filter by Group
     if (memberFilterGroup !== 'all') {
       items = items.filter(m => m.group === memberFilterGroup);
+    }
+
+    // Filter by Name Search
+    if (memberSearchQuery.trim()) {
+      items = items.filter(m => m.name.toLowerCase().includes(memberSearchQuery.toLowerCase()));
     }
     
     // Sort
@@ -465,16 +529,19 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
         return 0;
       });
     } else if (activeTab === 'members') {
-       // Default sort by name
+       // Default sort by name, but keep active members first maybe? 
+       // For now just sort by Name
        items.sort((a, b) => a.name.localeCompare(b.name));
     }
 
     return items;
-  }, [members, memberFilterGroup, sortConfig, activeTab]);
+  }, [members, memberFilterGroup, memberSearchQuery, sortConfig, activeTab]);
 
   // Sort and Filter for Attendance Tab
   const processedAttendanceMembers = useMemo(() => {
     let items = [...members];
+    // Filter out inactive for Attendance Input
+    items = items.filter(m => m.status !== 'INACTIVE');
 
     // Filter
     if (attendanceFilterGroup !== 'all') {
@@ -533,7 +600,7 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
     setCopySuccess(true);
     setTimeout(() => setCopySuccess(false), 2000);
   };
-
+  
   return (
     <div className="space-y-6 relative">
       {/* Loading Overlay */}
@@ -541,7 +608,7 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
           <div className="bg-white p-6 rounded-lg shadow-xl flex flex-col items-center">
              <Loader2 size={32} className="animate-spin text-indigo-600 mb-4" />
-             <p className="font-bold text-slate-700">멤버 추가 중...</p>
+             <p className="font-bold text-slate-700">데이터 처리 중...</p>
              <p className="text-xs text-slate-500 mt-1">잠시만 기다려주세요.</p>
           </div>
         </div>
@@ -554,8 +621,8 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
               <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
                  <Check size={24} className="text-emerald-600" />
               </div>
-              <h3 className="text-lg font-bold text-slate-800 mb-2">추가 완료</h3>
-              <p className="text-slate-600 mb-6">새로운 멤버가 성공적으로 등록되었습니다.</p>
+              <h3 className="text-lg font-bold text-slate-800 mb-2">완료</h3>
+              <p className="text-slate-600 mb-6">성공적으로 처리되었습니다.</p>
               <button 
                  onClick={() => setShowAddSuccess(false)}
                  className="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 transition-colors"
@@ -566,24 +633,109 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
         </div>
       )}
 
+      {/* Edit Modal */}
+      {editingMember && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
+             <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+               <h3 className="text-lg font-bold text-slate-800">멤버 정보 수정</h3>
+               <button onClick={() => setEditingMember(null)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+             </div>
+             <div className="p-6 space-y-4">
+                <div>
+                   <label className="block text-xs font-bold text-slate-500 mb-1">이름</label>
+                   <input 
+                     type="text" 
+                     className="w-full border border-slate-300 rounded-lg p-2.5" 
+                     value={editingMember.name} 
+                     onChange={e => setEditingMember({...editingMember, name: e.target.value})}
+                   />
+                </div>
+                <div>
+                   <label className="block text-xs font-bold text-slate-500 mb-1">소그룹</label>
+                   <select 
+                     className="w-full border border-slate-300 rounded-lg p-2.5"
+                     value={editingMember.group}
+                     onChange={e => setEditingMember({...editingMember, group: e.target.value, wool: e.target.value})}
+                   >
+                     {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
+                   </select>
+                </div>
+                <div>
+                   <label className="block text-xs font-bold text-slate-500 mb-1">연락처</label>
+                   <input 
+                     type="text" 
+                     className="w-full border border-slate-300 rounded-lg p-2.5" 
+                     value={editingMember.phoneNumber || ''} 
+                     onChange={e => setEditingMember({...editingMember, phoneNumber: e.target.value})}
+                   />
+                </div>
+                <div>
+                   <label className="block text-xs font-bold text-slate-500 mb-1">비고 (Memo)</label>
+                   <textarea 
+                     className="w-full border border-slate-300 rounded-lg p-2.5 h-20 resize-none" 
+                     value={editingMember.specialNotes || ''} 
+                     onChange={e => setEditingMember({...editingMember, specialNotes: e.target.value})}
+                   />
+                </div>
+             </div>
+             <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+                <button onClick={() => setEditingMember(null)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">취소</button>
+                <button onClick={handleSaveEdit} className="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-medium text-sm flex items-center">
+                   <Save size={16} className="mr-2" /> 저장하기
+                </button>
+             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingMember && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full overflow-hidden">
+             <div className="p-6 text-center">
+               <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                 <Trash2 size={32} />
+               </div>
+               <h3 className="text-lg font-bold text-slate-800 mb-2">비활성화 하시겠습니까?</h3>
+               <p className="text-slate-600 text-sm mb-4">
+                 <span className="font-bold">{deletingMember.name}</span>님을 목록에서 삭제(비활성화)합니다.<br/>
+                 데이터 관리 목록에는 흐리게 표시되지만, 다른 통계 화면에서는 숨겨집니다.
+               </p>
+             </div>
+             <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+                <button onClick={() => setDeletingMember(null)} className="flex-1 px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">취소</button>
+                <button onClick={handleDeleteMember} className="flex-1 px-4 py-2 bg-rose-600 text-white hover:bg-rose-700 rounded-lg font-medium text-sm">
+                   비활성화 (삭제)
+                </button>
+             </div>
+          </div>
+        </div>
+      )}
+
       <header className="flex justify-between items-center">
         <div>
            <h2 className="text-3xl font-bold text-slate-800">데이터 관리</h2>
-           <p className="text-slate-500">멤버/출석 관리 및 데이터베이스 연결 설정</p>
+           <p className="text-slate-500">멤버/출석 관리, 데이터 내보내기 및 DB 설정</p>
         </div>
       </header>
 
       {/* Tabs */}
-      <div className="border-b border-slate-200">
-        <ul className="flex flex-wrap -mb-px text-sm font-medium text-center text-slate-500">
+      <div className="border-b border-slate-200 overflow-x-auto">
+        <ul className="flex flex-nowrap -mb-px text-sm font-medium text-center text-slate-500">
           <li className="mr-2">
-            <button onClick={() => { setActiveTab('members'); setSortConfig(null); }} className={`inline-block p-4 rounded-t-lg border-b-2 ${activeTab === 'members' ? 'text-indigo-600 border-indigo-600' : 'border-transparent hover:text-slate-600 hover:border-slate-300'}`}>멤버 관리</button>
+            <button onClick={() => { setActiveTab('members'); setSortConfig(null); }} className={`inline-block p-4 rounded-t-lg border-b-2 whitespace-nowrap ${activeTab === 'members' ? 'text-indigo-600 border-indigo-600' : 'border-transparent hover:text-slate-600 hover:border-slate-300'}`}>멤버 관리</button>
           </li>
           <li className="mr-2">
-            <button onClick={() => { setActiveTab('attendance'); setSortConfig(null); }} className={`inline-block p-4 rounded-t-lg border-b-2 ${activeTab === 'attendance' ? 'text-indigo-600 border-indigo-600' : 'border-transparent hover:text-slate-600 hover:border-slate-300'}`}>출석 입력</button>
+            <button onClick={() => { setActiveTab('attendance'); setSortConfig(null); }} className={`inline-block p-4 rounded-t-lg border-b-2 whitespace-nowrap ${activeTab === 'attendance' ? 'text-indigo-600 border-indigo-600' : 'border-transparent hover:text-slate-600 hover:border-slate-300'}`}>출석 입력</button>
           </li>
           <li className="mr-2">
-            <button onClick={() => setActiveTab('settings')} className={`flex items-center p-4 rounded-t-lg border-b-2 ${activeTab === 'settings' ? 'text-slate-800 border-slate-800' : 'border-transparent hover:text-slate-600 hover:border-slate-300'}`}>
+            <button onClick={() => setActiveTab('export')} className={`flex items-center p-4 rounded-t-lg border-b-2 whitespace-nowrap ${activeTab === 'export' ? 'text-indigo-600 border-indigo-600' : 'border-transparent hover:text-slate-600 hover:border-slate-300'}`}>
+              <Download size={16} className="mr-2" /> 데이터 내보내기
+            </button>
+          </li>
+          <li className="mr-2">
+            <button onClick={() => setActiveTab('settings')} className={`flex items-center p-4 rounded-t-lg border-b-2 whitespace-nowrap ${activeTab === 'settings' ? 'text-slate-800 border-slate-800' : 'border-transparent hover:text-slate-600 hover:border-slate-300'}`}>
               <Settings size={16} className="mr-2" /> DB 연결 설정
             </button>
           </li>
@@ -593,8 +745,8 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
       {activeTab === 'members' && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
            {/* Member Add Form */}
-           <div className="flex flex-col md:flex-row gap-4 mb-6 bg-slate-50 p-4 rounded-lg">
-             <div className="flex-1 space-y-4">
+           <div className="flex flex-col gap-4 mb-6 bg-slate-50 p-4 rounded-lg">
+             <div className="space-y-4">
                 <h4 className="font-bold text-slate-700 text-sm">새 멤버 추가</h4>
                 <div className="flex flex-col md:flex-row gap-2">
                     <input type="text" className="border border-slate-300 rounded p-2 text-sm flex-1" value={newMember.name || ''} onChange={e => setNewMember({...newMember, name: e.target.value})} placeholder="이름" />
@@ -603,6 +755,7 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
                       {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
                     </select>
                     <input type="text" className="border border-slate-300 rounded p-2 text-sm flex-1" value={newMember.phoneNumber || ''} onChange={e => setNewMember({...newMember, phoneNumber: e.target.value})} placeholder="연락처" />
+                    <input type="text" className="border border-slate-300 rounded p-2 text-sm flex-1" value={newMember.specialNotes || ''} onChange={e => setNewMember({...newMember, specialNotes: e.target.value})} placeholder="비고(메모)" />
                     <button onClick={handleAddMember} className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700 flex items-center justify-center min-w-[80px]">
                       <Plus size={16} className="mr-1" /> 추가
                     </button>
@@ -610,7 +763,27 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
              </div>
            </div>
 
-           <div className="flex justify-end mb-4">
+           <div className="flex flex-col md:flex-row justify-between items-end md:items-center mb-4 gap-3">
+              <div className="flex items-center gap-2 w-full md:w-auto">
+                 <div className="relative w-full md:w-64">
+                   <div className="absolute inset-y-0 left-0 flex items-center pl-2 pointer-events-none text-slate-400">
+                     <Search size={16} />
+                   </div>
+                   <input 
+                     type="text" 
+                     placeholder="이름 검색..." 
+                     className="pl-8 border border-slate-300 rounded p-1.5 text-sm w-full"
+                     value={memberSearchQuery}
+                     onChange={(e) => setMemberSearchQuery(e.target.value)}
+                   />
+                   {memberSearchQuery && (
+                      <button onClick={() => setMemberSearchQuery('')} className="absolute inset-y-0 right-0 flex items-center pr-2 text-slate-400 hover:text-slate-600">
+                        <X size={14} />
+                      </button>
+                   )}
+                 </div>
+              </div>
+
               <div className="flex items-center gap-2">
                 <Filter size={16} className="text-slate-500" />
                 <select 
@@ -635,17 +808,31 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
                       <div className="flex items-center">소그룹/울 <ArrowUpDown size={14} className={`ml-1 ${sortConfig?.key === 'group' ? 'text-indigo-600' : 'text-slate-300'}`} /></div>
                     </th>
                     <th className="px-6 py-3">연락처</th>
+                    <th className="px-6 py-3">비고 (Memo)</th>
                     <th className="px-6 py-3 text-right">관리</th>
                   </tr>
                 </thead>
                 <tbody>
                   {processedMembers.map(member => (
-                    <tr key={member.id} className="bg-white border-b hover:bg-slate-50">
-                      <td className="px-6 py-4 font-medium text-slate-900">{member.name}</td>
+                    <tr key={member.id} className={`border-b group ${member.status === 'INACTIVE' ? 'bg-slate-100 text-slate-400 hover:bg-slate-200' : 'bg-white hover:bg-slate-50 text-slate-900'}`}>
+                      <td className="px-6 py-4 font-medium flex items-center">
+                        {member.name}
+                        {member.status === 'INACTIVE' && (
+                           <span className="ml-2 text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded border border-slate-300">비활성</span>
+                        )}
+                      </td>
                       <td className="px-6 py-4">{member.group}</td>
                       <td className="px-6 py-4">{member.phoneNumber}</td>
+                      <td className="px-6 py-4 truncate max-w-[200px]" title={member.specialNotes}>{member.specialNotes}</td>
                       <td className="px-6 py-4 text-right">
-                        <button onClick={() => setEditingMember(member)} className="text-indigo-600 hover:text-indigo-900"><Edit2 size={18} /></button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button onClick={() => setEditingMember(member)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors" title="수정">
+                             <Edit2 size={16} />
+                          </button>
+                          <button onClick={() => setDeletingMember(member)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-full transition-colors" title="비활성화(삭제)">
+                             <Trash2 size={16} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -660,13 +847,20 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
            <div className="mb-6 space-y-4">
               <div className="flex items-center gap-4">
                 <label className="font-bold text-slate-700 w-24">날짜 선택:</label>
-                <select 
-                  className="border border-slate-300 rounded p-2 text-sm bg-white"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                >
-                  {SUNDAYS_2026.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
+                <div className="flex items-center gap-3">
+                  <select 
+                    className="border border-slate-300 rounded p-2 text-sm bg-white"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                  >
+                    {SUNDAYS_2026.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                  {getEventName(selectedDate) && (
+                    <span className="text-sm text-indigo-600 font-medium bg-indigo-50 px-2 py-1 rounded border border-indigo-100">
+                      {getEventName(selectedDate)}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex flex-col md:flex-row md:items-start gap-4">
                 <label className="font-bold text-slate-700 w-24 mt-2">소그룹/울:</label>
@@ -743,7 +937,101 @@ const DataManagement: React.FC<DataManagementProps> = ({ members, setMembers, re
         </div>
       )}
 
-      {/* Settings Tab Content (Preserved) */}
+      {activeTab === 'export' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+           <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
+              <Download size={20} className="mr-2 text-indigo-600" /> 
+              데이터 엑셀 내보내기
+           </h3>
+           <p className="text-slate-500 text-sm mb-6">
+              선택한 기간 동안의 출석 상세 현황, 기도제목, 그리고 종합 통계를 엑셀 파일(.xlsx)로 다운로드합니다.
+              <br/>데이터는 소그룹별로 정렬되어 저장됩니다.
+           </p>
+
+           <div className="bg-slate-50 p-6 rounded-lg border border-slate-200 max-w-2xl">
+              <div className="mb-6">
+                 <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center">
+                    <Calendar size={16} className="mr-2" /> 기간 선택
+                 </label>
+                 <div className="flex flex-col md:flex-row gap-4 items-center">
+                    <div className="flex-1 w-full">
+                       <span className="text-xs text-slate-500 block mb-1">시작일</span>
+                       <input 
+                         type="date" 
+                         className="w-full border border-slate-300 rounded p-2 text-sm"
+                         value={exportStartDate}
+                         onChange={(e) => setExportStartDate(e.target.value)}
+                       />
+                    </div>
+                    <span className="text-slate-400 hidden md:block mt-5">~</span>
+                    <div className="flex-1 w-full">
+                       <span className="text-xs text-slate-500 block mb-1">종료일</span>
+                       <input 
+                         type="date" 
+                         className="w-full border border-slate-300 rounded p-2 text-sm"
+                         value={exportEndDate}
+                         onChange={(e) => setExportEndDate(e.target.value)}
+                       />
+                    </div>
+                 </div>
+              </div>
+
+              <div className="mb-6">
+                 <span className="text-xs font-bold text-slate-500 mb-2 block">빠른 기간 설정</span>
+                 <div className="flex gap-2">
+                    <button 
+                      onClick={() => { setExportStartDate('2026-01-01'); setExportEndDate('2026-12-31'); }}
+                      className="px-3 py-1.5 bg-white border border-slate-300 rounded text-xs hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                    >
+                      1년 전체 (2026)
+                    </button>
+                    <button 
+                       onClick={() => {
+                          const now = new Date();
+                          const start = new Date(now.getFullYear(), now.getMonth(), 1);
+                          const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                          setExportStartDate(start.toISOString().split('T')[0]);
+                          setExportEndDate(end.toISOString().split('T')[0]);
+                       }}
+                       className="px-3 py-1.5 bg-white border border-slate-300 rounded text-xs hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                    >
+                      이번 달
+                    </button>
+                    <button 
+                       onClick={() => {
+                          const now = new Date();
+                          const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+                          setExportStartDate(threeMonthsAgo.toISOString().split('T')[0]);
+                          setExportEndDate(now.toISOString().split('T')[0]);
+                       }}
+                       className="px-3 py-1.5 bg-white border border-slate-300 rounded text-xs hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                    >
+                      최근 3개월
+                    </button>
+                 </div>
+              </div>
+
+              <div className="flex justify-end pt-4 border-t border-slate-200">
+                 <button 
+                   onClick={() => {
+                     exportDataToExcel(
+                        members,
+                        records, 
+                        prayerRecords,
+                        meetingStatus, // Pass meetingStatus
+                        availableGroups,
+                        { startDate: exportStartDate, endDate: exportEndDate }
+                     );
+                   }}
+                   className="bg-emerald-600 text-white px-6 py-2.5 rounded-lg hover:bg-emerald-700 flex items-center font-bold shadow-sm transition-transform active:scale-95"
+                 >
+                    <Download size={18} className="mr-2" /> 엑셀 파일 생성 및 다운로드
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
       {activeTab === 'settings' && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <div className="mb-8">
