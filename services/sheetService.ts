@@ -2,7 +2,15 @@ import { Member, AttendanceRecord, PrayerRecord, AttendanceType, MeetingStatus }
 
 const STORAGE_KEY = 'church_admin_script_url';
 
-export const getScriptUrl = () => localStorage.getItem(STORAGE_KEY) || '';
+// Default URL provided for the application (Moved from DataManagement to be shared)
+export const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby7PkkkXjoilb2yEqO0z7JdYXXmJgsIbwS7XLRHZrpsVkqTsRCodVGFL39DiQC_lLXOKg/exec";
+
+// Returns local storage URL if exists, otherwise defaults to the hardcoded URL
+export const getScriptUrl = () => {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  return stored ? stored : DEFAULT_SCRIPT_URL;
+};
+
 export const setScriptUrl = (url: string) => localStorage.setItem(STORAGE_KEY, url);
 
 interface SheetDataResponse {
@@ -10,7 +18,8 @@ interface SheetDataResponse {
   attendance: AttendanceRecord[];
   prayers: PrayerRecord[];
   meetingStatus: MeetingStatus[];
-  groups: string[]; // Added groups
+  groups: string[];
+  accessCodes?: string[]; // Added for authentication
   status: 'success' | 'error';
   debug_sheets?: string[];
 }

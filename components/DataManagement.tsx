@@ -2,19 +2,14 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Member, AttendanceRecord, AttendanceType, MeetingStatus, PrayerRecord } from '../types';
 import { Plus, Edit2, Save, Trash2, X, Phone, ArrowUpDown, Settings, Link as LinkIcon, AlertCircle, Copy, Check, HelpCircle, Filter, Loader2, StickyNote, Search, Download, Calendar } from 'lucide-react';
 import { SUNDAYS_2026 } from '../services/mockData';
-import { getScriptUrl, setScriptUrl, fetchSheetData, sendAction } from '../services/sheetService';
+import { getScriptUrl, setScriptUrl, fetchSheetData, sendAction, DEFAULT_SCRIPT_URL } from '../services/sheetService';
 import { getClosestSunday } from '../services/utils';
 import { exportDataToExcel } from '../services/excelService';
 
-// Default URL provided for the application
-const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby7PkkkXjoilb2yEqO0z7JdYXXmJgsIbwS7XLRHZrpsVkqTsRCodVGFL39DiQC_lLXOKg/exec";
-
 const GAS_CODE_SNIPPET = `
 /* 
- [구글 스프레드시트 연결 스크립트 v4.1]
- - 업데이트: 멤버 정보 수정(UPDATE_MEMBER) 기능 추가
- - 업데이트: 멤버 상태 변경(INACTIVE) 처리 로직 추가
- - 업데이트: SessionConfig에서 사역(ministryEvent) 정보 가져오기 추가
+ [구글 스프레드시트 연결 스크립트 v4.3]
+ - 업데이트: '울장' AccessCode만 로그인 비밀번호로 사용
  
  1. 스프레드시트 메뉴: 확장 프로그램 > Apps Script 클릭
  2. [Code.gs] 내용 모두 지우고 이 코드 붙여넣기
@@ -63,11 +58,20 @@ function doGet(e) {
     specialNotes: m['notes'] || m['비고'] || m['specialnotes'] || m['memo'] || m['메모'] || ''
   })).filter(m => m.name);
 
-  // 2. 소그룹 목록 가져오기 (시트명: groups, 컬럼: woolName)
+  // 2. 소그룹 목록 및 AccessCode 가져오기 (시트명: groups)
   const groupsData = getSheetData(ss, 'groups');
+  
+  // 소그룹 목록 (울장 등 관리자용 행은 제외)
   const groups = groupsData
     .map(g => String(g['woolname'] || g['name'] || ''))
-    .filter(name => name.length > 0);
+    .filter(name => name.length > 0 && name !== '울장');
+  
+  // AccessCode 추출 (로그인용 - '울장'의 AccessCode만 허용)
+  // Groups 시트에서 woolName(또는 name)이 '울장'인 행의 accessCode만 가져옵니다.
+  const accessCodes = groupsData
+    .filter(g => String(g['woolname'] || g['name'] || '') === '울장')
+    .map(g => String(g['accesscode'] || g['code'] || g['password'] || g['비밀번호'] || ''))
+    .filter(code => code.length > 0);
 
   // 3. 모임 설정 (시트명: SessionConfig)
   const configData = getSheetData(ss, 'SessionConfig');
@@ -142,6 +146,7 @@ function doGet(e) {
     prayers: prayers,
     meetingStatus: meetingStatus,
     groups: groups,
+    accessCodes: accessCodes,
     debug_sheets: availableSheets,
     connected_id: ss.getId()
   })).setMimeType(ContentService.MimeType.JSON);
@@ -1051,9 +1056,9 @@ const DataManagement: React.FC<DataManagementProps> = ({
             </div>
 
             <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6">
-              <h4 className="font-bold text-slate-700 mb-2">1단계: 스크립트 복사 및 배포</h4>
+              <h4 className="font-bold text-slate-700 mb-2">1단계: 스크립트 복사 및 배포 (필수 업데이트)</h4>
               <p className="text-sm text-slate-600 mb-2">
-                 아래 코드를 복사하여 Google Spreadsheet &gt; 확장 프로그램 &gt; Apps Script 의 <strong>Code.gs</strong> 파일 내용을 모두 지우고 붙여넣으세요.
+                 <strong>[중요]</strong> '울장' 비밀번호 정책 적용을 위해 아래 코드를 <strong>반드시 새로 복사하여 배포</strong>해주세요.
               </p>
               <div className="relative group">
                 <pre className="bg-slate-800 text-slate-200 p-4 rounded-lg text-xs overflow-x-auto h-48 custom-scrollbar font-mono">

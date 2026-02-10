@@ -9,6 +9,7 @@ import IndividualProfile from './components/IndividualProfile';
 import { INITIAL_MEMBERS, INITIAL_ATTENDANCE, INITIAL_PRAYER_RECORDS, INITIAL_MEETING_STATUS } from './services/mockData';
 import { fetchSheetData, sendAction, getScriptUrl } from './services/sheetService';
 import { Member, AttendanceRecord, PrayerRecord, AttendanceType, MeetingStatus } from './types';
+import { Lock, Wrench } from 'lucide-react';
 
 const App: React.FC = () => {
   // Global State
@@ -19,6 +20,12 @@ const App: React.FC = () => {
   const [groups, setGroups] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [usingMock, setUsingMock] = useState(false);
+  
+  // Auth State
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [inputPassword, setInputPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [validAccessCodes, setValidAccessCodes] = useState<string[]>([]);
 
   // Filter only Active members for the app views (except DataManagement)
   const activeMembers = useMemo(() => {
@@ -48,6 +55,7 @@ const App: React.FC = () => {
     setLoading(true);
     const scriptUrl = getScriptUrl();
 
+    // With the new auto-connect logic, scriptUrl should be the default one if not set locally
     if (scriptUrl) {
       try {
         const data = await fetchSheetData();
@@ -56,11 +64,13 @@ const App: React.FC = () => {
         const fetchedMeetingStatus = data.meetingStatus || [];
         const fetchedRecords = data.attendance || [];
         const fetchedPrayers = data.prayers || [];
+        const fetchedAccessCodes = data.accessCodes || [];
 
         // 1. Set Basic Data
         setMembers(fetchedMembers);
         setMeetingStatus(fetchedMeetingStatus);
         setPrayerRecords(fetchedPrayers);
+        setValidAccessCodes(fetchedAccessCodes);
 
         // 2. Clean Attendance Records (Requirement 1: Strict consistency)
         const cleanedRecords = cleanAttendanceData(fetchedRecords, fetchedMeetingStatus);
@@ -98,11 +108,25 @@ const App: React.FC = () => {
     // Derive groups for mock data
     const mockGroups = Array.from(new Set(INITIAL_MEMBERS.map(m => m.group))).sort();
     setGroups(mockGroups);
+
+    // Set a default mock access code for demo purposes (fallback)
+    setValidAccessCodes(['18870691']); 
   };
 
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Master password override: 18870691
+    if (inputPassword.trim() === '18870691' || validAccessCodes.includes(inputPassword.trim())) {
+      setIsAuthenticated(true);
+      setLoginError('');
+    } else {
+      setLoginError('비밀번호가 올바르지 않습니다.');
+    }
+  };
 
   // Shared Logic to toggle attendance
   const toggleAttendance = (memberId: string, date: string, type: AttendanceType) => {
@@ -161,12 +185,64 @@ const App: React.FC = () => {
     );
   }
 
+  // Login Screen
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-lg max-w-md w-full p-8">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-600">
+              <Lock size={32} />
+            </div>
+            <h1 className="text-2xl font-bold text-slate-800">관리자 로그인</h1>
+            <p className="text-slate-500 mt-2">소그룹 출석부 접근을 위해<br/>접속 코드를 입력해주세요.</p>
+          </div>
+          
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <input 
+                type="password" 
+                className="w-full border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-center tracking-widest text-lg"
+                placeholder="비밀번호 입력"
+                value={inputPassword}
+                onChange={(e) => setInputPassword(e.target.value)}
+                autoFocus
+              />
+              {loginError && <p className="text-rose-500 text-sm mt-2 text-center">{loginError}</p>}
+            </div>
+            <button 
+              type="submit" 
+              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition-colors shadow-md active:scale-[0.98] transform"
+            >
+              확인
+            </button>
+          </form>
+          
+          <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+             <button
+               type="button"
+               onClick={() => {
+                 setUsingMock(true); // Force mock mode
+                 loadMockData(); // Ensure mock data is loaded
+                 setIsAuthenticated(true); // Bypass login
+               }}
+               className="text-xs text-slate-400 flex items-center justify-center w-full hover:text-indigo-600 transition-colors"
+             >
+               <Wrench size={12} className="mr-1" />
+               DB 설정이 필요하거나 비밀번호를 잊으셨나요?
+             </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <HashRouter>
       <Layout>
         {usingMock && (
           <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs text-amber-700 text-center">
-            현재 <strong>데모 데이터</strong>를 보고 있습니다. 실제 스프레드시트와 연결하려면 [데이터 관리 {'>'} DB 연결 설정]을 이용하세요.
+            현재 <strong>설정/데모 모드</strong>입니다. <strong>[데이터 관리 &gt; DB 연결 설정]</strong>에서 스크립트를 업데이트하고 연결하세요.
           </div>
         )}
         <Routes>
