@@ -9,7 +9,7 @@ import IndividualProfile from './components/IndividualProfile';
 import { INITIAL_MEMBERS, INITIAL_ATTENDANCE, INITIAL_PRAYER_RECORDS, INITIAL_MEETING_STATUS } from './services/mockData';
 import { fetchSheetData, sendAction, getScriptUrl } from './services/sheetService';
 import { Member, AttendanceRecord, PrayerRecord, AttendanceType, MeetingStatus } from './types';
-import { Lock, Wrench } from 'lucide-react';
+import { Lock } from 'lucide-react';
 
 const App: React.FC = () => {
   // Global State
@@ -217,21 +217,6 @@ const App: React.FC = () => {
               확인
             </button>
           </form>
-          
-          <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-             <button
-               type="button"
-               onClick={() => {
-                 setUsingMock(true); // Force mock mode
-                 loadMockData(); // Ensure mock data is loaded
-                 setIsAuthenticated(true); // Bypass login
-               }}
-               className="text-xs text-slate-400 flex items-center justify-center w-full hover:text-indigo-600 transition-colors"
-             >
-               <Wrench size={12} className="mr-1" />
-               DB 설정이 필요하거나 비밀번호를 잊으셨나요?
-             </button>
-          </div>
         </div>
       </div>
     );
