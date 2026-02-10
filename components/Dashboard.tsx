@@ -36,34 +36,34 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
   };
 
   return (
-    <div className="space-y-8">
-      <header className="mb-8">
-        <h2 className="text-3xl font-bold text-slate-800">대시보드</h2>
-        <p className="text-slate-500">2026년 전체 출석 통계 현황입니다.</p>
+    <div className="space-y-6 md:space-y-8">
+      <header className="mb-4 md:mb-8">
+        <h2 className="text-2xl md:text-3xl font-bold text-slate-800">대시보드</h2>
+        <p className="text-sm md:text-base text-slate-500">2026년 전체 출석 통계 현황입니다.</p>
       </header>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-blue-500">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
+        <div className="bg-white p-5 md:p-6 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-blue-500 flex flex-row sm:flex-col justify-between items-center sm:items-start">
           <h3 className="text-sm font-medium text-slate-500">누적 예배 출석</h3>
-          <p className="text-3xl font-bold text-slate-800 mt-2">{totalWorship.toLocaleString()}</p>
+          <p className="text-2xl md:text-3xl font-bold text-slate-800 mt-0 sm:mt-2">{totalWorship.toLocaleString()}</p>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-indigo-500">
+        <div className="bg-white p-5 md:p-6 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-indigo-500 flex flex-row sm:flex-col justify-between items-center sm:items-start">
           <h3 className="text-sm font-medium text-slate-500">누적 집회 출석</h3>
-          <p className="text-3xl font-bold text-slate-800 mt-2">{totalGathering.toLocaleString()}</p>
+          <p className="text-2xl md:text-3xl font-bold text-slate-800 mt-0 sm:mt-2">{totalGathering.toLocaleString()}</p>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-emerald-500">
+        <div className="bg-white p-5 md:p-6 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-emerald-500 flex flex-row sm:flex-col justify-between items-center sm:items-start">
           <h3 className="text-sm font-medium text-slate-500">누적 울모임 출석</h3>
-          <p className="text-3xl font-bold text-slate-800 mt-2">{totalWool.toLocaleString()}</p>
+          <p className="text-2xl md:text-3xl font-bold text-slate-800 mt-0 sm:mt-2">{totalWool.toLocaleString()}</p>
         </div>
       </div>
 
       {/* Weekly Trend Chart */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-        <h3 className="text-lg font-bold text-slate-800 mb-6">주별 출석 추이 (전체)</h3>
-        <div className="h-80 w-full mb-8">
+      <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-100">
+        <h3 className="text-lg font-bold text-slate-800 mb-4 md:mb-6">주별 출석 추이 (전체)</h3>
+        <div className="h-64 md:h-80 w-full mb-6 md:mb-8">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={weeklyStats} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+            <AreaChart data={weeklyStats} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorWorship" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
@@ -82,15 +82,16 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
                 dataKey="date" 
                 tickFormatter={(val) => val.substring(5)} 
                 stroke="#94a3b8"
-                fontSize={12}
+                fontSize={10}
+                tick={{fontSize: 10}}
               />
-              <YAxis stroke="#94a3b8" fontSize={12} />
+              <YAxis stroke="#94a3b8" fontSize={10} tick={{fontSize: 10}} />
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
               <Tooltip 
-                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
                 labelStyle={{ fontWeight: 'bold', color: '#1e293b' }}
               />
-              <Legend />
+              <Legend wrapperStyle={{fontSize: '12px', paddingTop: '10px'}} />
               <Area type="monotone" dataKey="worshipCount" name="예배" stroke="#3b82f6" fillOpacity={1} fill="url(#colorWorship)" />
               <Area type="monotone" dataKey="gatheringCount" name="집회" stroke="#6366f1" fillOpacity={1} fill="url(#colorGathering)" />
               <Area type="monotone" dataKey="woolCount" name="울모임" stroke="#10b981" fillOpacity={1} fill="url(#colorWool)" />
@@ -101,12 +102,12 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
         {/* Weekly Stats Table */}
         <div className="overflow-x-auto custom-scrollbar border-t border-slate-100 pt-6">
           <h4 className="text-sm font-bold text-slate-600 mb-4">주별 상세 데이터</h4>
-          <table className="w-full text-sm text-center text-slate-500 border-collapse">
+          <table className="w-full text-xs md:text-sm text-center text-slate-500 border-collapse">
             <thead className="text-xs text-slate-700 uppercase bg-slate-50">
               <tr>
-                <th scope="col" className="px-4 py-3 border sticky left-0 bg-slate-50 z-20 min-w-[80px]">구분</th>
+                <th scope="col" className="px-2 md:px-4 py-3 border sticky left-0 bg-slate-50 z-20 min-w-[60px] md:min-w-[80px]">구분</th>
                 {weeklyStats.map(stat => (
-                  <th key={stat.date} scope="col" className="px-2 py-3 border min-w-[70px]">
+                  <th key={stat.date} scope="col" className="px-1 md:px-2 py-3 border min-w-[50px] md:min-w-[70px]">
                     <span className="font-bold text-slate-600">{stat.date.substring(5)}</span>
                   </th>
                 ))}
@@ -115,30 +116,30 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
             <tbody>
               {/* Ministry Event Row - Highlighted */}
               <tr className="bg-white border-b">
-                <td className="px-4 py-2 font-bold text-indigo-700 border sticky left-0 bg-indigo-50 z-10">사역</td>
+                <td className="px-2 md:px-4 py-2 font-bold text-indigo-700 border sticky left-0 bg-indigo-50 z-10">사역</td>
                 {weeklyStats.map(stat => (
-                  <td key={stat.date} className="px-2 py-2 border text-xs text-indigo-600 font-bold bg-indigo-50/30 whitespace-normal break-keep align-middle">
+                  <td key={stat.date} className="px-1 md:px-2 py-2 border text-[10px] md:text-xs text-indigo-600 font-bold bg-indigo-50/30 whitespace-normal break-keep align-middle">
                     {getEventName(stat.date)}
                   </td>
                 ))}
               </tr>
               {/* Stats Rows */}
               <tr className="bg-white border-b">
-                <td className="px-4 py-2 font-bold text-blue-600 border sticky left-0 bg-white z-10">예배</td>
+                <td className="px-2 md:px-4 py-2 font-bold text-blue-600 border sticky left-0 bg-white z-10">예배</td>
                 {weeklyStats.map(stat => (
-                  <td key={stat.date} className="px-2 py-2 border">{stat.worshipCount}</td>
+                  <td key={stat.date} className="px-1 md:px-2 py-2 border">{stat.worshipCount}</td>
                 ))}
               </tr>
               <tr className="bg-white border-b">
-                <td className="px-4 py-2 font-bold text-indigo-600 border sticky left-0 bg-white z-10">집회</td>
+                <td className="px-2 md:px-4 py-2 font-bold text-indigo-600 border sticky left-0 bg-white z-10">집회</td>
                 {weeklyStats.map(stat => (
-                  <td key={stat.date} className="px-2 py-2 border">{stat.gatheringCount}</td>
+                  <td key={stat.date} className="px-1 md:px-2 py-2 border">{stat.gatheringCount}</td>
                 ))}
               </tr>
               <tr className="bg-white border-b">
-                <td className="px-4 py-2 font-bold text-emerald-600 border sticky left-0 bg-white z-10">울모임</td>
+                <td className="px-2 md:px-4 py-2 font-bold text-emerald-600 border sticky left-0 bg-white z-10">울모임</td>
                 {weeklyStats.map(stat => (
-                  <td key={stat.date} className="px-2 py-2 border">{stat.woolCount}</td>
+                  <td key={stat.date} className="px-1 md:px-2 py-2 border">{stat.woolCount}</td>
                 ))}
               </tr>
             </tbody>
@@ -147,22 +148,22 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
       </div>
 
       {/* Monthly Average Chart */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-        <h3 className="text-lg font-bold text-slate-800 mb-6">월별 평균 출석 현황</h3>
-        <div className="h-80 w-full mb-8">
+      <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-100">
+        <h3 className="text-lg font-bold text-slate-800 mb-4 md:mb-6">월별 평균 출석 현황</h3>
+        <div className="h-64 md:h-80 w-full mb-6 md:mb-8">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={monthlyStats} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+            <BarChart data={monthlyStats} margin={{ top: 20, right: 0, left: -20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} />
-              <YAxis stroke="#94a3b8" fontSize={12} />
+              <XAxis dataKey="month" stroke="#94a3b8" fontSize={10} />
+              <YAxis stroke="#94a3b8" fontSize={10} />
               <Tooltip 
                 cursor={{ fill: '#f1f5f9' }}
-                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
               />
-              <Legend />
-              <Bar dataKey="worshipAverage" name="예배 평균" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="gatheringAverage" name="집회 평균" fill="#6366f1" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="woolAverage" name="울모임 평균" fill="#10b981" radius={[4, 4, 0, 0]} />
+              <Legend wrapperStyle={{fontSize: '12px', paddingTop: '10px'}} />
+              <Bar dataKey="worshipAverage" name="예배" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="gatheringAverage" name="집회" fill="#6366f1" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="woolAverage" name="울모임" fill="#10b981" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -170,12 +171,12 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
         {/* Monthly Stats Table */}
         <div className="overflow-x-auto custom-scrollbar border-t border-slate-100 pt-6">
           <h4 className="text-sm font-bold text-slate-600 mb-4">월별 상세 데이터 (평균)</h4>
-          <table className="w-full text-sm text-center text-slate-500 border-collapse">
+          <table className="w-full text-xs md:text-sm text-center text-slate-500 border-collapse">
             <thead className="text-xs text-slate-700 uppercase bg-slate-50">
               <tr>
-                <th scope="col" className="px-4 py-2 border sticky left-0 bg-slate-50 z-20 min-w-[80px]">구분</th>
+                <th scope="col" className="px-2 md:px-4 py-2 border sticky left-0 bg-slate-50 z-20 min-w-[60px] md:min-w-[80px]">구분</th>
                 {monthlyStats.map(stat => (
-                  <th key={stat.month} scope="col" className="px-2 py-2 border min-w-[50px]">
+                  <th key={stat.month} scope="col" className="px-1 md:px-2 py-2 border min-w-[40px] md:min-w-[50px]">
                     {stat.month}
                   </th>
                 ))}
@@ -183,21 +184,21 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
             </thead>
             <tbody>
               <tr className="bg-white border-b">
-                <td className="px-4 py-2 font-bold text-blue-600 border sticky left-0 bg-slate-50 z-10 whitespace-nowrap">예배</td>
+                <td className="px-2 md:px-4 py-2 font-bold text-blue-600 border sticky left-0 bg-slate-50 z-10 whitespace-nowrap">예배</td>
                 {monthlyStats.map(stat => (
-                  <td key={stat.month} className="px-2 py-2 border">{Math.round(stat.worshipAverage)}</td>
+                  <td key={stat.month} className="px-1 md:px-2 py-2 border">{Math.round(stat.worshipAverage)}</td>
                 ))}
               </tr>
               <tr className="bg-white border-b">
-                <td className="px-4 py-2 font-bold text-indigo-600 border sticky left-0 bg-slate-50 z-10 whitespace-nowrap">집회</td>
+                <td className="px-2 md:px-4 py-2 font-bold text-indigo-600 border sticky left-0 bg-slate-50 z-10 whitespace-nowrap">집회</td>
                 {monthlyStats.map(stat => (
-                  <td key={stat.month} className="px-2 py-2 border">{Math.round(stat.gatheringAverage)}</td>
+                  <td key={stat.month} className="px-1 md:px-2 py-2 border">{Math.round(stat.gatheringAverage)}</td>
                 ))}
               </tr>
               <tr className="bg-white border-b">
-                <td className="px-4 py-2 font-bold text-emerald-600 border sticky left-0 bg-slate-50 z-10 whitespace-nowrap">울모임</td>
+                <td className="px-2 md:px-4 py-2 font-bold text-emerald-600 border sticky left-0 bg-slate-50 z-10 whitespace-nowrap">울모임</td>
                 {monthlyStats.map(stat => (
-                  <td key={stat.month} className="px-2 py-2 border">{Math.round(stat.woolAverage)}</td>
+                  <td key={stat.month} className="px-1 md:px-2 py-2 border">{Math.round(stat.woolAverage)}</td>
                 ))}
               </tr>
             </tbody>
@@ -206,19 +207,19 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
       </div>
 
       {/* Group Comparison Chart */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-        <h3 className="text-lg font-bold text-slate-800 mb-6">소그룹별 누적 참여 현황</h3>
-        <div className="h-80 w-full">
+      <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-100">
+        <h3 className="text-lg font-bold text-slate-800 mb-4 md:mb-6">소그룹별 누적 참여 현황</h3>
+        <div className="h-64 md:h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={groupStats} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+            <BarChart data={groupStats} margin={{ top: 20, right: 0, left: -20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis dataKey="groupName" stroke="#94a3b8" fontSize={12} />
-              <YAxis stroke="#94a3b8" fontSize={12} />
+              <XAxis dataKey="groupName" stroke="#94a3b8" fontSize={10} />
+              <YAxis stroke="#94a3b8" fontSize={10} />
               <Tooltip 
                 cursor={{ fill: '#f1f5f9' }}
-                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
               />
-              <Legend />
+              <Legend wrapperStyle={{fontSize: '12px', paddingTop: '10px'}} />
               <Bar dataKey="totalWorship" name="예배" fill="#3b82f6" radius={[4, 4, 0, 0]} />
               <Bar dataKey="totalGathering" name="집회" fill="#6366f1" radius={[4, 4, 0, 0]} />
               <Bar dataKey="totalWool" name="울모임" fill="#10b981" radius={[4, 4, 0, 0]} />

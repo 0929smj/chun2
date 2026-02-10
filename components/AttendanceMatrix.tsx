@@ -87,7 +87,7 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
         <td 
           key={`${memberId}-${date}-${type}`} 
           onClick={() => onToggleAttendance(memberId, date, type)}
-          className={`px-2 py-2 border border-slate-200 text-center cursor-pointer transition-colors ${hoverClass}`}
+          className={`px-1 md:px-2 py-2 border border-slate-200 text-center cursor-pointer transition-colors ${hoverClass}`}
         >
           <div className={`flex justify-center ${activeColorClass}`}>
              <Check size={16} strokeWidth={3} />
@@ -98,7 +98,7 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
 
     if (canceled) {
       return (
-        <td key={`${memberId}-${date}-${type}`} className="px-2 py-2 border border-slate-200 text-center bg-slate-100 text-slate-400">
+        <td key={`${memberId}-${date}-${type}`} className="px-1 md:px-2 py-2 border border-slate-200 text-center bg-slate-100 text-slate-400">
            -
         </td>
       );
@@ -108,7 +108,7 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
       <td 
         key={`${memberId}-${date}-${type}`} 
         onClick={() => onToggleAttendance(memberId, date, type)}
-        className={`px-2 py-2 border border-slate-200 text-center cursor-pointer transition-colors ${hoverClass}`}
+        className={`px-1 md:px-2 py-2 border border-slate-200 text-center cursor-pointer transition-colors ${hoverClass}`}
       >
       </td>
     );
@@ -118,46 +118,48 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
     <div className="space-y-6">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-slate-800">출석 상세 현황</h2>
-          <p className="text-slate-500">클릭하여 출석 상태를 바로 수정할 수 있습니다. (회색 칸은 모임 없음)</p>
+          <h2 className="text-2xl md:text-3xl font-bold text-slate-800">출석 상세 현황</h2>
+          <p className="text-sm text-slate-500">클릭하여 출석 상태를 바로 수정할 수 있습니다.</p>
         </div>
         
-        <div className="flex flex-wrap gap-4 items-center">
+        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center w-full md:w-auto">
             {/* Search Input */}
-            <div className="relative">
+            <div className="relative flex-1 sm:flex-none">
               <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                 <Search size={16} className="text-slate-400" />
               </div>
               <input 
                 type="text" 
-                className="bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-40 pl-10 p-2.5" 
+                className="bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:w-40 pl-10 p-2.5" 
                 placeholder="이름 검색" 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
 
-            <select
-              className="bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-32 p-2.5"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-            >
-              <option value="all">1년 전체</option>
-              {months.map((m, idx) => (
-                <option key={m} value={idx}>{m}월</option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                className="bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:w-32 p-2.5 flex-1"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+              >
+                <option value="all">1년 전체</option>
+                {months.map((m, idx) => (
+                  <option key={m} value={idx}>{m}월</option>
+                ))}
+              </select>
 
-            <select
-              className="bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-40 p-2.5"
-              value={filterGroup}
-              onChange={(e) => setFilterGroup(e.target.value)}
-            >
-              <option value="all">전체 소그룹/울</option>
-              {availableGroups.map(g => (
-                <option key={g} value={g}>{g}</option>
-              ))}
-            </select>
+              <select
+                className="bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:w-40 p-2.5 flex-1"
+                value={filterGroup}
+                onChange={(e) => setFilterGroup(e.target.value)}
+              >
+                <option value="all">전체 소그룹/울</option>
+                {availableGroups.map(g => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
+            </div>
         </div>
       </header>
 
@@ -166,11 +168,11 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
           <table className="w-full text-sm text-left text-slate-500 border-collapse">
             <thead className="text-xs text-slate-700 uppercase bg-slate-50">
               <tr>
-                <th scope="col" className="px-4 py-3 sticky left-0 bg-slate-50 z-20 w-24 border border-slate-200">이름</th>
-                <th scope="col" className="px-4 py-3 w-32 border border-slate-200">소그룹/울</th>
-                <th scope="col" className="px-2 py-3 w-16 border border-slate-200 text-center">구분</th>
+                <th scope="col" className="px-2 md:px-4 py-3 sticky left-0 bg-slate-50 z-20 w-20 md:w-24 border border-slate-200">이름</th>
+                <th scope="col" className="px-2 md:px-4 py-3 w-24 md:w-32 border border-slate-200">소그룹</th>
+                <th scope="col" className="px-2 py-3 w-12 md:w-16 border border-slate-200 text-center">구분</th>
                 {currentMonthSundays.map(date => (
-                  <th key={date} scope="col" className="px-2 py-3 text-center border border-slate-200 min-w-[50px]">
+                  <th key={date} scope="col" className="px-1 md:px-2 py-3 text-center border border-slate-200 min-w-[50px]">
                     <div className="flex flex-col items-center">
                       <span>{date.substring(5)}</span>
                       {getEventName(date) && (
@@ -179,7 +181,7 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
                     </div>
                   </th>
                 ))}
-                <th scope="col" className="px-2 py-3 text-center border border-slate-200 min-w-[50px]">계</th>
+                <th scope="col" className="px-1 md:px-2 py-3 text-center border border-slate-200 min-w-[40px] md:min-w-[50px]">계</th>
               </tr>
             </thead>
             <tbody>
@@ -187,12 +189,12 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
                 <React.Fragment key={member.id}>
                   {/* Row 1: Worship */}
                   <tr className="bg-white border-b hover:bg-slate-50">
-                    <td rowSpan={3} className={`px-4 py-3 font-medium text-slate-900 sticky left-0 bg-white z-10 border border-slate-200 ${mIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} group relative`}>
+                    <td rowSpan={3} className={`px-2 md:px-4 py-3 font-medium text-slate-900 sticky left-0 bg-white z-10 border border-slate-200 ${mIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} group relative`}>
                       <span className="cursor-default decoration-dotted underline underline-offset-4 decoration-slate-300">{member.name}</span>
                       
-                      {/* Modern Tooltip for Memo */}
+                      {/* Modern Tooltip for Memo - Adjusted for mobile position */}
                       {member.specialNotes && (
-                        <div className="absolute left-full top-0 ml-2 w-56 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+                        <div className="hidden sm:block absolute left-full top-0 ml-2 w-56 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
                            <div className="bg-slate-800 text-white text-xs rounded-lg py-2 px-3 shadow-xl">
                               <div className="flex items-center gap-1.5 mb-1 text-slate-300 font-bold border-b border-slate-600 pb-1">
                                  <MessageSquare size={10} /> 비고 (Memo)
@@ -204,36 +206,36 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
                         </div>
                       )}
                     </td>
-                    <td rowSpan={3} className="px-4 py-3 border border-slate-200">
-                      <div className="font-semibold text-slate-700">{member.group}</div>
+                    <td rowSpan={3} className="px-2 md:px-4 py-3 border border-slate-200">
+                      <div className="font-semibold text-slate-700 text-xs md:text-sm">{member.group}</div>
                     </td>
-                    <td className="px-2 py-2 text-center text-xs font-bold text-blue-600 border border-slate-200 bg-blue-50">예배</td>
+                    <td className="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-bold text-blue-600 border border-slate-200 bg-blue-50">예배</td>
                     {currentMonthSundays.map(date => 
                       renderCell(member.id, date, AttendanceType.Worship, 'text-blue-600', 'hover:bg-blue-50')
                     )}
-                    <td className="px-2 py-2 text-center font-bold text-slate-700 border border-slate-200 bg-slate-50">
+                    <td className="px-1 md:px-2 py-2 text-center font-bold text-slate-700 border border-slate-200 bg-slate-50">
                       {calculateTotal(member.id, AttendanceType.Worship)}
                     </td>
                   </tr>
                   
                   {/* Row 2: Gathering */}
                   <tr className="bg-white border-b hover:bg-slate-50">
-                    <td className="px-2 py-2 text-center text-xs font-bold text-indigo-600 border border-slate-200 bg-indigo-50">집회</td>
+                    <td className="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-bold text-indigo-600 border border-slate-200 bg-indigo-50">집회</td>
                     {currentMonthSundays.map(date => 
                       renderCell(member.id, date, AttendanceType.Gathering, 'text-indigo-600', 'hover:bg-indigo-50')
                     )}
-                    <td className="px-2 py-2 text-center font-bold text-slate-700 border border-slate-200 bg-slate-50">
+                    <td className="px-1 md:px-2 py-2 text-center font-bold text-slate-700 border border-slate-200 bg-slate-50">
                       {calculateTotal(member.id, AttendanceType.Gathering)}
                     </td>
                   </tr>
 
                   {/* Row 3: Wool */}
                   <tr className="bg-white border-b hover:bg-slate-50">
-                    <td className="px-2 py-2 text-center text-xs font-bold text-emerald-600 border border-slate-200 bg-emerald-50">울</td>
+                    <td className="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-bold text-emerald-600 border border-slate-200 bg-emerald-50">울</td>
                     {currentMonthSundays.map(date => 
                       renderCell(member.id, date, AttendanceType.Wool, 'text-emerald-600', 'hover:bg-emerald-50')
                     )}
-                    <td className="px-2 py-2 text-center font-bold text-slate-700 border border-slate-200 bg-slate-50">
+                    <td className="px-1 md:px-2 py-2 text-center font-bold text-slate-700 border border-slate-200 bg-slate-50">
                       {calculateTotal(member.id, AttendanceType.Wool)}
                     </td>
                   </tr>

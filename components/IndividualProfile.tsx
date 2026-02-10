@@ -182,9 +182,9 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
 
       {/* Search & Filter Section */}
       <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-200">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+        <div className="flex flex-col md:flex-row gap-4 md:items-end">
            {/* Direct Search */}
-           <div className="col-span-12 md:col-span-5">
+           <div className="w-full md:flex-1">
              <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center text-indigo-700">
                 <Search size={14} className="mr-1" /> 이름 검색
              </label>
@@ -224,10 +224,11 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
              </div>
            </div>
 
-           <div className="col-span-12 md:col-span-1 flex justify-center pb-2 text-slate-300 font-bold text-sm">OR</div>
+           <div className="hidden md:flex justify-center pb-2 text-slate-300 font-bold text-sm">OR</div>
+           <div className="md:hidden text-center text-xs text-slate-400 -my-1">- 또는 소그룹으로 찾기 -</div>
 
            {/* Dropdowns */}
-           <div className="col-span-12 md:col-span-6 flex gap-3">
+           <div className="w-full md:flex-1 flex gap-3">
               <div className="flex-1">
                  <label className="block text-xs font-bold text-slate-500 mb-2">소그룹 선택</label>
                  <select
@@ -235,7 +236,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
                    value={selectedGroup}
                    onChange={handleGroupChange}
                  >
-                   <option value="">소그룹 선택</option>
+                   <option value="">선택</option>
                    {availableGroups.map(g => (
                      <option key={g} value={g}>{g}</option>
                    ))}
@@ -249,7 +250,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
                    onChange={handleMemberChange}
                    disabled={!selectedGroup}
                  >
-                   <option value="">멤버를 선택하세요</option>
+                   <option value="">선택</option>
                    {filteredMembers.map(m => (
                      <option key={m.id} value={m.id}>{m.name}</option>
                    ))}
@@ -265,20 +266,20 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
              {/* Profile Card */}
              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="bg-gradient-to-r from-indigo-500 to-purple-600 h-20 md:h-24 relative">
-                   <div className="absolute -bottom-10 left-6 w-20 h-20 rounded-full bg-white p-1 shadow-md">
+                <div className="bg-gradient-to-r from-indigo-500 to-purple-600 h-16 md:h-24 relative">
+                   <div className="absolute -bottom-8 md:-bottom-10 left-6 w-16 h-16 md:w-20 md:h-20 rounded-full bg-white p-1 shadow-md">
                       {/* Avatar with number prefix */}
-                      <div className="w-full h-full rounded-full bg-slate-200 flex items-center justify-center text-slate-500 text-xl md:text-2xl font-bold">
+                      <div className="w-full h-full rounded-full bg-slate-200 flex items-center justify-center text-slate-500 text-lg md:text-2xl font-bold">
                         {memberDisplay.avatarText}
                       </div>
                    </div>
                 </div>
-                <div className="pt-12 pb-6 px-6">
+                <div className="pt-10 md:pt-12 pb-6 px-6">
                    {/* Display Name without number */}
-                   <h3 className="text-2xl font-bold text-slate-800">{memberDisplay.displayName}</h3>
-                   <p className="text-indigo-600 font-medium">{targetMember.group}</p>
+                   <h3 className="text-xl md:text-2xl font-bold text-slate-800">{memberDisplay.displayName}</h3>
+                   <p className="text-indigo-600 font-medium text-sm md:text-base">{targetMember.group}</p>
                    
-                   <div className="mt-6 space-y-3">
+                   <div className="mt-4 md:mt-6 space-y-3">
                       <div className="flex items-center text-sm text-slate-600">
                          <User size={16} className="mr-3 text-slate-400" />
                          <span>{targetMember.role || '성도'}</span>
@@ -313,43 +314,43 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
                 
                 <div className="flex flex-col md:flex-row gap-6">
                    {/* Stats Grid - Responsive: 1 col on mobile, 2 cols on tablet+ */}
-                   <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col justify-center">
-                         <span className="text-xs font-bold text-blue-600 uppercase">예배 출석률</span>
-                         <div className="flex items-end mt-2">
-                            <span className="text-2xl md:text-3xl font-bold text-slate-800">{stats.worshipRate}%</span>
-                            <span className="text-xs text-slate-500 ml-2 mb-1">({stats.worshipCount}/{stats.possibleWorship}회)</span>
+                   <div className="flex-1 grid grid-cols-2 gap-3 md:gap-4">
+                      <div className="bg-blue-50 p-3 md:p-4 rounded-xl border border-blue-100 flex flex-col justify-center">
+                         <span className="text-[10px] md:text-xs font-bold text-blue-600 uppercase">예배 출석률</span>
+                         <div className="flex items-end mt-1 md:mt-2">
+                            <span className="text-xl md:text-3xl font-bold text-slate-800">{stats.worshipRate}%</span>
+                            <span className="text-[10px] md:text-xs text-slate-500 ml-1 md:ml-2 mb-1">({stats.worshipCount}/{stats.possibleWorship})</span>
                          </div>
                       </div>
-                      <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex flex-col justify-center">
-                         <span className="text-xs font-bold text-indigo-600 uppercase">집회 출석률</span>
-                         <div className="flex items-end mt-2">
-                            <span className="text-2xl md:text-3xl font-bold text-slate-800">{stats.gatheringRate}%</span>
-                            <span className="text-xs text-slate-500 ml-2 mb-1">({stats.gatheringCount}/{stats.possibleGathering}회)</span>
+                      <div className="bg-indigo-50 p-3 md:p-4 rounded-xl border border-indigo-100 flex flex-col justify-center">
+                         <span className="text-[10px] md:text-xs font-bold text-indigo-600 uppercase">집회 출석률</span>
+                         <div className="flex items-end mt-1 md:mt-2">
+                            <span className="text-xl md:text-3xl font-bold text-slate-800">{stats.gatheringRate}%</span>
+                            <span className="text-[10px] md:text-xs text-slate-500 ml-1 md:ml-2 mb-1">({stats.gatheringCount}/{stats.possibleGathering})</span>
                          </div>
                       </div>
-                      <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex flex-col justify-center">
-                         <span className="text-xs font-bold text-emerald-600 uppercase">울모임 출석률</span>
-                         <div className="flex items-end mt-2">
-                            <span className="text-2xl md:text-3xl font-bold text-slate-800">{stats.woolRate}%</span>
-                            <span className="text-xs text-slate-500 ml-2 mb-1">({stats.woolCount}/{stats.possibleWool}회)</span>
+                      <div className="bg-emerald-50 p-3 md:p-4 rounded-xl border border-emerald-100 flex flex-col justify-center">
+                         <span className="text-[10px] md:text-xs font-bold text-emerald-600 uppercase">울모임 출석률</span>
+                         <div className="flex items-end mt-1 md:mt-2">
+                            <span className="text-xl md:text-3xl font-bold text-slate-800">{stats.woolRate}%</span>
+                            <span className="text-[10px] md:text-xs text-slate-500 ml-1 md:ml-2 mb-1">({stats.woolCount}/{stats.possibleWool})</span>
                          </div>
                       </div>
-                      <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex flex-col justify-center">
-                         <span className="text-xs font-bold text-amber-600 uppercase">기도 나눔</span>
-                         <div className="flex items-end mt-2">
-                            <span className="text-2xl md:text-3xl font-bold text-slate-800">{stats.prayerCount}</span>
-                            <span className="text-xs text-slate-500 ml-2 mb-1">건</span>
+                      <div className="bg-amber-50 p-3 md:p-4 rounded-xl border border-amber-100 flex flex-col justify-center">
+                         <span className="text-[10px] md:text-xs font-bold text-amber-600 uppercase">기도 나눔</span>
+                         <div className="flex items-end mt-1 md:mt-2">
+                            <span className="text-xl md:text-3xl font-bold text-slate-800">{stats.prayerCount}</span>
+                            <span className="text-[10px] md:text-xs text-slate-500 ml-1 md:ml-2 mb-1">건</span>
                          </div>
                       </div>
                    </div>
 
                    {/* Radar Chart */}
-                   <div className="flex-1 h-64 min-h-[250px] flex items-center justify-center">
+                   <div className="flex-1 h-56 md:h-64 min-h-[220px] flex items-center justify-center">
                       <ResponsiveContainer width="100%" height="100%">
-                         <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
+                         <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
                             <PolarGrid stroke="#e2e8f0" />
-                            <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 12 }} />
+                            <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 11 }} />
                             <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
                             <Radar
                                name={targetMember.name}
@@ -359,7 +360,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
                                fill="#6366f1"
                                fillOpacity={0.4}
                             />
-                            <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}/>
+                            <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }}/>
                          </RadarChart>
                       </ResponsiveContainer>
                    </div>
@@ -372,7 +373,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
              <h4 className="font-bold text-slate-700 mb-4 md:mb-6 flex items-center">
                 <Calendar size={18} className="mr-2 text-indigo-500" /> 1년 출석 히스토리
              </h4>
-             {/* Responsive Columns */}
+             {/* Responsive Columns - 1 col on mobile, 2 on sm, 3 on lg */}
              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
                 {[1,2,3,4,5,6,7,8,9,10,11,12].map(month => {
                    const monthDates = SUNDAYS_2026.filter(d => new Date(d).getMonth() + 1 === month);
@@ -401,7 +402,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
                                   <div className="flex items-center min-w-0">
                                     <span className="text-slate-500 font-mono text-[10px] md:text-xs">{dateStr}</span>
                                     {eventName && (
-                                       <span className="ml-1 text-[9px] text-indigo-400 font-medium truncate max-w-[60px]">{eventName}</span>
+                                       <span className="ml-1 text-[9px] text-indigo-400 font-medium truncate max-w-[50px] md:max-w-[60px]">{eventName}</span>
                                     )}
                                   </div>
                                   <div className="flex gap-1 flex-shrink-0">
@@ -413,7 +414,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
                                         types.includes(AttendanceType.Gathering) ? 'bg-indigo-100 text-indigo-600' : 
                                         gCanceled ? 'bg-slate-100 text-slate-300' : 'bg-slate-50 text-slate-200'
                                      }`}>{gCanceled ? '-' : 'G'}</span>
-                                     <span className={`w-4 h-4 md:w-5 md:h-5 flex items-center justify-center rounded text-[10px] font-bold ${
+                                     <span className={`w-4 h-4 md:w-5 md:h-5 flex items-center justify-center rounded text-[8px] md:text-[10px] font-bold ${
                                         types.includes(AttendanceType.Wool) ? 'bg-emerald-100 text-emerald-600' : 
                                         lCanceled ? 'bg-slate-100 text-slate-300' : 'bg-slate-50 text-slate-200'
                                      }`}>{lCanceled ? '-' : 'L'}</span>
@@ -426,11 +427,11 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
                    );
                 })}
              </div>
-             <div className="mt-4 flex flex-wrap gap-3 text-xs text-slate-500 justify-end">
-                <div className="flex items-center"><span className="w-2 h-2 rounded-full bg-blue-500 mr-1"></span> W: 예배</div>
-                <div className="flex items-center"><span className="w-2 h-2 rounded-full bg-indigo-500 mr-1"></span> G: 집회</div>
-                <div className="flex items-center"><span className="w-2 h-2 rounded-full bg-emerald-500 mr-1"></span> L: 울모임</div>
-                <div className="flex items-center"><span className="w-2 h-2 rounded-full bg-slate-200 mr-1"></span> - : 모임 없음</div>
+             <div className="mt-4 flex flex-wrap gap-2 md:gap-3 text-[10px] md:text-xs text-slate-500 justify-end">
+                <div className="flex items-center"><span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-blue-500 mr-1"></span> W: 예배</div>
+                <div className="flex items-center"><span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-indigo-500 mr-1"></span> G: 집회</div>
+                <div className="flex items-center"><span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-emerald-500 mr-1"></span> L: 울모임</div>
+                <div className="flex items-center"><span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-slate-200 mr-1"></span> - : 모임 없음</div>
              </div>
           </div>
 
@@ -463,10 +464,10 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
         </>
       ) : (
         // Empty State
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-80 md:h-96 flex flex-col items-center justify-center text-slate-400 p-8 text-center">
-           <User size={64} className="mb-4 text-slate-200" />
-           <h3 className="text-lg font-bold text-slate-600 mb-2">성도를 선택해주세요</h3>
-           <p className="max-w-md text-sm md:text-base">상단 검색창에서 이름을 입력하거나, 소그룹 및 멤버를 선택하여 상세 정보를 확인하세요.</p>
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-64 md:h-96 flex flex-col items-center justify-center text-slate-400 p-8 text-center">
+           <User size={48} className="mb-4 text-slate-200 md:w-16 md:h-16" />
+           <h3 className="text-base md:text-lg font-bold text-slate-600 mb-2">성도를 선택해주세요</h3>
+           <p className="max-w-md text-xs md:text-base">상단 검색창에서 이름을 입력하거나, 소그룹 및 멤버를 선택하여 상세 정보를 확인하세요.</p>
         </div>
       )}
     </div>

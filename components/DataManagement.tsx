@@ -6,7 +6,13 @@ import { getScriptUrl, setScriptUrl, fetchSheetData, sendAction, DEFAULT_SCRIPT_
 import { getClosestSunday } from '../services/utils';
 import { exportDataToExcel } from '../services/excelService';
 
-const GAS_CODE_SNIPPET = `
+const GAS_CODE_SNIPPET = `/* ... (Existing code kept for brevity, will be in the actual file) ... */
+/* 
+ [구글 스프레드시트 연결 스크립트 v4.3]
+ - 업데이트: '울장' AccessCode만 로그인 비밀번호로 사용
+ ...
+*/
+// (Code truncated for response, assume full GAS code is here as before)
 /* 
  [구글 스프레드시트 연결 스크립트 v4.3]
  - 업데이트: '울장' AccessCode만 로그인 비밀번호로 사용
@@ -720,14 +726,14 @@ const DataManagement: React.FC<DataManagementProps> = ({
 
       <header className="flex justify-between items-center">
         <div>
-           <h2 className="text-3xl font-bold text-slate-800">데이터 관리</h2>
-           <p className="text-slate-500">멤버/출석 관리, 데이터 내보내기 및 DB 설정</p>
+           <h2 className="text-2xl md:text-3xl font-bold text-slate-800">데이터 관리</h2>
+           <p className="text-sm md:text-base text-slate-500">멤버/출석 관리, 데이터 내보내기 및 DB 설정</p>
         </div>
       </header>
 
       {/* Tabs */}
-      <div className="border-b border-slate-200 overflow-x-auto">
-        <ul className="flex flex-nowrap -mb-px text-sm font-medium text-center text-slate-500">
+      <div className="border-b border-slate-200 overflow-x-auto custom-scrollbar">
+        <ul className="flex flex-nowrap -mb-px text-sm font-medium text-center text-slate-500 min-w-max">
           <li className="mr-2">
             <button onClick={() => { setActiveTab('members'); setSortConfig(null); }} className={`inline-block p-4 rounded-t-lg border-b-2 whitespace-nowrap ${activeTab === 'members' ? 'text-indigo-600 border-indigo-600' : 'border-transparent hover:text-slate-600 hover:border-slate-300'}`}>멤버 관리</button>
           </li>
@@ -748,20 +754,20 @@ const DataManagement: React.FC<DataManagementProps> = ({
       </div>
 
       {activeTab === 'members' && (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6">
            {/* Member Add Form */}
            <div className="flex flex-col gap-4 mb-6 bg-slate-50 p-4 rounded-lg">
              <div className="space-y-4">
                 <h4 className="font-bold text-slate-700 text-sm">새 멤버 추가</h4>
                 <div className="flex flex-col md:flex-row gap-2">
-                    <input type="text" className="border border-slate-300 rounded p-2 text-sm flex-1" value={newMember.name || ''} onChange={e => setNewMember({...newMember, name: e.target.value})} placeholder="이름" />
-                    <select className="border border-slate-300 rounded p-2 text-sm flex-1" value={newMember.group || ''} onChange={e => setNewMember({...newMember, group: e.target.value, wool: e.target.value})}>
+                    <input type="text" className="border border-slate-300 rounded p-2 text-sm flex-1 w-full" value={newMember.name || ''} onChange={e => setNewMember({...newMember, name: e.target.value})} placeholder="이름" />
+                    <select className="border border-slate-300 rounded p-2 text-sm flex-1 w-full" value={newMember.group || ''} onChange={e => setNewMember({...newMember, group: e.target.value, wool: e.target.value})}>
                       <option value="">소그룹 선택</option>
                       {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
                     </select>
-                    <input type="text" className="border border-slate-300 rounded p-2 text-sm flex-1" value={newMember.phoneNumber || ''} onChange={e => setNewMember({...newMember, phoneNumber: e.target.value})} placeholder="연락처" />
-                    <input type="text" className="border border-slate-300 rounded p-2 text-sm flex-1" value={newMember.specialNotes || ''} onChange={e => setNewMember({...newMember, specialNotes: e.target.value})} placeholder="비고(메모)" />
-                    <button onClick={handleAddMember} className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700 flex items-center justify-center min-w-[80px]">
+                    <input type="text" className="border border-slate-300 rounded p-2 text-sm flex-1 w-full" value={newMember.phoneNumber || ''} onChange={e => setNewMember({...newMember, phoneNumber: e.target.value})} placeholder="연락처" />
+                    <input type="text" className="border border-slate-300 rounded p-2 text-sm flex-1 w-full" value={newMember.specialNotes || ''} onChange={e => setNewMember({...newMember, specialNotes: e.target.value})} placeholder="비고(메모)" />
+                    <button onClick={handleAddMember} className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700 flex items-center justify-center min-w-[80px] w-full md:w-auto">
                       <Plus size={16} className="mr-1" /> 추가
                     </button>
                 </div>
@@ -802,34 +808,34 @@ const DataManagement: React.FC<DataManagementProps> = ({
               </div>
            </div>
 
-           <div className="overflow-x-auto">
+           <div className="overflow-x-auto custom-scrollbar">
              <table className="w-full text-sm text-left text-slate-500">
                 <thead className="text-xs text-slate-700 uppercase bg-slate-50">
                   <tr>
-                    <th className="px-6 py-3 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('name')}>
+                    <th className="px-4 md:px-6 py-3 cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap" onClick={() => handleSort('name')}>
                       <div className="flex items-center">이름 <ArrowUpDown size={14} className={`ml-1 ${sortConfig?.key === 'name' ? 'text-indigo-600' : 'text-slate-300'}`} /></div>
                     </th>
-                    <th className="px-6 py-3 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('group')}>
-                      <div className="flex items-center">소그룹/울 <ArrowUpDown size={14} className={`ml-1 ${sortConfig?.key === 'group' ? 'text-indigo-600' : 'text-slate-300'}`} /></div>
+                    <th className="px-4 md:px-6 py-3 cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap" onClick={() => handleSort('group')}>
+                      <div className="flex items-center">소그룹 <ArrowUpDown size={14} className={`ml-1 ${sortConfig?.key === 'group' ? 'text-indigo-600' : 'text-slate-300'}`} /></div>
                     </th>
-                    <th className="px-6 py-3">연락처</th>
-                    <th className="px-6 py-3">비고 (Memo)</th>
-                    <th className="px-6 py-3 text-right">관리</th>
+                    <th className="px-4 md:px-6 py-3 whitespace-nowrap">연락처</th>
+                    <th className="px-4 md:px-6 py-3 whitespace-nowrap">비고 (Memo)</th>
+                    <th className="px-4 md:px-6 py-3 text-right whitespace-nowrap">관리</th>
                   </tr>
                 </thead>
                 <tbody>
                   {processedMembers.map(member => (
                     <tr key={member.id} className={`border-b group ${member.status === 'INACTIVE' ? 'bg-slate-100 text-slate-400 hover:bg-slate-200' : 'bg-white hover:bg-slate-50 text-slate-900'}`}>
-                      <td className="px-6 py-4 font-medium flex items-center">
+                      <td className="px-4 md:px-6 py-4 font-medium flex items-center whitespace-nowrap">
                         {member.name}
                         {member.status === 'INACTIVE' && (
                            <span className="ml-2 text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded border border-slate-300">비활성</span>
                         )}
                       </td>
-                      <td className="px-6 py-4">{member.group}</td>
-                      <td className="px-6 py-4">{member.phoneNumber}</td>
-                      <td className="px-6 py-4 truncate max-w-[200px]" title={member.specialNotes}>{member.specialNotes}</td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-4 md:px-6 py-4 whitespace-nowrap">{member.group}</td>
+                      <td className="px-4 md:px-6 py-4 whitespace-nowrap">{member.phoneNumber}</td>
+                      <td className="px-4 md:px-6 py-4 truncate max-w-[150px] md:max-w-[200px]" title={member.specialNotes}>{member.specialNotes}</td>
+                      <td className="px-4 md:px-6 py-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2">
                           <button onClick={() => setEditingMember(member)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors" title="수정">
                              <Edit2 size={16} />
@@ -848,27 +854,27 @@ const DataManagement: React.FC<DataManagementProps> = ({
       )}
 
       {activeTab === 'attendance' && (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6">
            <div className="mb-6 space-y-4">
-              <div className="flex items-center gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
                 <label className="font-bold text-slate-700 w-24">날짜 선택:</label>
                 <div className="flex items-center gap-3">
                   <select 
-                    className="border border-slate-300 rounded p-2 text-sm bg-white"
+                    className="border border-slate-300 rounded p-2 text-sm bg-white w-full sm:w-auto"
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
                   >
                     {SUNDAYS_2026.map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
                   {getEventName(selectedDate) && (
-                    <span className="text-sm text-indigo-600 font-medium bg-indigo-50 px-2 py-1 rounded border border-indigo-100">
+                    <span className="text-sm text-indigo-600 font-medium bg-indigo-50 px-2 py-1 rounded border border-indigo-100 whitespace-nowrap">
                       {getEventName(selectedDate)}
                     </span>
                   )}
                 </div>
               </div>
-              <div className="flex flex-col md:flex-row md:items-start gap-4">
-                <label className="font-bold text-slate-700 w-24 mt-2">소그룹/울:</label>
+              <div className="flex flex-col md:flex-row md:items-start gap-2 md:gap-4">
+                <label className="font-bold text-slate-700 w-24 md:mt-2">소그룹/울:</label>
                 <div className="flex flex-wrap gap-2">
                    <button onClick={() => setAttendanceFilterGroup('all')} className={`px-3 py-1.5 rounded-full text-xs font-medium border ${attendanceFilterGroup === 'all' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600'}`}>전체 보기</button>
                    {availableGroups.map(g => (
@@ -878,19 +884,19 @@ const DataManagement: React.FC<DataManagementProps> = ({
               </div>
            </div>
            
-           <div className="overflow-x-auto">
+           <div className="overflow-x-auto custom-scrollbar">
              <table className="w-full text-sm text-left text-slate-500">
                 <thead className="text-xs text-slate-700 uppercase bg-slate-50">
                    <tr>
-                     <th className="px-6 py-3 cursor-pointer hover:bg-slate-100" onClick={() => handleSort('name')}>
+                     <th className="px-4 md:px-6 py-3 cursor-pointer hover:bg-slate-100 whitespace-nowrap" onClick={() => handleSort('name')}>
                        <div className="flex items-center">이름 <ArrowUpDown size={14} className={`ml-1 ${sortConfig?.key === 'name' ? 'text-indigo-600' : 'text-slate-300'}`} /></div>
                      </th>
-                     <th className="px-6 py-3 cursor-pointer hover:bg-slate-100" onClick={() => handleSort('group')}>
-                        <div className="flex items-center">소그룹/울 <ArrowUpDown size={14} className={`ml-1 ${sortConfig?.key === 'group' ? 'text-indigo-600' : 'text-slate-300'}`} /></div>
+                     <th className="px-4 md:px-6 py-3 cursor-pointer hover:bg-slate-100 whitespace-nowrap" onClick={() => handleSort('group')}>
+                        <div className="flex items-center">소그룹 <ArrowUpDown size={14} className={`ml-1 ${sortConfig?.key === 'group' ? 'text-indigo-600' : 'text-slate-300'}`} /></div>
                      </th>
-                     <th className="px-6 py-3 text-center">예배</th>
-                     <th className="px-6 py-3 text-center">집회</th>
-                     <th className="px-6 py-3 text-center">울모임</th>
+                     <th className="px-4 md:px-6 py-3 text-center whitespace-nowrap">예배</th>
+                     <th className="px-4 md:px-6 py-3 text-center whitespace-nowrap">집회</th>
+                     <th className="px-4 md:px-6 py-3 text-center whitespace-nowrap">울모임</th>
                    </tr>
                 </thead>
                 <tbody>
@@ -922,15 +928,15 @@ const DataManagement: React.FC<DataManagementProps> = ({
 
                     return (
                       <tr key={member.id} className="bg-white border-b hover:bg-slate-50">
-                        <td className="px-6 py-4 font-medium text-slate-900">{member.name}</td>
-                        <td className="px-6 py-4">{member.group}</td>
-                        <td className="px-6 py-4 text-center">
+                        <td className="px-4 md:px-6 py-4 font-medium text-slate-900 whitespace-nowrap">{member.name}</td>
+                        <td className="px-4 md:px-6 py-4 whitespace-nowrap">{member.group}</td>
+                        <td className="px-4 md:px-6 py-4 text-center">
                           {renderCheckButton(AttendanceType.Worship, '', 'bg-blue-600')}
                         </td>
-                        <td className="px-6 py-4 text-center">
+                        <td className="px-4 md:px-6 py-4 text-center">
                           {renderCheckButton(AttendanceType.Gathering, '', 'bg-indigo-600')}
                         </td>
-                        <td className="px-6 py-4 text-center">
+                        <td className="px-4 md:px-6 py-4 text-center">
                           {renderCheckButton(AttendanceType.Wool, '', 'bg-emerald-600')}
                         </td>
                       </tr>
@@ -943,7 +949,7 @@ const DataManagement: React.FC<DataManagementProps> = ({
       )}
 
       {activeTab === 'export' && (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6">
            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
               <Download size={20} className="mr-2 text-indigo-600" /> 
               데이터 엑셀 내보내기
@@ -953,7 +959,7 @@ const DataManagement: React.FC<DataManagementProps> = ({
               <br/>데이터는 소그룹별로 정렬되어 저장됩니다.
            </p>
 
-           <div className="bg-slate-50 p-6 rounded-lg border border-slate-200 max-w-2xl">
+           <div className="bg-slate-50 p-4 md:p-6 rounded-lg border border-slate-200 max-w-2xl">
               <div className="mb-6">
                  <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center">
                     <Calendar size={16} className="mr-2" /> 기간 선택
@@ -983,7 +989,7 @@ const DataManagement: React.FC<DataManagementProps> = ({
 
               <div className="mb-6">
                  <span className="text-xs font-bold text-slate-500 mb-2 block">빠른 기간 설정</span>
-                 <div className="flex gap-2">
+                 <div className="flex flex-wrap gap-2">
                     <button 
                       onClick={() => { setExportStartDate('2026-01-01'); setExportEndDate('2026-12-31'); }}
                       className="px-3 py-1.5 bg-white border border-slate-300 rounded text-xs hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
@@ -1028,7 +1034,7 @@ const DataManagement: React.FC<DataManagementProps> = ({
                         { startDate: exportStartDate, endDate: exportEndDate }
                      );
                    }}
-                   className="bg-emerald-600 text-white px-6 py-2.5 rounded-lg hover:bg-emerald-700 flex items-center font-bold shadow-sm transition-transform active:scale-95"
+                   className="w-full md:w-auto bg-emerald-600 text-white px-6 py-2.5 rounded-lg hover:bg-emerald-700 flex items-center justify-center font-bold shadow-sm transition-transform active:scale-95"
                  >
                     <Download size={18} className="mr-2" /> 엑셀 파일 생성 및 다운로드
                  </button>
@@ -1038,16 +1044,16 @@ const DataManagement: React.FC<DataManagementProps> = ({
       )}
 
       {activeTab === 'settings' && (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6">
           <div className="mb-8">
             <h3 className="text-lg font-bold text-slate-800 mb-2">Google Spreadsheet 데이터베이스 연결</h3>
             
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <h4 className="font-bold text-blue-800 flex items-center mb-2">
+              <h4 className="font-bold text-blue-800 flex items-center mb-2 text-sm md:text-base">
                 <HelpCircle size={18} className="mr-2"/>
                 "Failed to fetch" 오류가 발생하나요?
               </h4>
-              <ul className="list-disc list-inside text-sm text-blue-700 space-y-1">
+              <ul className="list-disc list-inside text-xs md:text-sm text-blue-700 space-y-1">
                 <li>배포 시 <strong>'액세스 권한 승인'</strong>을 <strong>'모든 사용자'</strong>로 설정했는지 꼭 확인하세요.</li>
                 <li>'본인'이나 'Google 계정 사용자'로 설정하면 연결되지 않습니다.</li>
                 <li>스크립트를 수정했다면 <strong>[새 배포]</strong>를 눌러 새 버전을 생성해야 적용됩니다.</li>
@@ -1056,12 +1062,12 @@ const DataManagement: React.FC<DataManagementProps> = ({
             </div>
 
             <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6">
-              <h4 className="font-bold text-slate-700 mb-2">1단계: 스크립트 복사 및 배포 (필수 업데이트)</h4>
-              <p className="text-sm text-slate-600 mb-2">
+              <h4 className="font-bold text-slate-700 mb-2 text-sm md:text-base">1단계: 스크립트 복사 및 배포 (필수 업데이트)</h4>
+              <p className="text-xs md:text-sm text-slate-600 mb-2">
                  <strong>[중요]</strong> '울장' 비밀번호 정책 적용을 위해 아래 코드를 <strong>반드시 새로 복사하여 배포</strong>해주세요.
               </p>
               <div className="relative group">
-                <pre className="bg-slate-800 text-slate-200 p-4 rounded-lg text-xs overflow-x-auto h-48 custom-scrollbar font-mono">
+                <pre className="bg-slate-800 text-slate-200 p-4 rounded-lg text-[10px] md:text-xs overflow-x-auto h-48 custom-scrollbar font-mono">
                   {GAS_CODE_SNIPPET}
                 </pre>
                 <button 
@@ -1072,25 +1078,25 @@ const DataManagement: React.FC<DataManagementProps> = ({
                   {copySuccess ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
                 </button>
               </div>
-              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-800">
+              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-xs md:text-sm text-yellow-800">
                 <strong>안내:</strong> 말씀하신 데이터베이스 시트 ID(<code>1LoEMB...</code>)가 이미 코드에 적용되어 있습니다. 바로 복사해서 사용하세요.
               </div>
             </div>
 
             <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-               <h4 className="font-bold text-slate-700 mb-2">2단계: URL 연결</h4>
-               <div className="flex gap-2">
+               <h4 className="font-bold text-slate-700 mb-2 text-sm md:text-base">2단계: URL 연결</h4>
+               <div className="flex flex-col md:flex-row gap-2">
                  <input 
                    type="text" 
                    value={scriptUrl}
                    onChange={(e) => setLocalScriptUrl(e.target.value)}
                    placeholder="https://script.google.com/macros/s/......./exec"
-                   className="flex-1 border border-slate-300 rounded-lg p-2.5 text-sm"
+                   className="flex-1 border border-slate-300 rounded-lg p-2.5 text-sm w-full"
                  />
                  <button 
                    onClick={handleSaveUrl}
                    disabled={connectionStatus === 'testing'}
-                   className={`px-4 py-2 rounded-lg text-white font-medium flex items-center ${
+                   className={`px-4 py-2 rounded-lg text-white font-medium flex items-center justify-center ${
                      connectionStatus === 'testing' ? 'bg-slate-400' : 'bg-indigo-600 hover:bg-indigo-700'
                    }`}
                  >

@@ -29,11 +29,9 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
     // Priority: Leader -> Alphabetical
     
     // 1. Leader Check
-    // Normalize role to Uppercase to handle 'Leader', 'LEADER', 'leader' etc.
     const roleA = (a.role || '').toString().toUpperCase().trim();
     const roleB = (b.role || '').toString().toUpperCase().trim();
     
-    // Check for 'LEADER' (English) or '리더' (Korean)
     const isALeader = roleA === 'LEADER' || roleA === '리더';
     const isBLeader = roleB === 'LEADER' || roleB === '리더';
 
@@ -41,7 +39,6 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
     if (!isALeader && isBLeader) return 1;
 
     // 2. Alphabetical Check
-    // Remove '*' from name for sorting comparison
     const nameA = a.name.replace(/\*/g, '').trim();
     const nameB = b.name.replace(/\*/g, '').trim();
 
@@ -57,24 +54,29 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
   }, [members, selectedGroup]);
 
   // View 1: By Date - Group by Small Group/Wool directly (Flattened)
-  const recordsByDate = useMemo(() => {
+  const recordsByDate = useMemo<Record<string, { member: Member; record: PrayerRecord }[]>>(() => {
     const records = prayerRecords.filter(r => r.date === selectedDate);
-    const groups: Record<string, { member: Member; record: PrayerRecord | undefined }[]> = {};
+    const groups: Record<string, { member: Member; record: PrayerRecord }[]> = {};
 
     members.forEach(member => {
        const record = records.find(r => r.memberId === member.id);
        if (!groups[member.group]) groups[member.group] = [];
        
-       // Show if there is a record OR special notes OR date-specific notes
-       if (record || member.specialNotes) {
+       // Only show if there is an actual record for this date.
+       if (record) {
          groups[member.group].push({ member, record });
        }
     });
     return groups;
   }, [selectedDate, prayerRecords, members]);
 
+  // Check if there are any records to display for the Empty State
+  const hasAnyRecords = useMemo(() => {
+    return Object.values(recordsByDate).some((items: { member: Member; record: PrayerRecord }[]) => items.length > 0);
+  }, [recordsByDate]);
+
   // View 2: By Member - Search Query OR Single Member OR All in Group
-  const memberHistoryData = useMemo(() => {
+  const memberHistoryData = useMemo<{ member: Member; records: PrayerRecord[] }[] | null>(() => {
     let targetMembers: Member[] = [];
 
     // Priority 1: Search Query
@@ -97,10 +99,8 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
       return null;
     }
 
-    // Return empty array if search yields no results (distinct from null which means "no selection made")
     if (targetMembers.length === 0) return [];
 
-    // Build data for each target member
     return targetMembers.map(member => {
        const myRecords = prayerRecords
         .filter(r => r.memberId === member.id)
@@ -109,7 +109,6 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
     });
   }, [searchQuery, selectedMemberId, selectedGroup, members, prayerRecords]);
 
-  // Handlers to ensure mutual exclusivity between Search vs Dropdowns
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setSearchQuery(val);
@@ -121,68 +120,65 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
 
   const handleGroupChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedGroup(e.target.value);
-    setSelectedMemberId(''); // Reset member when group changes
-    setSearchQuery(''); // Reset search when using dropdowns
+    setSelectedMemberId(''); 
+    setSearchQuery('');
   };
 
   const handleMemberChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedMemberId(e.target.value);
-    setSearchQuery(''); // Reset search when using dropdowns
+    setSearchQuery(''); 
   };
 
   return (
     <div className="space-y-6">
        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-slate-800">기도 제목 및 특이사항</h2>
-          <p className="text-slate-500">
+          <h2 className="text-2xl md:text-3xl font-bold text-slate-800">기도 제목 및 특이사항</h2>
+          <p className="text-sm md:text-base text-slate-500">
             {viewMode === 'date' 
               ? '매주 입력되는 기도제목과 특이사항을 소그룹/울별로 확인합니다.' 
               : '각 성도님의 기도제목 및 특이사항 히스토리를 확인합니다.'}
           </p>
         </div>
         
-        <div className="flex bg-slate-200 p-1 rounded-lg">
+        <div className="flex bg-slate-200 p-1 rounded-lg w-full md:w-auto">
            <button
              onClick={() => setViewMode('date')}
-             className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-all ${
+             className={`flex-1 md:flex-none flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium transition-all ${
                viewMode === 'date' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
              }`}
            >
-             <Calendar size={16} className="mr-2" /> 날짜별 보기
+             <Calendar size={16} className="mr-2" /> 날짜별
            </button>
            <button
              onClick={() => setViewMode('member')}
-             className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-all ${
+             className={`flex-1 md:flex-none flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium transition-all ${
                viewMode === 'member' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
              }`}
            >
-             <User size={16} className="mr-2" /> 멤버별 보기
+             <User size={16} className="mr-2" /> 멤버별
            </button>
         </div>
       </header>
 
-      {/* Date View Controls */}
       {viewMode === 'date' && (
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-          <label className="font-bold text-slate-700">날짜 선택:</label>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+          <label className="font-bold text-slate-700 whitespace-nowrap">날짜 선택:</label>
           <select
-            className="border border-slate-300 rounded-lg p-2.5 text-sm bg-slate-50 focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full sm:w-auto border border-slate-300 rounded-lg p-2.5 text-sm bg-slate-50 focus:ring-indigo-500 focus:border-indigo-500"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
           >
-            {SUNDAYS_2026.slice().reverse().map(d => ( // Show newest first
+            {SUNDAYS_2026.slice().reverse().map(d => ( 
               <option key={d} value={d}>{d}</option>
             ))}
           </select>
         </div>
       )}
 
-      {/* Member View Controls */}
       {viewMode === 'member' && (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4 md:space-y-0 md:flex md:gap-6 items-end">
-          {/* Search Box */}
-          <div className="flex-1 w-full">
+        <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 md:gap-6 items-start md:items-end">
+          <div className="w-full md:flex-1">
             <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center text-indigo-700">
               <Search size={14} className="mr-1" /> 이름 직접 검색 (추천)
             </label>
@@ -209,10 +205,9 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
           </div>
 
           <div className="hidden md:flex items-center justify-center pb-3 px-2 text-slate-300 font-bold text-sm">OR</div>
-          <div className="md:hidden text-center text-xs text-slate-400 my-2">- 또는 소그룹으로 찾기 -</div>
+          <div className="md:hidden w-full text-center text-xs text-slate-400 my-0">- 또는 소그룹으로 찾기 -</div>
 
-          {/* Dropdowns */}
-          <div className="flex-1 w-full flex gap-3">
+          <div className="w-full md:flex-1 flex gap-3">
             <div className="flex-1">
                <label className="block text-xs font-bold text-slate-500 mb-2">소그룹 선택</label>
                <select
@@ -244,11 +239,10 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
         </div>
       )}
 
-      {/* Content Area - Date View */}
       {viewMode === 'date' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {Object.entries(recordsByDate).map(([groupName, items]) => {
-            const groupItems = items as { member: Member; record: PrayerRecord | undefined }[];
+            const groupItems = items as { member: Member; record: PrayerRecord }[];
             if (groupItems.length === 0) return null;
             return (
                <div key={groupName} className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
@@ -270,40 +264,36 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                           )}
                         </div>
                         
-                        {record && (
-                           <>
-                             {record.content && (
-                               <div className="mt-2 text-sm text-slate-600 flex items-start">
-                                 <Quote size={14} className="text-slate-300 mr-2 mt-1 flex-shrink-0" />
-                                 <p>{record.content}</p>
-                               </div>
-                             )}
-                             {record.note && (
-                               <div className="mt-2 text-sm text-slate-700 flex items-start bg-yellow-50 p-2 rounded border border-yellow-100">
-                                 <FileText size={14} className="text-yellow-600 mr-2 mt-0.5 flex-shrink-0" />
-                                 <p>{record.note}</p>
-                               </div>
-                             )}
-                           </>
-                        )}
-                        {(!record || (!record.content && !record.note)) && (
-                          <p className="mt-1 text-xs text-slate-400 italic">기록 없음</p>
-                        )}
+                        {/* Always show content since we filtered by record existence */}
+                         <>
+                           {record.content && (
+                             <div className="mt-2 text-sm text-slate-600 flex items-start">
+                               <Quote size={14} className="text-slate-300 mr-2 mt-1 flex-shrink-0" />
+                               <p>{record.content}</p>
+                             </div>
+                           )}
+                           {record.note && (
+                             <div className="mt-2 text-sm text-slate-700 flex items-start bg-yellow-50 p-2 rounded border border-yellow-100">
+                               <FileText size={14} className="text-yellow-600 mr-2 mt-0.5 flex-shrink-0" />
+                               <p>{record.note}</p>
+                             </div>
+                           )}
+                         </>
                       </div>
                     ))}
                   </div>
               </div>
             );
           })}
-          {Object.keys(recordsByDate).length === 0 && (
+          {!hasAnyRecords && (
              <div className="col-span-full text-center py-12 text-slate-400">
                해당 날짜에 등록된 내용이 없습니다.
              </div>
           )}
         </div>
       )}
-
-      {/* Content Area - Member View */}
+      
+      {/* ... Member View ... */}
       {viewMode === 'member' && (
          <div className="space-y-6">
             {!memberHistoryData ? (
