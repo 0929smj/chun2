@@ -104,8 +104,7 @@ export const generateMeetingStatus = (): MeetingStatus[] => {
       date: date,
       type: AttendanceType.Gathering,
       isCanceled: gCanceled,
-      event: eventName,
-      manualAssemblyCount: gCanceled ? 0 : Math.floor(Math.random() * 50) + 100 // Mock value
+      event: eventName
     });
     
     // 3. Worship
@@ -113,7 +112,8 @@ export const generateMeetingStatus = (): MeetingStatus[] => {
       date: date,
       type: AttendanceType.Worship,
       isCanceled: wCanceled,
-      event: eventName
+      event: eventName,
+      manualAssemblyCount: wCanceled ? 0 : Math.floor(Math.random() * 20) + 40 // Mock headcount between 40-60
     });
   });
 

@@ -11,8 +11,8 @@ import {
   Bar,
   Legend
 } from 'recharts';
-import { AttendanceRecord, Member, AttendanceType, MeetingStatus } from '../types';
-import { getWeeklyStats, getGroupStats, getMonthlyStats } from '../services/dataService';
+import { AttendanceRecord, Member, AttendanceType, MeetingStatus, MonthlyStats, WeeklyStats } from '../types';
+import { getWeeklyStats, getGroupStats, getMonthlyStats, getWeeklyGroupStats } from '../services/dataService';
 import { SUNDAYS_2026 } from '../services/mockData';
 
 interface DashboardProps {
@@ -23,16 +23,78 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus = [] }) => {
   // Calculate weekly, monthly, and group stats
-  const weeklyStats = useMemo(() => getWeeklyStats(records, SUNDAYS_2026), [records]);
-  const monthlyStats = useMemo(() => getMonthlyStats(records, SUNDAYS_2026), [records]);
+  const weeklyStats = useMemo(() => {
+    const baseStats = getWeeklyStats(records, SUNDAYS_2026);
+    return baseStats.map(stat => {
+      const statusWorship = meetingStatus.find(s => s.date === stat.date && s.type === AttendanceType.Worship);
+      const statusGathering = meetingStatus.find(s => s.date === stat.date && s.type === AttendanceType.Gathering);
+      const statusWool = meetingStatus.find(s => s.date === stat.date && s.type === AttendanceType.Wool);
+      
+      const mCount = statusWorship?.manualAssemblyCount || 0;
+      const worshipCanceled = statusWorship?.isCanceled;
+      const gatheringCanceled = statusGathering?.isCanceled;
+      const woolCanceled = statusWool?.isCanceled;
+
+      return {
+        ...stat,
+        worshipCount: worshipCanceled ? null : stat.worshipCount,
+        gatheringCount: gatheringCanceled ? null : Math.max(stat.gatheringCount, mCount),
+        woolCount: woolCanceled ? null : stat.woolCount,
+        isManualCount: mCount > stat.gatheringCount && !gatheringCanceled
+      };
+    });
+  }, [records, meetingStatus]);
+
+  const weeklyGroupStats = useMemo(() => {
+    return getWeeklyGroupStats(members, records, SUNDAYS_2026);
+  }, [members, records]);
+
+  const monthlyStats = useMemo(() => {
+    // We want monthly stats to also reflect the max gathering count
+    // So we use our updated weeklyStats to aggregate
+    const stats: MonthlyStats[] = [];
+    for (let i = 1; i <= 12; i++) {
+      const monthName = `${i}월`;
+      const weeksInMonth = weeklyStats.filter(stat => parseInt(stat.date.substring(5, 7), 10) === i);
+      
+      if (weeksInMonth.length === 0) {
+        stats.push({ month: monthName, worshipAverage: 0, gatheringAverage: 0, woolAverage: 0 });
+        continue;
+      }
+
+      const worshipWeeks = weeksInMonth.filter(s => s.worshipCount !== null);
+      const avgWorship = worshipWeeks.length > 0 
+        ? worshipWeeks.reduce((sum, s) => sum + (s.worshipCount || 0), 0) / worshipWeeks.length 
+        : 0;
+
+      const gatheringWeeks = weeksInMonth.filter(s => s.gatheringCount !== null);
+      const avgGathering = gatheringWeeks.length > 0 
+        ? gatheringWeeks.reduce((sum, s) => sum + (s.gatheringCount || 0), 0) / gatheringWeeks.length 
+        : 0;
+
+      const woolWeeks = weeksInMonth.filter(s => s.woolCount !== null);
+      const avgWool = woolWeeks.length > 0 
+        ? woolWeeks.reduce((sum, s) => sum + (s.woolCount || 0), 0) / woolWeeks.length 
+        : 0;
+
+      stats.push({
+        month: monthName,
+        worshipAverage: parseFloat(avgWorship.toFixed(1)),
+        gatheringAverage: parseFloat(avgGathering.toFixed(1)),
+        woolAverage: parseFloat(avgWool.toFixed(1))
+      });
+    }
+    return stats;
+  }, [weeklyStats]);
+
   const groupStats = useMemo(() => getGroupStats(members, records), [members, records]);
 
   const getEventName = (date: string) => {
     return meetingStatus.find(s => s.date === date)?.event || '';
   };
 
-  const getManualAssemblyCount = (date: string) => {
-    return meetingStatus.find(s => s.date === date && s.type === AttendanceType.Gathering)?.manualAssemblyCount || 0;
+  const isMeetingCanceled = (date: string, type: AttendanceType) => {
+    return meetingStatus.some(s => s.date === date && s.type === type && s.isCanceled);
   };
 
   return (
@@ -76,9 +138,9 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
                 labelStyle={{ fontWeight: 'bold', color: '#1e293b' }}
               />
               <Legend wrapperStyle={{fontSize: '12px', paddingTop: '10px'}} />
-              <Area type="monotone" dataKey="worshipCount" name="예배" stroke="#3b82f6" fillOpacity={1} fill="url(#colorWorship)" />
-              <Area type="monotone" dataKey="gatheringCount" name="집회" stroke="#6366f1" fillOpacity={1} fill="url(#colorGathering)" />
-              <Area type="monotone" dataKey="woolCount" name="울모임" stroke="#10b981" fillOpacity={1} fill="url(#colorWool)" />
+              <Area type="monotone" dataKey="worshipCount" name="예배" stroke="#3b82f6" fillOpacity={1} fill="url(#colorWorship)" connectNulls={true} />
+              <Area type="monotone" dataKey="gatheringCount" name="집회" stroke="#6366f1" fillOpacity={1} fill="url(#colorGathering)" connectNulls={true} />
+              <Area type="monotone" dataKey="woolCount" name="울모임" stroke="#10b981" fillOpacity={1} fill="url(#colorWool)" connectNulls={true} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -89,7 +151,8 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
           <table className="w-full text-xs md:text-sm text-center text-slate-500 border-collapse">
             <thead className="text-xs text-slate-700 uppercase bg-slate-50">
               <tr>
-                <th scope="col" className="px-2 md:px-4 py-3 border sticky left-0 bg-slate-50 z-20 min-w-[60px] md:min-w-[80px]">구분</th>
+                <th scope="col" className="px-2 md:px-4 py-3 border sticky left-0 bg-slate-50 z-20 min-w-[60px] md:min-w-[80px]">울</th>
+                <th scope="col" className="px-2 md:px-4 py-3 border sticky left-[60px] md:left-[80px] bg-slate-50 z-20 min-w-[50px] md:min-w-[60px]">구분</th>
                 {weeklyStats.map(stat => (
                   <th key={stat.date} scope="col" className="px-1 md:px-2 py-3 border min-w-[50px] md:min-w-[70px]">
                     <span className="font-bold text-slate-600">{stat.date.substring(5)}</span>
@@ -98,40 +161,100 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
               </tr>
             </thead>
             <tbody>
-              {/* Ministry Event Row - Highlighted */}
+              {/* Overall Ministry Event Row */}
               <tr className="bg-white border-b">
-                <td className="px-2 md:px-4 py-2 font-bold text-indigo-700 border sticky left-0 bg-indigo-50 z-10">사역</td>
+                <td colSpan={2} className="px-2 md:px-4 py-2 font-bold text-indigo-700 border sticky left-0 bg-indigo-50 z-10">사역</td>
                 {weeklyStats.map(stat => (
                   <td key={stat.date} className="px-1 md:px-2 py-2 border text-[10px] md:text-xs text-indigo-600 font-bold bg-indigo-50/30 whitespace-normal break-keep align-middle">
                     {getEventName(stat.date)}
                   </td>
                 ))}
               </tr>
-              {/* Stats Rows */}
-              <tr className="bg-white border-b">
-                <td className="px-2 md:px-4 py-2 font-bold text-blue-600 border sticky left-0 bg-white z-10">예배</td>
-                {weeklyStats.map(stat => (
-                  <td key={stat.date} className="px-1 md:px-2 py-2 border">{stat.worshipCount}</td>
-                ))}
+
+              {/* Total Stats Rows */}
+              <tr className="bg-slate-50/30 border-b">
+                <td rowSpan={3} className="px-2 md:px-4 py-2 font-bold text-slate-900 border sticky left-0 bg-slate-100 z-10 whitespace-nowrap align-middle">전체</td>
+                <td className="px-2 md:px-4 py-2 font-bold text-blue-600 border sticky left-[60px] md:left-[80px] bg-slate-50/30 z-10">예배</td>
+                {weeklyStats.map(stat => {
+                  const canceled = isMeetingCanceled(stat.date, AttendanceType.Worship);
+                  return (
+                    <td key={stat.date} className={`px-1 md:px-2 py-2 border font-medium ${canceled ? 'bg-slate-100/50 text-slate-300' : ''}`}>
+                      {canceled ? '-' : stat.worshipCount}
+                    </td>
+                  );
+                })}
               </tr>
-              <tr className="bg-white border-b">
-                <td className="px-2 md:px-4 py-2 font-bold text-indigo-600 border sticky left-0 bg-white z-10">집회</td>
-                {weeklyStats.map(stat => (
-                  <td key={stat.date} className="px-1 md:px-2 py-2 border">{stat.gatheringCount}</td>
-                ))}
+              <tr className="bg-slate-50/30 border-b">
+                <td className="px-2 md:px-4 py-2 font-bold text-indigo-600 border sticky left-[60px] md:left-[80px] bg-slate-50/30 z-10">집회</td>
+                {weeklyStats.map(stat => {
+                  const canceled = isMeetingCanceled(stat.date, AttendanceType.Gathering);
+                  return (
+                    <td key={stat.date} className={`px-1 md:px-2 py-2 border font-medium ${canceled ? 'bg-slate-100/50 text-slate-300' : ''}`}>
+                      {canceled ? '-' : (
+                        <>
+                          {stat.gatheringCount}
+                          {(stat as any).isManualCount && (
+                            <span className="text-[9px] text-slate-400 block italic leading-none mt-0.5">(계수)</span>
+                          )}
+                        </>
+                      )}
+                    </td>
+                  );
+                })}
               </tr>
-              <tr className="bg-white border-b">
-                <td className="px-2 md:px-4 py-2 font-bold text-indigo-400 border sticky left-0 bg-white z-10">집회계수</td>
-                {weeklyStats.map(stat => (
-                  <td key={stat.date} className="px-1 md:px-2 py-2 border italic text-slate-400">{getManualAssemblyCount(stat.date)}</td>
-                ))}
+              <tr className="bg-slate-50/30 border-b-2 border-slate-200">
+                <td className="px-2 md:px-4 py-2 font-bold text-emerald-600 border sticky left-[60px] md:left-[80px] bg-slate-50/30 z-10">울모임</td>
+                {weeklyStats.map(stat => {
+                  const canceled = isMeetingCanceled(stat.date, AttendanceType.Wool);
+                  return (
+                    <td key={stat.date} className={`px-1 md:px-2 py-2 border font-medium ${canceled ? 'bg-slate-100/50 text-slate-300' : ''}`}>
+                      {canceled ? '-' : stat.woolCount}
+                    </td>
+                  );
+                })}
               </tr>
-              <tr className="bg-white border-b">
-                <td className="px-2 md:px-4 py-2 font-bold text-emerald-600 border sticky left-0 bg-white z-10">울모임</td>
-                {weeklyStats.map(stat => (
-                  <td key={stat.date} className="px-1 md:px-2 py-2 border">{stat.woolCount}</td>
-                ))}
-              </tr>
+
+              {/* Individual Group Stats Rows */}
+              {weeklyGroupStats.map((group, groupIdx) => (
+                <React.Fragment key={group.groupName}>
+                  <tr className={`${groupIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50'} hover:bg-blue-50/50 transition-colors`}>
+                    <td rowSpan={3} className={`px-2 md:px-4 py-2 font-bold text-slate-700 border-x border-t sticky left-0 z-10 whitespace-normal break-all align-middle text-[10px] md:text-sm ${groupIdx % 2 === 0 ? 'bg-slate-50' : 'bg-slate-100'}`}>
+                      {group.groupName}
+                    </td>
+                    <td className={`px-2 md:px-3 py-1.5 text-blue-600 font-bold border sticky left-[60px] md:left-[80px] z-10 text-[10px] md:text-xs ${groupIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>예배</td>
+                    {group.weeklyData.map(stat => {
+                      const canceled = isMeetingCanceled(stat.date, AttendanceType.Worship);
+                      return (
+                        <td key={stat.date} className={`px-1 md:px-2 py-1.5 border text-[10px] md:text-xs ${canceled ? 'bg-slate-100/30 text-slate-300' : ''}`}>
+                          {canceled ? '-' : stat.worshipCount}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr className={`${groupIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50'} hover:bg-blue-50/50 transition-colors text-slate-400`}>
+                    <td className={`px-2 md:px-3 py-1.5 text-indigo-600 font-bold border sticky left-[60px] md:left-[80px] z-10 text-[10px] md:text-xs ${groupIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>집회</td>
+                    {group.weeklyData.map(stat => {
+                      const canceled = isMeetingCanceled(stat.date, AttendanceType.Gathering);
+                      return (
+                        <td key={stat.date} className={`px-1 md:px-2 py-1.5 border text-[10px] md:text-xs ${canceled ? 'bg-slate-100/30 text-slate-300' : ''}`}>
+                          {canceled ? '-' : stat.gatheringCount}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr className={`${groupIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50'} hover:bg-blue-50/50 transition-colors text-slate-400 border-b-2 ${groupIdx === weeklyGroupStats.length - 1 ? 'border-slate-300' : 'border-slate-300'}`}>
+                    <td className={`px-2 md:px-3 py-1.5 text-emerald-600 font-bold border sticky left-[60px] md:left-[80px] z-10 text-[10px] md:text-xs ${groupIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>울모임</td>
+                    {group.weeklyData.map(stat => {
+                      const canceled = isMeetingCanceled(stat.date, AttendanceType.Wool);
+                      return (
+                        <td key={stat.date} className={`px-1 md:px-2 py-1.5 border text-[10px] md:text-xs ${canceled ? 'bg-slate-100/30 text-slate-300' : ''}`}>
+                          {canceled ? '-' : stat.woolCount}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </React.Fragment>
+              ))}
             </tbody>
           </table>
         </div>
@@ -176,19 +299,19 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
               <tr className="bg-white border-b">
                 <td className="px-2 md:px-4 py-2 font-bold text-blue-600 border sticky left-0 bg-slate-50 z-10 whitespace-nowrap">예배</td>
                 {monthlyStats.map(stat => (
-                  <td key={stat.month} className="px-1 md:px-2 py-2 border">{Math.round(stat.worshipAverage)}</td>
+                  <td key={stat.month} className="px-1 md:px-2 py-2 border">{Math.ceil(stat.worshipAverage)}</td>
                 ))}
               </tr>
               <tr className="bg-white border-b">
                 <td className="px-2 md:px-4 py-2 font-bold text-indigo-600 border sticky left-0 bg-slate-50 z-10 whitespace-nowrap">집회</td>
                 {monthlyStats.map(stat => (
-                  <td key={stat.month} className="px-1 md:px-2 py-2 border">{Math.round(stat.gatheringAverage)}</td>
+                  <td key={stat.month} className="px-1 md:px-2 py-2 border">{Math.ceil(stat.gatheringAverage)}</td>
                 ))}
               </tr>
               <tr className="bg-white border-b">
                 <td className="px-2 md:px-4 py-2 font-bold text-emerald-600 border sticky left-0 bg-slate-50 z-10 whitespace-nowrap">울모임</td>
                 {monthlyStats.map(stat => (
-                  <td key={stat.month} className="px-1 md:px-2 py-2 border">{Math.round(stat.woolAverage)}</td>
+                  <td key={stat.month} className="px-1 md:px-2 py-2 border">{Math.ceil(stat.woolAverage)}</td>
                 ))}
               </tr>
             </tbody>

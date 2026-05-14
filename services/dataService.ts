@@ -68,6 +68,30 @@ export const getGroupStats = (members: Member[], records: AttendanceRecord[]): G
   });
 };
 
+export const getWeeklyGroupStats = (members: Member[], records: AttendanceRecord[], dates: string[]) => {
+  const groups = Array.from(new Set(members.map(m => m.group))).filter(Boolean);
+  
+  return groups.map(group => {
+    const groupMemberIds = members.filter(m => m.group === group).map(m => m.id);
+    const groupRecords = records.filter(r => groupMemberIds.includes(r.memberId));
+    
+    const weeklyData = dates.map(date => {
+      const dailyRecords = groupRecords.filter(r => r.date === date);
+      return {
+        date,
+        worshipCount: dailyRecords.filter(r => r.types.includes(AttendanceType.Worship)).length,
+        gatheringCount: dailyRecords.filter(r => r.types.includes(AttendanceType.Gathering)).length,
+        woolCount: dailyRecords.filter(r => r.types.includes(AttendanceType.Wool)).length,
+      };
+    });
+    
+    return {
+      groupName: group,
+      weeklyData
+    };
+  });
+};
+
 export const getAttendanceStatusByMember = (member: Member, records: AttendanceRecord[]): Record<string, AttendanceType[]> => {
   const memberRecords = records.filter(r => r.memberId === member.id);
   const status: Record<string, AttendanceType[]> = {};

@@ -38,7 +38,7 @@ export interface MeetingStatus {
   type: AttendanceType;
   isCanceled: boolean;
   event?: string; // Name of the ministry event (e.g., 부활절, 수련회)
-  manualAssemblyCount?: number; // DB에서 SessionConfig에서 가져올 값
+  manualAssemblyCount?: number; // 계수한 인원
 }
 
 export interface JoinedRecord extends Member {

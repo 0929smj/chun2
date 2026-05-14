@@ -92,14 +92,15 @@ function doGet(e) {
 
     // 예배
     const wVal = row['worship'] || row['예배'] || row['hasworship'];
-    if (!isChecked(wVal)) meetingStatus.push({ date: date, type: '예배', isCanceled: true, event: eventName });
-    else meetingStatus.push({ date: date, type: '예배', isCanceled: false, event: eventName });
+    const mCount = Number(row['manualassemblycount'] || row['계수인원'] || 0);
+    
+    if (!isChecked(wVal)) meetingStatus.push({ date: date, type: '예배', isCanceled: true, event: eventName, manualAssemblyCount: mCount });
+    else meetingStatus.push({ date: date, type: '예배', isCanceled: false, event: eventName, manualAssemblyCount: mCount });
     
     // 집회
     const gVal = row['gathering'] || row['meeting'] || row['집회'] || row['hasassembly'] || row['assembly'];
-    const gCount = parseInt(row['manualassemblycount'] || row['집회계수'] || '0');
-    if (!isChecked(gVal)) meetingStatus.push({ date: date, type: '집회', isCanceled: true, event: eventName, manualAssemblyCount: 0 });
-    else meetingStatus.push({ date: date, type: '집회', isCanceled: false, event: eventName, manualAssemblyCount: gCount });
+    if (!isChecked(gVal)) meetingStatus.push({ date: date, type: '집회', isCanceled: true, event: eventName });
+    else meetingStatus.push({ date: date, type: '집회', isCanceled: false, event: eventName });
     
     // 울모임
     const woolVal = row['wool'] || row['울모임'] || row['haswool'] || row['haswoorl'];
@@ -182,6 +183,8 @@ function doPost(e) {
       addMember(ss, payload);
     } else if (action === 'UPDATE_MEMBER') {
       updateMember(ss, payload);
+    } else if (action === 'UPDATE_SESSION_CONFIG') {
+      updateSessionConfig(ss, payload);
     }
   } catch(err) {
     return errorResponse(err.toString());
@@ -354,6 +357,39 @@ function updateMember(ss, payload) {
      });
   }
 }
+
+function updateSessionConfig(ss, payload) {
+  let sheet = ss.getSheets().find(s => s.getName().toLowerCase() === 'sessionconfig');
+  if (!sheet) return;
+
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).toLowerCase().replace(/\\s/g, ''));
+  const dateIdx = headers.indexOf('date') !== -1 ? headers.indexOf('date') : headers.indexOf('날짜');
+  if (dateIdx === -1) return;
+
+  const data = sheet.getDataRange().getDisplayValues();
+  let foundRowIndex = -1;
+
+  for (let i = 1; i < data.length; i++) {
+    if (formatDate(data[i][dateIdx]) === payload.date) {
+      foundRowIndex = i + 1;
+      break;
+    }
+  }
+
+  if (foundRowIndex > 0) {
+    const colName = 'manualassemblycount';
+    let colIdx = headers.indexOf(colName);
+    if (colIdx === -1) colIdx = headers.indexOf('계수인원');
+    
+    if (colIdx !== -1) {
+      sheet.getRange(foundRowIndex, colIdx + 1).setValue(payload.count);
+    } else {
+      // Add column if missing
+      sheet.getRange(1, headers.length + 1).setValue('manualAssemblyCount');
+      sheet.getRange(foundRowIndex, headers.length + 1).setValue(payload.count);
+    }
+  }
+}
 `;
 
 interface DataManagementProps {
@@ -404,12 +440,38 @@ const DataManagement: React.FC<DataManagementProps> = ({
   const [exportStartDate, setExportStartDate] = useState<string>('2026-01-01');
   const [exportEndDate, setExportEndDate] = useState<string>('2026-12-31');
 
+  // Manual Assembly Count State
+  const [manualCount, setManualCount] = useState<string>('');
+  const [isUpdatingManualCount, setIsUpdatingManualCount] = useState(false);
+
   // Update selected date if tab changes to attendance or on mount
   useEffect(() => {
     if (activeTab === 'attendance') {
       setSelectedDate(getClosestSunday());
     }
   }, [activeTab]);
+
+  // Sync manualCount with meetingStatus when date changes
+  useEffect(() => {
+    const status = meetingStatus.find(s => s.date === selectedDate && s.type === AttendanceType.Worship);
+    setManualCount(status?.manualAssemblyCount?.toString() || '');
+  }, [selectedDate, meetingStatus]);
+
+  const handleUpdateManualAssemblyCount = async () => {
+    if (!selectedDate) return;
+    setIsUpdatingManualCount(true);
+    try {
+      await sendAction('UPDATE_SESSION_CONFIG', {
+        date: selectedDate,
+        count: parseInt(manualCount) || 0
+      });
+      refreshData();
+    } catch (e) {
+      alert("인원 계수 저장 중 오류가 발생했습니다.");
+    } finally {
+      setIsUpdatingManualCount(false);
+    }
+  };
   
   // Helper to get event name for selected date in Attendance tab
   const getEventName = (date: string) => {
@@ -898,6 +960,28 @@ const DataManagement: React.FC<DataManagementProps> = ({
                   )}
                 </div>
               </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 pb-4 border-b border-slate-100">
+                <label className="font-bold text-slate-700 w-24">인원 계수:</label>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="number"
+                    className="border border-slate-300 rounded p-2 text-sm w-32"
+                    placeholder="계수 인원 입력"
+                    value={manualCount}
+                    onChange={(e) => setManualCount(e.target.value)}
+                  />
+                  <button 
+                    onClick={handleUpdateManualAssemblyCount}
+                    disabled={isUpdatingManualCount}
+                    className={`px-4 py-2 bg-indigo-600 text-white rounded text-sm font-bold hover:bg-indigo-700 transition-colors ${isUpdatingManualCount ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {isUpdatingManualCount ? '저장 중...' : '계수 저장'}
+                  </button>
+                  <span className="text-[10px] text-slate-400 ml-2">* 수동으로 계수한 현장 인원을 입력합니다.</span>
+                </div>
+              </div>
+
               <div className="flex flex-col md:flex-row md:items-start gap-2 md:gap-4">
                 <label className="font-bold text-slate-700 w-24 md:mt-2">소그룹/울:</label>
                 <div className="flex flex-wrap gap-2">
