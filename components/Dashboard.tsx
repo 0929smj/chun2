@@ -22,17 +22,17 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus = [] }) => {
+  // Calculate weekly, monthly, and group stats
   const weeklyStats = useMemo(() => getWeeklyStats(records, SUNDAYS_2026), [records]);
   const monthlyStats = useMemo(() => getMonthlyStats(records, SUNDAYS_2026), [records]);
   const groupStats = useMemo(() => getGroupStats(members, records), [members, records]);
 
-  // Calculate totals
-  const totalWorship = records.filter(r => r.types.includes(AttendanceType.Worship)).length;
-  const totalGathering = records.filter(r => r.types.includes(AttendanceType.Gathering)).length;
-  const totalWool = records.filter(r => r.types.includes(AttendanceType.Wool)).length;
-
   const getEventName = (date: string) => {
     return meetingStatus.find(s => s.date === date)?.event || '';
+  };
+
+  const getManualAssemblyCount = (date: string) => {
+    return meetingStatus.find(s => s.date === date && s.type === AttendanceType.Gathering)?.manualAssemblyCount || 0;
   };
 
   return (
@@ -41,22 +41,6 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
         <h2 className="text-2xl md:text-3xl font-bold text-slate-800">대시보드</h2>
         <p className="text-sm md:text-base text-slate-500">2026년 전체 출석 통계 현황입니다.</p>
       </header>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
-        <div className="bg-white p-5 md:p-6 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-blue-500 flex flex-row sm:flex-col justify-between items-center sm:items-start">
-          <h3 className="text-sm font-medium text-slate-500">누적 예배 출석</h3>
-          <p className="text-2xl md:text-3xl font-bold text-slate-800 mt-0 sm:mt-2">{totalWorship.toLocaleString()}</p>
-        </div>
-        <div className="bg-white p-5 md:p-6 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-indigo-500 flex flex-row sm:flex-col justify-between items-center sm:items-start">
-          <h3 className="text-sm font-medium text-slate-500">누적 집회 출석</h3>
-          <p className="text-2xl md:text-3xl font-bold text-slate-800 mt-0 sm:mt-2">{totalGathering.toLocaleString()}</p>
-        </div>
-        <div className="bg-white p-5 md:p-6 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-emerald-500 flex flex-row sm:flex-col justify-between items-center sm:items-start">
-          <h3 className="text-sm font-medium text-slate-500">누적 울모임 출석</h3>
-          <p className="text-2xl md:text-3xl font-bold text-slate-800 mt-0 sm:mt-2">{totalWool.toLocaleString()}</p>
-        </div>
-      </div>
 
       {/* Weekly Trend Chart */}
       <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-100">
@@ -134,6 +118,12 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
                 <td className="px-2 md:px-4 py-2 font-bold text-indigo-600 border sticky left-0 bg-white z-10">집회</td>
                 {weeklyStats.map(stat => (
                   <td key={stat.date} className="px-1 md:px-2 py-2 border">{stat.gatheringCount}</td>
+                ))}
+              </tr>
+              <tr className="bg-white border-b">
+                <td className="px-2 md:px-4 py-2 font-bold text-indigo-400 border sticky left-0 bg-white z-10">집회계수</td>
+                {weeklyStats.map(stat => (
+                  <td key={stat.date} className="px-1 md:px-2 py-2 border italic text-slate-400">{getManualAssemblyCount(stat.date)}</td>
                 ))}
               </tr>
               <tr className="bg-white border-b">

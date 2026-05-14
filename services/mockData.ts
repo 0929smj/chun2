@@ -104,7 +104,8 @@ export const generateMeetingStatus = (): MeetingStatus[] => {
       date: date,
       type: AttendanceType.Gathering,
       isCanceled: gCanceled,
-      event: eventName
+      event: eventName,
+      manualAssemblyCount: gCanceled ? 0 : Math.floor(Math.random() * 50) + 100 // Mock value
     });
     
     // 3. Worship

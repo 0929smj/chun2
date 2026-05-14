@@ -97,8 +97,9 @@ function doGet(e) {
     
     // 집회
     const gVal = row['gathering'] || row['meeting'] || row['집회'] || row['hasassembly'] || row['assembly'];
-    if (!isChecked(gVal)) meetingStatus.push({ date: date, type: '집회', isCanceled: true, event: eventName });
-    else meetingStatus.push({ date: date, type: '집회', isCanceled: false, event: eventName });
+    const gCount = parseInt(row['manualassemblycount'] || row['집회계수'] || '0');
+    if (!isChecked(gVal)) meetingStatus.push({ date: date, type: '집회', isCanceled: true, event: eventName, manualAssemblyCount: 0 });
+    else meetingStatus.push({ date: date, type: '집회', isCanceled: false, event: eventName, manualAssemblyCount: gCount });
     
     // 울모임
     const woolVal = row['wool'] || row['울모임'] || row['haswool'] || row['haswoorl'];
