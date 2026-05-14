@@ -3,7 +3,7 @@ import { Member, AttendanceRecord, PrayerRecord, AttendanceType, MeetingStatus }
 const STORAGE_KEY = 'church_admin_script_url';
 
 // Default URL provided for the application (Moved from DataManagement to be shared)
-export const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby7PkkkXjoilb2yEqO0z7JdYXXmJgsIbwS7XLRHZrpsVkqTsRCodVGFL39DiQC_lLXOKg/exec";
+export const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwFZIjVfw9UlhW7i5fSmDcJgW4gppEPkPo-z-hFanukgJgjPFvm_1AqqNBtz-oZCOHTQg/exec";
 
 // Returns local storage URL if exists, otherwise defaults to the hardcoded URL
 export const getScriptUrl = () => {
