@@ -56,11 +56,12 @@ function doGet(e) {
   const members = membersData.map(m => ({
     id: String(m['memberid'] || m['id'] || m['name']),
     name: m['name'],
-    group: m['group'] || m['소그룹'] || m['wool'] || m['woolname'],
-    wool: m['group'] || m['소그룹'] || m['wool'] || m['woolname'],
-    phoneNumber: m['phone'] || m['phonenumber'] || m['연락처'] || '',
+    group: m['group'] || m['소그룹'] || m['wool'] || m['woolname'] || m['소속'] || '',
+    wool: m['group'] || m['소그룹'] || m['wool'] || m['woolname'] || m['소속'] || '',
+    phoneNumber: m['phone'] || m['phonenumber'] || m['연락처'] || m['전화번호'] || '',
     role: m['role'] || m['직분'] || '성도',
     status: m['status'] || m['상태'] || 'ACTIVE',
+    MemberRegistration: m['memberregistration'] || m['등록일'] || m['등반일'] || m['registrationdate'] || m['등록일자'] || '',
     specialNotes: m['notes'] || m['비고'] || m['specialnotes'] || m['memo'] || m['메모'] || ''
   })).filter(m => m.name);
 
@@ -291,9 +292,9 @@ function addMember(ss, payload) {
   let sheet = ss.getSheets().find(s => s.getName().toLowerCase() === 'members');
   if (!sheet) {
     sheet = ss.insertSheet('members');
-    sheet.appendRow(['MemberID', 'Name', 'Group', 'Phone', 'Role', 'Status', 'Notes']);
+    sheet.appendRow(['MemberID', 'Name', 'Group', 'Phone', 'Role', 'Status', 'MemberRegistration', 'Notes']);
   }
-  if (sheet.getLastRow() === 0) sheet.appendRow(['MemberID', 'Name', 'Group', 'Phone', 'Role', 'Status', 'Notes']);
+  if (sheet.getLastRow() === 0) sheet.appendRow(['MemberID', 'Name', 'Group', 'Phone', 'Role', 'Status', 'MemberRegistration', 'Notes']);
 
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).toLowerCase().replace(/\\s/g, ''));
   
@@ -304,6 +305,7 @@ function addMember(ss, payload) {
     if (header === 'phone' || header === 'phonenumber' || header === '연락처') return payload.phoneNumber;
     if (header === 'role' || header === '직분') return payload.role; 
     if (header === 'status' || header === '상태') return payload.status;
+    if (header === 'memberregistration' || header === '등록일' || header === '등반일') return payload.MemberRegistration;
     if (header === 'notes' || header === '비고' || header === 'specialnotes' || header === 'memo') return payload.specialNotes;
     return '';
   });
@@ -330,14 +332,13 @@ function updateMember(ss, payload) {
   }
 
   if (foundRowIndex > 0) {
-     // Loop through payload keys and update corresponding columns
-     // We map common payload keys to potential header names
      const map = {
        'name': ['name', '이름'],
        'group': ['group', '소그룹', 'wool', 'woolname'],
        'phoneNumber': ['phone', 'phonenumber', '연락처'],
        'role': ['role', '직분'],
        'status': ['status', '상태'],
+       'MemberRegistration': ['memberregistration', '등록일', '등반일'],
        'specialNotes': ['notes', '비고', 'specialnotes', 'memo', '메모']
      };
 
@@ -386,7 +387,7 @@ const DataManagement: React.FC<DataManagementProps> = ({
   const [copySuccess, setCopySuccess] = useState(false);
 
   // New Member State
-  const [newMember, setNewMember] = useState<Partial<Member>>({ group: '', name: '', phoneNumber: '', specialNotes: '' });
+  const [newMember, setNewMember] = useState<Partial<Member>>({ group: '', name: '', phoneNumber: '', MemberRegistration: '', specialNotes: '' });
   const [isAddingMember, setIsAddingMember] = useState(false);
   const [showAddSuccess, setShowAddSuccess] = useState(false);
   
@@ -445,6 +446,7 @@ const DataManagement: React.FC<DataManagementProps> = ({
       phoneNumber: newMember.phoneNumber || '',
       role: 'MEMBER', 
       status: 'ACTIVE', 
+      MemberRegistration: newMember.MemberRegistration || '',
       latestPrayerRequest: '', 
       specialNotes: newMember.specialNotes || '' 
     };
@@ -457,7 +459,7 @@ const DataManagement: React.FC<DataManagementProps> = ({
       setMembers(prev => [...prev, memberToAdd]);
 
       // 3. Reset Form & Show Success
-      setNewMember({ group: '', name: '', phoneNumber: '', specialNotes: '' });
+      setNewMember({ group: '', name: '', phoneNumber: '', MemberRegistration: '', specialNotes: '' });
       setShowAddSuccess(true);
     } catch (e) {
       alert("멤버 추가 중 오류가 발생했습니다.");
@@ -682,6 +684,16 @@ const DataManagement: React.FC<DataManagementProps> = ({
                    />
                 </div>
                 <div>
+                   <label className="block text-xs font-bold text-slate-500 mb-1">등반일</label>
+                   <input 
+                     type="text" 
+                     className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" 
+                     placeholder="YYYY-MM-DD 또는 YYYY"
+                     value={editingMember.MemberRegistration || ''} 
+                     onChange={e => setEditingMember({...editingMember, MemberRegistration: e.target.value})}
+                   />
+                </div>
+                <div>
                    <label className="block text-xs font-bold text-slate-500 mb-1">비고 (Memo)</label>
                    <textarea 
                      className="w-full border border-slate-300 rounded-lg p-2.5 h-20 resize-none" 
@@ -756,23 +768,29 @@ const DataManagement: React.FC<DataManagementProps> = ({
       {activeTab === 'members' && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6">
            {/* Member Add Form */}
-           <div className="flex flex-col gap-4 mb-6 bg-slate-50 p-4 rounded-lg">
-             <div className="space-y-4">
-                <h4 className="font-bold text-slate-700 text-sm">새 멤버 추가</h4>
-                <div className="flex flex-col md:flex-row gap-2">
-                    <input type="text" className="border border-slate-300 rounded p-2 text-sm flex-1 w-full" value={newMember.name || ''} onChange={e => setNewMember({...newMember, name: e.target.value})} placeholder="이름" />
-                    <select className="border border-slate-300 rounded p-2 text-sm flex-1 w-full" value={newMember.group || ''} onChange={e => setNewMember({...newMember, group: e.target.value, wool: e.target.value})}>
-                      <option value="">소그룹 선택</option>
-                      {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
-                    </select>
-                    <input type="text" className="border border-slate-300 rounded p-2 text-sm flex-1 w-full" value={newMember.phoneNumber || ''} onChange={e => setNewMember({...newMember, phoneNumber: e.target.value})} placeholder="연락처" />
-                    <input type="text" className="border border-slate-300 rounded p-2 text-sm flex-1 w-full" value={newMember.specialNotes || ''} onChange={e => setNewMember({...newMember, specialNotes: e.target.value})} placeholder="비고(메모)" />
-                    <button onClick={handleAddMember} className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700 flex items-center justify-center min-w-[80px] w-full md:w-auto">
-                      <Plus size={16} className="mr-1" /> 추가
+            <div className="flex flex-col gap-4 mb-6 bg-slate-50 p-4 rounded-lg">
+              <div className="space-y-4">
+                 <h4 className="font-bold text-slate-700 text-sm">새 멤버 추가</h4>
+                 <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                     <input type="text" className="border border-slate-300 rounded p-2 text-sm w-full" value={newMember.name || ''} onChange={e => setNewMember({...newMember, name: e.target.value})} placeholder="이름" />
+                     <select className="border border-slate-300 rounded p-2 text-sm w-full" value={newMember.group || ''} onChange={e => setNewMember({...newMember, group: e.target.value, wool: e.target.value})}>
+                       <option value="">소그룹 선택</option>
+                       {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
+                     </select>
+                     <input type="text" className="border border-slate-300 rounded p-2 text-sm w-full" value={newMember.phoneNumber || ''} onChange={e => setNewMember({...newMember, phoneNumber: e.target.value})} placeholder="연락처" />
+                     <div className="relative group">
+                        <input type="text" className="border border-slate-300 rounded p-2 text-sm w-full" placeholder="등반일(YYYY-MM-DD)" value={newMember.MemberRegistration || ''} onChange={e => setNewMember({...newMember, MemberRegistration: e.target.value})} />
+                        <div className="absolute left-0 -bottom-5 hidden group-hover:block whitespace-nowrap bg-slate-800 text-white text-[10px] px-2 py-0.5 rounded z-10">등반일 (입력 시 해당일부터 출석률 계산)</div>
+                     </div>
+                     <input type="text" className="border border-slate-300 rounded p-2 text-sm w-full" value={newMember.specialNotes || ''} onChange={e => setNewMember({...newMember, specialNotes: e.target.value})} placeholder="비고(메모)" />
+                 </div>
+                 <div className="flex justify-end">
+                    <button onClick={handleAddMember} className="bg-indigo-600 text-white px-8 py-2 rounded text-sm hover:bg-indigo-700 flex items-center justify-center font-bold shadow-sm">
+                      <Plus size={16} className="mr-1" /> 멤버 추가하기
                     </button>
-                </div>
-             </div>
-           </div>
+                 </div>
+              </div>
+            </div>
 
            <div className="flex flex-col md:flex-row justify-between items-end md:items-center mb-4 gap-3">
               <div className="flex items-center gap-2 w-full md:w-auto">
@@ -818,6 +836,9 @@ const DataManagement: React.FC<DataManagementProps> = ({
                     <th className="px-4 md:px-6 py-3 cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap" onClick={() => handleSort('group')}>
                       <div className="flex items-center">소그룹 <ArrowUpDown size={14} className={`ml-1 ${sortConfig?.key === 'group' ? 'text-indigo-600' : 'text-slate-300'}`} /></div>
                     </th>
+                    <th className="px-4 md:px-6 py-3 cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap" onClick={() => handleSort('MemberRegistration')}>
+                      <div className="flex items-center">등반일 <ArrowUpDown size={14} className={`ml-1 ${sortConfig?.key === 'MemberRegistration' ? 'text-indigo-600' : 'text-slate-300'}`} /></div>
+                    </th>
                     <th className="px-4 md:px-6 py-3 whitespace-nowrap">연락처</th>
                     <th className="px-4 md:px-6 py-3 whitespace-nowrap">비고 (Memo)</th>
                     <th className="px-4 md:px-6 py-3 text-right whitespace-nowrap">관리</th>
@@ -833,6 +854,9 @@ const DataManagement: React.FC<DataManagementProps> = ({
                         )}
                       </td>
                       <td className="px-4 md:px-6 py-4 whitespace-nowrap">{member.group}</td>
+                      <td className="px-4 md:px-6 py-4 whitespace-nowrap font-mono text-xs text-slate-500">
+                        {member.MemberRegistration || (member as any).registrationDate || '-'}
+                      </td>
                       <td className="px-4 md:px-6 py-4 whitespace-nowrap">{member.phoneNumber}</td>
                       <td className="px-4 md:px-6 py-4 truncate max-w-[150px] md:max-w-[200px]" title={member.specialNotes}>{member.specialNotes}</td>
                       <td className="px-4 md:px-6 py-4 text-right whitespace-nowrap">

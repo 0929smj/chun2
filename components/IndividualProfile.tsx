@@ -107,8 +107,22 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
     const targetDate = new Date(2026, now.getMonth(), now.getDate()); 
     const comparisonDate = now.getFullYear() >= 2026 ? now : targetDate;
 
-    // 1. Filter Sundays that have passed so far
-    const passedSundays = SUNDAYS_2026.filter(d => new Date(d) <= comparisonDate);
+    // 1. Filter Sundays that have passed so far AND are on or after registration date
+    let passedSundays = SUNDAYS_2026.filter(d => new Date(d) <= comparisonDate);
+    
+    // Apply registration date filter if exists
+    const regDate = targetMember.MemberRegistration || (targetMember as any).registrationDate;
+    if (regDate) {
+      // Normalize to a searchable date (YYYY-MM-DD)
+      let normReg = String(regDate).trim();
+      if (/^\d{4}$/.test(normReg)) {
+        normReg = `${normReg}-01-01`;
+      } else if (/^\d{4}-\d{2}$/.test(normReg)) {
+        normReg = `${normReg}-01`;
+      }
+      
+      passedSundays = passedSundays.filter(d => d >= normReg);
+    }
 
     // 2. Calculate Total Possible Attendance (Denominator) excluding Canceled Meetings
     let possibleWorship = 0;
@@ -287,6 +301,10 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
                       <div className="flex items-center text-sm text-slate-600">
                          <Phone size={16} className="mr-3 text-slate-400" />
                          <span>{targetMember.phoneNumber || '연락처 없음'}</span>
+                      </div>
+                      <div className="flex items-center text-sm text-slate-600">
+                         <Calendar size={16} className="mr-3 text-slate-400" />
+                         <span>등반일: {targetMember.MemberRegistration || (targetMember as any).registrationDate || '정보 없음'}</span>
                       </div>
                       {targetMember.specialNotes && (
                         <div className="flex items-start text-sm text-slate-700 bg-slate-100 p-3 rounded-lg mt-2 border border-slate-200">

@@ -12,6 +12,7 @@ export interface Member {
   phoneNumber?: string; // 연락처
   role?: string; // 직분 (e.g. 성도, 집사, etc.)
   status?: string; // 상태 (e.g. ACTIVE)
+  MemberRegistration?: string; // 등반일 (YYYY-MM-DD, YYYY-MM, or YYYY)
   specialNotes?: string;
   latestPrayerRequest?: string; 
 }

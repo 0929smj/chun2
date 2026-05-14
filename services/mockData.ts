@@ -34,7 +34,7 @@ export const generateMembers = (): Member[] => {
   const members: Member[] = [];
   let idCounter = 1000;
 
-  GROUPS.forEach(group => {
+  GROUPS.forEach((group, idx) => {
     // 3-5 members per group
     const memberCount = Math.floor(Math.random() * 3) + 3;
     for (let i = 0; i < memberCount; i++) {
@@ -47,6 +47,7 @@ export const generateMembers = (): Member[] => {
         phoneNumber: `010-${Math.floor(Math.random()*9000)+1000}-${Math.floor(Math.random()*9000)+1000}`,
         role: '성도',
         status: 'ACTIVE',
+        MemberRegistration: idx === 0 && i === 0 ? '2026-03-01' : (idx === 1 && i === 1 ? '2026-04-12' : ''),
         specialNotes: Math.random() > 0.8 ? '최근 이사함' : '',
       });
       idCounter++;
