@@ -926,7 +926,16 @@ const DataManagement: React.FC<DataManagementProps> = ({
                   {processedMembers.map(member => (
                     <tr key={member.id} className={`border-b group ${member.status === 'INACTIVE' ? 'bg-slate-100 text-slate-400 hover:bg-slate-200' : 'bg-white hover:bg-slate-50 text-slate-900'}`}>
                       <td className="px-4 md:px-6 py-4 font-medium flex items-center whitespace-nowrap">
-                        {member.name}
+                        <div className="flex items-center gap-2">
+                           {member.photoUrl ? (
+                             <img src={member.photoUrl} alt={member.name} className="w-6 h-6 rounded-full object-cover border border-slate-200" referrerPolicy="no-referrer" />
+                           ) : (
+                             <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] text-slate-500 font-bold border border-slate-300 shrink-0">
+                               {member.name.substring(0, 1)}
+                             </div>
+                           )}
+                           <span>{member.name}</span>
+                        </div>
                         {member.status === 'INACTIVE' && (
                            <span className="ml-2 text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded border border-slate-300">비활성</span>
                         )}
@@ -1052,7 +1061,18 @@ const DataManagement: React.FC<DataManagementProps> = ({
 
                     return (
                       <tr key={member.id} className="bg-white border-b hover:bg-slate-50">
-                        <td className="px-4 md:px-6 py-4 font-medium text-slate-900 whitespace-nowrap">{member.name}</td>
+                        <td className="px-4 md:px-6 py-4 font-medium text-slate-900 whitespace-nowrap">
+                           <div className="flex items-center gap-2">
+                             {member.photoUrl ? (
+                               <img src={member.photoUrl} alt={member.name} className="w-6 h-6 rounded-full object-cover border border-slate-200" referrerPolicy="no-referrer" />
+                             ) : (
+                               <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] text-slate-500 font-bold border border-slate-300 shrink-0">
+                                 {member.name.substring(0, 1)}
+                               </div>
+                             )}
+                             <span>{member.name}</span>
+                          </div>
+                        </td>
                         <td className="px-4 md:px-6 py-4 whitespace-nowrap">{member.group}</td>
                         <td className="px-4 md:px-6 py-4 text-center">
                           {renderCheckButton(AttendanceType.Worship, '', 'bg-blue-600')}

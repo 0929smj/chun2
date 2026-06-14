@@ -190,7 +190,16 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
                   {/* Row 1: Worship */}
                   <tr className="bg-white border-b hover:bg-slate-50">
                     <td rowSpan={3} className={`px-2 md:px-4 py-3 font-medium text-slate-900 sticky left-0 bg-white z-10 border border-slate-200 ${mIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} group relative`}>
-                      <span className="cursor-default decoration-dotted underline underline-offset-4 decoration-slate-300">{member.name}</span>
+                      <div className="flex items-center gap-2">
+                         {member.photoUrl ? (
+                           <img src={member.photoUrl} alt={member.name} className="w-6 h-6 md:w-8 md:h-8 rounded-full object-cover border border-slate-200" referrerPolicy="no-referrer" />
+                         ) : (
+                           <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-slate-200 flex items-center justify-center text-[10px] md:text-xs text-slate-500 font-bold border border-slate-300 shrink-0">
+                             {member.name.substring(0, 1)}
+                           </div>
+                         )}
+                         <span className="cursor-default decoration-dotted underline underline-offset-4 decoration-slate-300 whitespace-nowrap">{member.name}</span>
+                      </div>
                       
                       {/* Modern Tooltip for Memo - Adjusted for mobile position */}
                       {member.specialNotes && (

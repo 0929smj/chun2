@@ -254,8 +254,17 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                   <div className="space-y-4">
                     {groupItems.map(({ member, record }) => (
                       <div key={member.id} className="relative pl-4 border-l-2 border-slate-100 hover:border-indigo-300 transition-colors">
-                        <div className="flex items-baseline justify-between">
-                          <h4 className="font-semibold text-slate-800">{member.name}</h4>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                             {member.photoUrl ? (
+                               <img src={member.photoUrl} alt={member.name} className="w-6 h-6 rounded-full object-cover border border-slate-200" referrerPolicy="no-referrer" />
+                             ) : (
+                               <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] text-slate-500 font-bold border border-slate-300 shrink-0">
+                                 {member.name.substring(0, 1)}
+                               </div>
+                             )}
+                            <h4 className="font-semibold text-slate-800">{member.name}</h4>
+                          </div>
                           {member.specialNotes && (
                             <span className="flex items-center text-xs text-rose-500 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100 max-w-[50%] truncate">
                               <AlertCircle size={10} className="mr-1" />
@@ -311,9 +320,18 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                  <div key={member.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                     <div className="p-6 border-b border-slate-100 bg-slate-50/50">
                        <div className="flex justify-between items-start">
-                          <div>
-                             <h3 className="font-bold text-2xl text-slate-800">{member.name}</h3>
-                             <p className="text-sm text-slate-500 mt-1">{member.group}</p>
+                          <div className="flex items-center gap-4">
+                             {member.photoUrl ? (
+                               <img src={member.photoUrl} alt={member.name} className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" referrerPolicy="no-referrer" />
+                             ) : (
+                               <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-lg text-slate-500 font-bold border-2 border-white shadow-sm shrink-0">
+                                 {member.name.substring(0, 1)}
+                               </div>
+                             )}
+                             <div>
+                                <h3 className="font-bold text-2xl text-slate-800">{member.name}</h3>
+                                <p className="text-sm text-slate-500 mt-1">{member.group}</p>
+                             </div>
                           </div>
                           {member.specialNotes && (
                              <div className="bg-rose-50 border border-rose-100 text-rose-600 px-4 py-2 rounded-lg max-w-md">

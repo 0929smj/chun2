@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Member, AttendanceRecord, PrayerRecord, AttendanceType, MeetingStatus } from '../types';
 import { Search, User, Phone, StickyNote, Calendar, Quote, TrendingUp, AlertCircle, FileText } from 'lucide-react';
 import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Tooltip as RechartsTooltip } from 'recharts';
@@ -13,9 +14,21 @@ interface IndividualProfileProps {
 }
 
 const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records, prayerRecords, meetingStatus, availableGroups }) => {
+  const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('');
   const [selectedMemberId, setSelectedMemberId] = useState('');
+
+  // Handle location state for deep linking from org chart
+  useEffect(() => {
+    if (location.state && location.state.memberId) {
+      const targetM = members.find(m => m.id === location.state.memberId);
+      if (targetM) {
+        setSelectedGroup(targetM.group || '');
+        setSelectedMemberId(targetM.id);
+      }
+    }
+  }, [location.state, members]);
 
   // 1. Resolve Target Member
   const targetMember = useMemo(() => {

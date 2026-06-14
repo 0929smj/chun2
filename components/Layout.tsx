@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, CalendarDays, BookOpen, Users, Menu, X, UserSearch } from 'lucide-react';
+import { LayoutDashboard, CalendarDays, BookOpen, Users, Menu, X, UserSearch, Network } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -16,13 +16,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { to: '/attendance', icon: CalendarDays, label: '출석 현황' },
     { to: '/prayer', icon: BookOpen, label: '기도 제목' },
     { to: '/profile', icon: UserSearch, label: '개인별 현황' },
+    { to: '/org', icon: Network, label: '조직도' },
     { to: '/manage', icon: Users, label: '데이터 관리' },
   ];
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {/* Mobile Header */}
-      <div className="lg:hidden fixed w-full z-20 flex items-center justify-between bg-white shadow-sm p-4">
+      <div className="lg:hidden fixed top-0 w-full z-40 flex items-center justify-between bg-white shadow-sm p-4">
         <h1 className="text-xl font-bold text-indigo-700">소그룹 출석부</h1>
         <button onClick={toggleSidebar}>
           {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
@@ -31,7 +32,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-10 w-64 bg-slate-900 text-white transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-auto ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-auto ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -73,7 +74,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       {/* Overlay for mobile sidebar */}
       {isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-0 lg:hidden"
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}

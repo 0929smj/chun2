@@ -6,6 +6,7 @@ import AttendanceMatrix from './components/AttendanceMatrix';
 import PrayerRequests from './components/PrayerRequests';
 import DataManagement from './components/DataManagement';
 import IndividualProfile from './components/IndividualProfile';
+import OrganizationChart from './components/OrganizationChart';
 import { INITIAL_MEMBERS, INITIAL_ATTENDANCE, INITIAL_PRAYER_RECORDS, INITIAL_MEETING_STATUS } from './services/mockData';
 import { fetchSheetData, sendAction, getScriptUrl } from './services/sheetService';
 import { Member, AttendanceRecord, PrayerRecord, AttendanceType, MeetingStatus } from './types';
@@ -263,6 +264,16 @@ const App: React.FC = () => {
                 prayerRecords={prayerRecords}
                 meetingStatus={meetingStatus}
                 availableGroups={groups}
+              />
+            } 
+          />
+          <Route 
+            path="/org" 
+            element={
+              <OrganizationChart 
+                members={activeMembers} 
+                records={records} 
+                meetingStatus={meetingStatus}
               />
             } 
           />
