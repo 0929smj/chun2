@@ -348,13 +348,13 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
       }
 
       const M = membersData.length;
-      const baseR = 120;
-      const remainingR = maxR - baseR;
+      const baseR = 120; // Minimum distance for the highest score members
+      const spreadR = 40; // Keep the spread compact
 
       membersData.forEach((item, i) => {
         const theta = i * 2.39996;
-        const ratio = 1 - (item.score / 100); 
-        const r = M === 1 ? baseR : baseR + remainingR * ratio;
+        const ratio = M > 1 ? i / (M - 1) : 0; 
+        const r = baseR + spreadR * ratio;
         
         item.targetX = cx + r * Math.cos(theta);
         item.targetY = cy + r * Math.sin(theta);
