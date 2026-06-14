@@ -7,8 +7,8 @@ import { getClosestSunday } from '../services/utils';
 import { exportDataToExcel } from '../services/excelService';
 
 const GAS_CODE_SNIPPET = `/* 
- [구글 스프레드시트 연결 스크립트 v4.5]
- - 업데이트: 사진 프로필 URL (thumbnail API 최적화)
+ [구글 스프레드시트 연결 스크립트 v4.6]
+ - 업데이트: '울장' 그룹도 기타 통계 및 모임출석에 나오도록 포함 조치
  
  1. 스프레드시트 메뉴: 확장 프로그램 > Apps Script 클릭
  2. [Code.gs] 내용 모두 지우고 이 코드 붙여넣기
@@ -83,10 +83,10 @@ function doGet(e) {
   // 2. 소그룹 목록 및 AccessCode 가져오기 (시트명: groups)
   const groupsData = getSheetData(ss, 'groups');
   
-  // 소그룹 목록 (울장 등 관리자용 행은 제외)
+  // 소그룹 목록 (울장 포함)
   const groups = groupsData
     .map(g => String(g['woolname'] || g['name'] || ''))
-    .filter(name => name.length > 0 && name !== '울장');
+    .filter(name => name.length > 0);
   
   // AccessCode 추출 (로그인용 - '울장'의 AccessCode만 허용)
   // Groups 시트에서 woolName(또는 name)이 '울장'인 행의 accessCode만 가져옵니다.
