@@ -51,19 +51,50 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
   const [layoutEdges, setLayoutEdges] = useState<Edge[]>([]);
 
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
   const isDraggingBg = useRef(false);
   const isDraggingCanvas = useRef(false);
   const startPan = useRef({ x: 0, y: 0 });
   const dragStartPos = useRef({ x: 0, y: 0 });
+  const activePointers = useRef(new Map<number, {x: number, y: number}>());
+  const initialPinchDist = useRef<number | null>(null);
+  const initialZoom = useRef<number>(1);
 
   const handleBgPointerDown = (e: React.PointerEvent) => {
-    isDraggingBg.current = true;
-    startPan.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
-    dragStartPos.current = { x: e.clientX, y: e.clientY };
-    isDraggingCanvas.current = false;
+    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointers.current.size === 1) {
+      isDraggingBg.current = true;
+      startPan.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+      dragStartPos.current = { x: e.clientX, y: e.clientY };
+      isDraggingCanvas.current = false;
+    } else if (activePointers.current.size === 2) {
+      isDraggingBg.current = false;
+      const pts = Array.from(activePointers.current.values());
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      initialPinchDist.current = dist;
+      initialZoom.current = zoom;
+    }
   };
 
   const handleBgPointerMove = (e: React.PointerEvent) => {
+    if (activePointers.current.has(e.pointerId)) {
+      activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    if (activePointers.current.size === 2) {
+      const pts = Array.from(activePointers.current.values());
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      
+      if (initialPinchDist.current) {
+        const scale = dist / initialPinchDist.current;
+        const newZoom = Math.min(Math.max(0.2, initialZoom.current * scale), 4);
+        setZoom(newZoom);
+        isDraggingCanvas.current = true;
+      }
+      return;
+    }
+
     if (!isDraggingBg.current) return;
     const newX = e.clientX - startPan.current.x;
     const newY = e.clientY - startPan.current.y;
@@ -75,10 +106,31 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
   };
 
   const handleBgPointerUp = (e: React.PointerEvent) => {
-    isDraggingBg.current = false;
-    setTimeout(() => {
-      isDraggingCanvas.current = false;
-    }, 50);
+    activePointers.current.delete(e.pointerId);
+    
+    if (activePointers.current.size < 2) {
+      initialPinchDist.current = null;
+    }
+    
+    if (activePointers.current.size === 1) {
+       const pts = Array.from(activePointers.current.values());
+       startPan.current = { x: pts[0].x - pan.x, y: pts[0].y - pan.y };
+       isDraggingBg.current = true;
+    } else if (activePointers.current.size === 0) {
+       isDraggingBg.current = false;
+       setTimeout(() => {
+         isDraggingCanvas.current = false;
+       }, 50);
+    }
+  };
+
+  const handleBgWheel = (e: React.WheelEvent) => {
+    if (e.ctrlKey) {
+       e.preventDefault(); // Might not work in React if passive, but trying to prevent default browser zoom
+    }
+    const zoomSensitivity = 0.001;
+    const delta = -e.deltaY * zoomSensitivity;
+    setZoom(prev => Math.min(Math.max(0.2, prev + prev * delta), 4));
   };
 
   const handleBgClick = () => {
@@ -436,18 +488,22 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
         onPointerUp={handleBgPointerUp}
         onPointerCancel={handleBgPointerUp}
         onPointerLeave={handleBgPointerUp}
+        onWheel={handleBgWheel}
         onClick={handleBgClick}
       >
-        <div 
-          className="absolute inset-0 z-0 pointer-events-none opacity-20 bg-grid" 
-          style={{
-            backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)',
-            backgroundSize: '32px 32px',
-            backgroundPosition: `${pan.x}px ${pan.y}px`
-          }} 
-        />
-        
-        <div className="absolute inset-0 w-full h-full pointer-events-none" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}>
+        <div className="absolute inset-0 w-full h-full pointer-events-none" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center center' }}>
+          <div 
+            className="absolute z-0 pointer-events-none opacity-20 bg-grid" 
+            style={{
+              width: '1000%',
+              height: '1000%',
+              left: '-450%',
+              top: '-450%',
+              backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)',
+              backgroundSize: '32px 32px',
+              backgroundPosition: 'center center'
+            }} 
+          />
         <svg className="absolute inset-0 w-full h-full pointer-events-none z-10 overflow-visible">
            <AnimatePresence>
            {layoutEdges.map(edge => {
