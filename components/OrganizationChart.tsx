@@ -314,7 +314,7 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
           stats,
           score: (stats.worshipRate + stats.gatheringRate + stats.woolRate) / 3,
           targetX: cx, targetY: cy,
-          opacity: 1, scale: 0.95,
+          opacity: 1, scale: 1.05,
           animDelay: Math.random() * 2.5,
           animDuration: 3.5 + Math.random() * 2,
           springStiffness: 40 + Math.random() * 80,
@@ -415,8 +415,8 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
       .force('y', d3.forceY<RankedNode>(d => d.targetY).strength(d => d.type === 'leader' && d.groupName === focusedGroup ? 1 : 0.3))
       .force('collide', d3.forceCollide<RankedNode>().radius(d => {
         if (d.id === 'CENTER') return 0;
-        if (d.type === 'leader') return 80; 
-        return 65; 
+        if (d.type === 'leader') return 84; 
+        return 72; 
       }).iterations(4))
       .stop();
 
@@ -545,7 +545,7 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
                 const { node: m, scale, opacity, type, groupName, stats } = node;
                 const { num, name } = getDisplayName(m);
                 const avatarText = name.substring(0, 1);
-                const SIZE = type === 'leader' ? 76 : 56; 
+                const SIZE = type === 'leader' ? 84 : 72; 
                 const isTooltipActive = activeTooltip === node.id;
 
                 return (
