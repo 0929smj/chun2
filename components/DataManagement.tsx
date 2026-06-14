@@ -6,20 +6,13 @@ import { getScriptUrl, setScriptUrl, fetchSheetData, sendAction, DEFAULT_SCRIPT_
 import { getClosestSunday } from '../services/utils';
 import { exportDataToExcel } from '../services/excelService';
 
-const GAS_CODE_SNIPPET = `/* ... (Existing code kept for brevity, will be in the actual file) ... */
-/* 
- [구글 스프레드시트 연결 스크립트 v4.3]
- - 업데이트: '울장' AccessCode만 로그인 비밀번호로 사용
- ...
-*/
-// (Code truncated for response, assume full GAS code is here as before)
-/* 
- [구글 스프레드시트 연결 스크립트 v4.3]
- - 업데이트: '울장' AccessCode만 로그인 비밀번호로 사용
+const GAS_CODE_SNIPPET = `/* 
+ [구글 스프레드시트 연결 스크립트 v4.5]
+ - 업데이트: 사진 프로필 URL (thumbnail API 최적화)
  
  1. 스프레드시트 메뉴: 확장 프로그램 > Apps Script 클릭
  2. [Code.gs] 내용 모두 지우고 이 코드 붙여넣기
- 3. [배포] > [새 배포] > '모든 사용자' 권한 설정 후 URL 복사
+ 3. [배포] > [새 배포] > '모든 사용자' 권한 설정 후 URL 복사 (기존 배포에서 '새 버전'으로 배포해야 업데이트 반영됨!)
 */
 
 // ▼▼▼ 설정 영역 ▼▼▼
@@ -53,17 +46,39 @@ function doGet(e) {
   
   // 1. 멤버 데이터 가져오기 (시트명: members)
   const membersData = getSheetData(ss, 'members');
-  const members = membersData.map(m => ({
-    id: String(m['memberid'] || m['id'] || m['name']),
-    name: m['name'],
-    group: m['group'] || m['소그룹'] || m['wool'] || m['woolname'] || m['소속'] || '',
-    wool: m['group'] || m['소그룹'] || m['wool'] || m['woolname'] || m['소속'] || '',
-    phoneNumber: m['phone'] || m['phonenumber'] || m['연락처'] || m['전화번호'] || '',
-    role: m['role'] || m['직분'] || '성도',
-    status: m['status'] || m['상태'] || 'ACTIVE',
-    MemberRegistration: m['memberregistration'] || m['등록일'] || m['등반일'] || m['registrationdate'] || m['등록일자'] || '',
-    specialNotes: m['notes'] || m['비고'] || m['specialnotes'] || m['memo'] || m['메모'] || ''
-  })).filter(m => m.name);
+  // 1-1. 프로필 이미지 가져오기 (Google Drive)
+  let photoFiles = {};
+  const FOLDER_ID = "1cv5vjlZSqtOqBS_UtOP14qR8w_Vhk2a3";
+  try {
+    const folder = DriveApp.getFolderById(FOLDER_ID);
+    const files = folder.getFiles();
+    while (files.hasNext()) {
+      const file = files.next();
+      const n = file.getName();
+      const rawName = n.split('.')[0]; // remove extension
+      const mId = rawName.replace(/\s+/g, ''); // ignore all spaces
+      photoFiles[mId] = "https://drive.google.com/thumbnail?id=" + file.getId() + "&sz=w400";
+    }
+  } catch(e) {
+    // DriveApp 권한이 없거나 폴더를 찾을 수 없을 때의 에러 무시
+  }
+
+  const members = membersData.map(m => {
+    const mid = String(m['memberid'] || m['id'] || m['name']).trim();
+    const matchId = String(m['name']).replace(/\s+/g, '');
+    return {
+      id: mid,
+      name: m['name'],
+      group: m['group'] || m['소그룹'] || m['wool'] || m['woolname'] || m['소속'] || '',
+      wool: m['group'] || m['소그룹'] || m['wool'] || m['woolname'] || m['소속'] || '',
+      phoneNumber: m['phone'] || m['phonenumber'] || m['연락처'] || m['전화번호'] || '',
+      role: m['role'] || m['직분'] || '성도',
+      status: m['status'] || m['상태'] || 'ACTIVE',
+      MemberRegistration: m['memberregistration'] || m['등록일'] || m['등반일'] || m['registrationdate'] || m['등록일자'] || '',
+      specialNotes: m['notes'] || m['비고'] || m['specialnotes'] || m['memo'] || m['메모'] || '',
+      photoUrl: photoFiles[matchId] || photoFiles[mid.replace(/\s+/g, '')] || ''
+    };
+  }).filter(m => m.name);
 
   // 2. 소그룹 목록 및 AccessCode 가져오기 (시트명: groups)
   const groupsData = getSheetData(ss, 'groups');

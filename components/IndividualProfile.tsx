@@ -34,7 +34,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
     const match = targetMember.name.match(/^(\d+)\s*(.*)$/);
     if (match) {
        // match[1] is the digits ("91"), match[2] is the rest ("류지선")
-       return { avatarText: match[1], displayName: match[2].trim() };
+       return { avatarText: match[1], displayName: `${match[1]} ${match[2].trim()}` };
     }
     // Fallback for names like '김철수' -> Avatar: '김', Name: '김철수'
     return { avatarText: targetMember.name.charAt(0), displayName: targetMember.name };
@@ -279,46 +279,48 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
           {/* Top Section: Profile & Analytics */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
              {/* Profile Card */}
-             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="bg-gradient-to-r from-indigo-500 to-purple-600 h-16 md:h-24 relative">
-                   <div className="absolute -bottom-8 md:-bottom-10 left-6 w-16 h-16 md:w-20 md:h-20 rounded-full bg-white p-1 shadow-md">
-                      {/* Avatar with number prefix */}
-                      <div className="w-full h-full rounded-full bg-slate-200 flex items-center justify-center text-slate-500 text-lg md:text-2xl font-bold">
-                        {memberDisplay.avatarText}
-                      </div>
-                   </div>
+             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col items-center pt-8 md:pt-10 pb-6 px-6 relative w-full">
+                <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-t-xl z-0" />
+                <div className="relative w-36 h-36 md:w-44 md:h-44 rounded-full bg-white p-2 shadow-lg mb-6 z-10 border border-slate-50">
+                   {targetMember.photoUrl ? (
+                     <div className="w-full h-full rounded-full overflow-hidden bg-slate-100 ring-2 ring-indigo-50">
+                       <img src={targetMember.photoUrl} alt={targetMember.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                     </div>
+                   ) : (
+                     <div className="w-full h-full rounded-full bg-slate-100 flex items-center justify-center text-slate-400 text-3xl md:text-5xl font-bold ring-2 ring-indigo-50 shadow-inner">
+                       {memberDisplay.avatarText}
+                     </div>
+                   )}
                 </div>
-                <div className="pt-10 md:pt-12 pb-6 px-6">
-                   {/* Display Name without number */}
-                   <h3 className="text-xl md:text-2xl font-bold text-slate-800">{memberDisplay.displayName}</h3>
-                   <p className="text-indigo-600 font-medium text-sm md:text-base">{targetMember.group}</p>
-                   
-                   <div className="mt-4 md:mt-6 space-y-3">
-                      <div className="flex items-center text-sm text-slate-600">
-                         <User size={16} className="mr-3 text-slate-400" />
-                         <span>{targetMember.role || '성도'}</span>
-                      </div>
-                      <div className="flex items-center text-sm text-slate-600">
-                         <Phone size={16} className="mr-3 text-slate-400" />
-                         <span>{targetMember.phoneNumber || '연락처 없음'}</span>
-                      </div>
-                      <div className="flex items-center text-sm text-slate-600">
-                         <Calendar size={16} className="mr-3 text-slate-400" />
-                         <span>등반일: {targetMember.MemberRegistration || (targetMember as any).registrationDate || '정보 없음'}</span>
-                      </div>
-                      {targetMember.specialNotes && (
-                        <div className="flex items-start text-sm text-slate-700 bg-slate-100 p-3 rounded-lg mt-2 border border-slate-200">
-                           <StickyNote size={16} className="mr-2 mt-0.5 flex-shrink-0 text-slate-500" />
-                           <div className="flex-1">
-                              <span className="font-bold text-xs text-slate-500 block mb-1">비고 (Memo)</span>
-                              <span>{targetMember.specialNotes}</span>
-                           </div>
+                
+                <h3 className="text-2xl md:text-3xl font-bold text-slate-800 text-center tracking-tight z-10 relative break-keep">{memberDisplay.displayName}</h3>
+                <p className="text-indigo-600 font-semibold text-sm md:text-base mt-2 text-center bg-indigo-50 px-3 py-1 rounded-full z-10 relative">{targetMember.group}</p>
+                
+                <div className="mt-8 space-y-3 w-full z-10 relative">
+                   <div className="flex items-center text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                      <User size={18} className="mr-3 text-slate-400" />
+                      <span>{targetMember.role || '성도'}</span>
+                   </div>
+                   <div className="flex items-center text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                      <Phone size={18} className="mr-3 text-slate-400" />
+                      <span>{targetMember.phoneNumber || '연락처 없음'}</span>
+                   </div>
+                   <div className="flex items-center text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                      <Calendar size={18} className="mr-3 text-slate-400" />
+                      <span>등반일: {targetMember.MemberRegistration || (targetMember as any).registrationDate || '정보 없음'}</span>
+                   </div>
+                   {targetMember.specialNotes && (
+                     <div className="flex items-start text-sm text-slate-700 bg-indigo-50/70 p-4 rounded-lg mt-2 border border-indigo-100">
+                        <StickyNote size={18} className="mr-3 mt-0.5 flex-shrink-0 text-indigo-400" />
+                        <div className="flex-1">
+                           <span className="font-semibold text-xs text-indigo-600 block mb-1">비고 (Memo)</span>
+                           <span className="leading-relaxed">{targetMember.specialNotes}</span>
                         </div>
-                      )}
-                      
-                      <div className="pt-4 border-t border-slate-100 text-xs text-slate-400">
-                        * 통계 기준: 1월 1일 ~ 오늘 ({stats.passedWeeksCount}주 경과)
-                      </div>
+                     </div>
+                   )}
+                   
+                   <div className="pt-4 border-t border-slate-100 text-xs text-slate-400 text-center">
+                     * 통계 기준: 1월 1일 ~ 오늘 ({stats.passedWeeksCount}주 경과)
                    </div>
                 </div>
              </div>

@@ -15,6 +15,7 @@ export interface Member {
   MemberRegistration?: string; // 등반일 (YYYY-MM-DD, YYYY-MM, or YYYY)
   specialNotes?: string;
   latestPrayerRequest?: string; 
+  photoUrl?: string; // 사진 주소 (from Drive)
 }
 
 export interface PrayerRecord {
