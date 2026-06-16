@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { LayoutDashboard, CalendarDays, BookOpen, Users, Menu, X, UserSearch, Network } from 'lucide-react';
 
 interface LayoutProps {
@@ -8,6 +8,8 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+  const location = useLocation();
+  const isOrgPage = location.pathname === '/org';
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
@@ -65,8 +67,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto pt-16 lg:pt-0 w-full relative">
-        <div className="p-4 lg:p-8 max-w-7xl mx-auto">
+      <main className={`flex-1 pt-16 lg:pt-0 w-full relative flex flex-col ${isOrgPage ? 'h-screen lg:h-full overflow-hidden' : 'overflow-auto'}`}>
+        <div className={`mx-auto ${isOrgPage ? 'max-w-none w-full flex-1 flex flex-col overflow-hidden p-4 lg:p-6' : 'p-4 lg:p-8 max-w-7xl'}`}>
           {children}
         </div>
       </main>

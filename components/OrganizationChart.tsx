@@ -410,9 +410,10 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
     }
 
     const simulation = d3.forceSimulation(nodes)
-      .force('charge', d3.forceManyBody().strength(d => d.id === 'CENTER' ? 0 : -100))
-      .force('x', d3.forceX<RankedNode>(d => d.targetX).strength(d => d.type === 'leader' && d.groupName === focusedGroup ? 1 : 0.3))
-      .force('y', d3.forceY<RankedNode>(d => d.targetY).strength(d => d.type === 'leader' && d.groupName === focusedGroup ? 1 : 0.3))
+      .force('charge', d3.forceManyBody().strength(d => d.id === 'CENTER' ? 0 : -10))
+      .force('radial', d3.forceRadial<RankedNode>(d => Math.hypot(d.targetX - cx, d.targetY - cy), cx, cy).strength(2.0))
+      .force('x', d3.forceX<RankedNode>(d => d.targetX).strength(1.2))
+      .force('y', d3.forceY<RankedNode>(d => d.targetY).strength(1.2))
       .force('collide', d3.forceCollide<RankedNode>().radius(d => {
         if (d.id === 'CENTER') return 0;
         if (d.type === 'leader') return 84; 
@@ -474,15 +475,15 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
   };
 
   return (
-    <div className="space-y-4">
-      <header>
+    <div className="h-full flex flex-col space-y-4 flex-1 overflow-hidden">
+      <header className="flex-shrink-0">
         <h2 className="text-2xl md:text-3xl font-bold text-slate-800">연결 조직도</h2>
         <p className="text-sm text-slate-500">리더를 클릭하면 하위 멤버가 나타납니다. 화면에 나온 멤버나 다시 리더를 클릭하면 상세 프로필로 이동합니다.</p>
       </header>
 
       <div 
         ref={containerRef}
-        className="w-full h-[75vh] min-h-[600px] relative bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-inner cursor-grab active:cursor-grabbing touch-none select-none"
+        className="w-full flex-1 min-h-[500px] relative bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-inner cursor-grab active:cursor-grabbing touch-none select-none"
         onPointerDown={handleBgPointerDown}
         onPointerMove={handleBgPointerMove}
         onPointerUp={handleBgPointerUp}

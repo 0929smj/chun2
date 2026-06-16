@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Member, AttendanceRecord, PrayerRecord, AttendanceType, MeetingStatus } from '../types';
-import { Search, User, Phone, StickyNote, Calendar, Quote, TrendingUp, AlertCircle, FileText } from 'lucide-react';
+import { Search, User, Phone, StickyNote, Calendar, Quote, TrendingUp, AlertCircle, FileText, Printer } from 'lucide-react';
 import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Tooltip as RechartsTooltip } from 'recharts';
 import { SUNDAYS_2026 } from '../services/mockData';
 
@@ -202,9 +202,20 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <header>
-        <h2 className="text-2xl md:text-3xl font-bold text-slate-800">개인별 종합 현황</h2>
-        <p className="text-sm md:text-base text-slate-500">개인의 출석 현황, 통계, 기도제목을 한눈에 확인합니다.</p>
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-2xl md:text-3xl font-bold text-slate-800">개인별 종합 현황</h2>
+          <p className="text-sm md:text-base text-slate-500">개인의 출석 현황, 통계, 기도제목을 한눈에 확인합니다.</p>
+        </div>
+        {targetMember && (
+          <button 
+            onClick={() => window.print()}
+            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-slate-800 text-white rounded-lg text-sm font-semibold shadow-md transition-colors cursor-pointer flex-shrink-0"
+          >
+            <Printer size={16} />
+            개인 리포트 인쇄 (A4 1장)
+          </button>
+        )}
       </header>
 
       {/* Search & Filter Section */}
@@ -502,6 +513,251 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({ members, records,
            <h3 className="text-base md:text-lg font-bold text-slate-600 mb-2">성도를 선택해주세요</h3>
            <p className="max-w-md text-xs md:text-base">상단 검색창에서 이름을 입력하거나, 소그룹 및 멤버를 선택하여 상세 정보를 확인하세요.</p>
         </div>
+      )}
+      {targetMember && stats && (
+        <>
+          <style>{`
+            .print-only-container {
+              display: none;
+            }
+            @media print {
+              body {
+                background: white !important;
+                margin: 0 !important;
+                padding: 0 !important;
+              }
+              body * {
+                visibility: hidden !important;
+              }
+              .print-only-container, .print-only-container * {
+                visibility: visible !important;
+              }
+              .print-only-container {
+                display: flex !important;
+                flex-direction: column !important;
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 210mm !important;
+                height: 297mm !important;
+                padding: 15mm 12mm 10mm 12mm !important;
+                box-sizing: border-box !important;
+                background: white !important;
+                color: black !important;
+                z-index: 9999999 !important;
+              }
+              * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              @page {
+                size: A4 portrait;
+                margin: 0;
+              }
+            }
+          `}</style>
+
+          {/* A4 Printable Report Area */}
+          <div className="hidden print-only-container">
+            {/* Header */}
+            <div className="border-b-4 border-double border-slate-800 pb-3 mb-4 flex justify-between items-end">
+              <div>
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest block">INDIVIDUAL PROFILE REPORT</span>
+                <h1 className="text-2xl font-black text-slate-900 tracking-tight">성도 종합 현황 리포트</h1>
+              </div>
+              <div className="text-right text-[11px] text-slate-500 font-medium">
+                <div>출력 소그룹: <strong className="text-slate-800">{targetMember.group}</strong></div>
+                <div>출력 일시: {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+              </div>
+            </div>
+
+            {/* Profile & Memo Grid */}
+            <div className="grid grid-cols-12 gap-4 mb-5 border border-slate-200 rounded-xl p-4 bg-slate-50/50">
+              {/* Foto or Avatar */}
+              <div className="col-span-3 flex flex-col items-center justify-center border-r border-slate-200/80 pr-4">
+                <div className="w-24 h-24 rounded-full bg-white border border-slate-200 p-1 flex items-center justify-center overflow-hidden shadow-sm">
+                  {targetMember.photoUrl ? (
+                    <img src={targetMember.photoUrl} alt={targetMember.name} className="w-full h-full rounded-full object-cover" />
+                  ) : (
+                    <div className="text-3xl font-black text-slate-300 uppercase">
+                      {memberDisplay.avatarText}
+                    </div>
+                  )}
+                </div>
+                <h2 className="text-lg font-bold text-slate-900 mt-2 text-center tracking-tight">{memberDisplay.displayName}</h2>
+                <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full mt-1 border border-indigo-100">{targetMember.group}</span>
+              </div>
+
+              {/* Profile Detail Table */}
+              <div className="col-span-5 grid grid-cols-2 gap-y-2 gap-x-4 pl-2 text-xs flex-col justify-center">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 block">역할 / 직분</span>
+                  <span className="font-semibold text-slate-800">{targetMember.role || '성도'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 block">연락처</span>
+                  <span className="font-semibold text-slate-800">{targetMember.phoneNumber || '연락처 없음'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 block">등록/등반일</span>
+                  <span className="font-semibold text-slate-800">{targetMember.MemberRegistration || (targetMember as any).registrationDate || '정보 없음'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 block">분석 기간</span>
+                  <span className="font-semibold text-slate-800">1월 1일 ~ 현재 ({stats.passedWeeksCount}주)</span>
+                </div>
+              </div>
+
+              {/* Memo/SpecialNotes */}
+              <div className="col-span-4 border-l border-slate-200/80 pl-4 flex flex-col justify-start">
+                <span className="text-[10px] font-bold text-indigo-500 block uppercase tracking-wider mb-1">비고 (Special Memo)</span>
+                <div className="bg-white border border-indigo-100 rounded-lg p-2 flex-1 text-[11px] text-slate-700 leading-relaxed overflow-hidden h-24">
+                  {targetMember.specialNotes ? (
+                    <p className="line-clamp-4 break-words">{targetMember.specialNotes}</p>
+                  ) : (
+                    <span className="text-slate-300 italic block mt-4 text-center">특별한 비고 사항이 없습니다.</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Stats & Radar Chart */}
+            <div className="grid grid-cols-12 gap-4 mb-5">
+              {/* Stats Numeric Blocks */}
+              <div className="col-span-12 md:col-span-7 grid grid-cols-2 gap-3" style={{ gridColumn: 'span 7' }}>
+                <div className="border border-blue-100 rounded-xl p-3 bg-blue-50/20 flex flex-col justify-center">
+                  <span className="text-[10px] font-bold text-blue-600 block">예배 출석률 (Worship)</span>
+                  <span className="text-xl font-black text-slate-800 mt-1">{stats.worshipRate}% <span className="text-xs font-normal text-slate-400">({stats.worshipCount}/{stats.possibleWorship})</span></span>
+                </div>
+                <div className="border border-indigo-100 rounded-xl p-3 bg-indigo-50/20 flex flex-col justify-center">
+                  <span className="text-[10px] font-bold text-indigo-600 block">집회 출석률 (Gathering)</span>
+                  <span className="text-xl font-black text-slate-800 mt-1">{stats.gatheringRate}% <span className="text-xs font-normal text-slate-400">({stats.gatheringCount}/{stats.possibleGathering})</span></span>
+                </div>
+                <div className="border border-emerald-100 rounded-xl p-2.5 bg-emerald-50/20 flex flex-col justify-center">
+                  <span className="text-[10px] font-bold text-emerald-600 block">울모임 출석률 (Wool)</span>
+                  <span className="text-xl font-black text-slate-800 mt-1">{stats.woolRate}% <span className="text-xs font-normal text-slate-400">({stats.woolCount}/{stats.possibleWool})</span></span>
+                </div>
+                <div className="border border-amber-100 rounded-xl p-2.5 bg-amber-50/20 flex flex-col justify-center">
+                  <span className="text-[10px] font-bold text-amber-600 block">기도 나눔 실적 (Prayer)</span>
+                  <span className="text-xl font-black text-slate-800 mt-1">{stats.prayerCount} <span className="text-xs font-normal text-slate-400">건</span></span>
+                </div>
+              </div>
+
+              {/* Small Radar Chart for Print */}
+              <div className="col-span-12 md:col-span-5 border border-slate-200 rounded-xl p-2 flex flex-col items-center justify-center bg-white h-[142px]" style={{ gridColumn: 'span 5' }}>
+                <span className="text-[10px] font-bold text-slate-400 block mb-1">종합 분석 레이더</span>
+                <div className="w-full h-[115px] flex items-center justify-center animate-none">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
+                      <PolarGrid stroke="#e2e8f0" />
+                      <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 9 }} />
+                      <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+                      <Radar
+                        name={targetMember.name}
+                        dataKey="A"
+                        stroke="#6366f1"
+                        strokeWidth={2}
+                        fill="#6366f1"
+                        fillOpacity={0.3}
+                      />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* 1 Year Attendance Compact Grid */}
+            <div className="border border-slate-200 rounded-xl p-4 mb-5 bg-white">
+              <h3 className="text-xs font-bold text-slate-800 mb-2 border-b border-slate-100 pb-1.5 flex justify-between">
+                <span>🗓️ 1년 출석 히스토리 요약</span>
+                <span className="text-[9px] font-normal text-slate-400">W: 예배 | G: 집회 | L: 울모임</span>
+              </h3>
+              
+              {/* 6 Grid layout for A4 width */}
+              <div className="grid grid-cols-6 gap-2">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(month => {
+                  const monthDates = SUNDAYS_2026.filter(d => new Date(d).getMonth() + 1 === month);
+                  if (monthDates.length === 0) return null;
+
+                  return (
+                    <div key={month} className="border border-slate-100 rounded-lg p-1.5 bg-slate-50/50">
+                      <span className="text-[10px] font-extrabold text-slate-600 block mb-1 border-b border-slate-200/50 pb-0.5 text-center">{month}월</span>
+                      <div className="space-y-1">
+                        {monthDates.map(date => {
+                          const dayRecord = records.find(r => r.memberId === targetMember.id && r.date === date);
+                          const types = dayRecord?.types || [];
+                          const dateStr = date.substring(8); // Only Day 'DD' for print compactness
+                          
+                          const wStatus = meetingStatus.find(s => s.date === date && s.type === AttendanceType.Worship);
+                          const gStatus = meetingStatus.find(s => s.date === date && s.type === AttendanceType.Gathering);
+                          const lStatus = meetingStatus.find(s => s.date === date && s.type === AttendanceType.Wool);
+                          
+                          const wCanceled = wStatus?.isCanceled;
+                          const gCanceled = gStatus?.isCanceled;
+                          const lCanceled = lStatus?.isCanceled;
+
+                          return (
+                            <div key={date} className="flex items-center justify-between text-[9px] leading-tight">
+                              <span className="text-slate-400 font-mono font-medium">{dateStr}일</span>
+                              <div className="flex gap-[1px]">
+                                <span className={`w-3 h-3 flex items-center justify-center rounded-[2px] font-bold text-[7px] ${
+                                  types.includes(AttendanceType.Worship) ? 'bg-blue-100 text-blue-600' : 
+                                  wCanceled ? 'bg-slate-100 text-slate-300' : 'bg-slate-50 text-slate-200'
+                                }`}>{wCanceled ? '-' : 'W'}</span>
+                                <span className={`w-3 h-3 flex items-center justify-center rounded-[2px] font-bold text-[7px] ${
+                                  types.includes(AttendanceType.Gathering) ? 'bg-indigo-100 text-indigo-600' : 
+                                  gCanceled ? 'bg-slate-100 text-slate-300' : 'bg-slate-50 text-slate-200'
+                                }`}>{gCanceled ? '-' : 'G'}</span>
+                                <span className={`w-3 h-3 flex items-center justify-center rounded-[2px] font-bold text-[7px] ${
+                                  types.includes(AttendanceType.Wool) ? 'bg-emerald-100 text-emerald-600' : 
+                                  lCanceled ? 'bg-slate-100 text-slate-300' : 'bg-slate-50 text-slate-200'
+                                }`}>{lCanceled ? '-' : 'L'}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Prayer Request List (Compact) */}
+            <div className="border border-slate-200 rounded-xl p-4 bg-white flex-1 overflow-hidden">
+              <h3 className="text-xs font-bold text-slate-800 mb-2 border-b border-slate-100 pb-1.5 flex justify-between">
+                <span>✍️ 최근 기도제목 리스트</span>
+                <span className="text-[9px] font-normal text-slate-400">최근 3건 표시</span>
+              </h3>
+
+              <div className="space-y-2 max-h-[160px] overflow-hidden">
+                {myPrayerHistory.slice(0, 3).length > 0 ? (
+                  myPrayerHistory.slice(0, 3).map(record => (
+                    <div key={record.id} className="border-b border-slate-100 pb-2 last:border-none last:pb-0">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{record.date}</span>
+                      </div>
+                      {record.content && <p className="text-slate-700 text-[11px] leading-relaxed font-normal">{record.content}</p>}
+                      {record.note && (
+                        <p className="text-[10px] text-amber-700 bg-amber-50/60 rounded px-2 py-0.5 mt-1 font-medium italic">
+                          * 비고: {record.note}
+                        </p>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-slate-300 italic text-[11px] py-4 text-center">등록된 기도제목이 존재하지 않습니다.</div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer branding */}
+            <div className="mt-4 border-t border-slate-100 pt-2 flex justify-between items-center text-[9px] text-slate-400">
+              <span>본 문서는 내부 행정을 위한 요약 보고서입니다. 무단 배포를 금합니다.</span>
+              <span className="font-semibold text-slate-500">소그룹 출석부 시스템</span>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
