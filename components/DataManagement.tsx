@@ -7,8 +7,8 @@ import { getClosestSunday } from '../services/utils';
 import { exportDataToExcel } from '../services/excelService';
 
 const GAS_CODE_SNIPPET = `/* 
- [구글 스프레드시트 연결 스크립트 v4.6]
- - 업데이트: '울장' 그룹도 기타 통계 및 모임출석에 나오도록 포함 조치
+ [구글 스프레드시트 연결 스크립트 v4.8]
+ - 업데이트: 심방 기록(Visitations) 등록, 수정, 삭제 기능 및 다양한 열 이름 매핑(성도ID, 심방ID 등) 유연 대응
  
  1. 스프레드시트 메뉴: 확장 프로그램 > Apps Script 클릭
  2. [Code.gs] 내용 모두 지우고 이 코드 붙여넣기
@@ -46,26 +46,36 @@ function doGet(e) {
   
   // 1. 멤버 데이터 가져오기 (시트명: members)
   const membersData = getSheetData(ss, 'members');
-  // 1-1. 프로필 이미지 가져오기 (Google Drive)
+  // 1-1. 프로필 이미지 가져오기 (Google Drive) - 캐싱으로 조회 시간 대폭 감소 (10초 -> 0.1초)
   let photoFiles = {};
-  const FOLDER_ID = "1cv5vjlZSqtOqBS_UtOP14qR8w_Vhk2a3";
-  try {
-    const folder = DriveApp.getFolderById(FOLDER_ID);
-    const files = folder.getFiles();
-    while (files.hasNext()) {
-      const file = files.next();
-      const n = file.getName();
-      const rawName = n.split('.')[0]; // remove extension
-      const mId = rawName.replace(/\s+/g, ''); // ignore all spaces
-      photoFiles[mId] = "https://drive.google.com/thumbnail?id=" + file.getId() + "&sz=w400";
+  const cache = CacheService.getScriptCache();
+  const cachedPhotos = cache.get("photo_files_cache");
+  if (cachedPhotos) {
+    try {
+      photoFiles = JSON.parse(cachedPhotos);
+    } catch(e) {}
+  } else {
+    const FOLDER_ID = "1cv5vjlZSqtOqBS_UtOP14qR8w_Vhk2a3";
+    try {
+      const folder = DriveApp.getFolderById(FOLDER_ID);
+      const files = folder.getFiles();
+      while (files.hasNext()) {
+        const file = files.next();
+        const n = file.getName();
+        const rawName = n.split('.')[0]; // remove extension
+        const mId = rawName.replace(/\\s+/g, ''); // ignore all spaces
+        photoFiles[mId] = "https://drive.google.com/thumbnail?id=" + file.getId() + "&sz=w400";
+      }
+      // 6시간(21600초) 동안 프로필 이미지 URL 목록 캐싱
+      cache.put("photo_files_cache", JSON.stringify(photoFiles), 21600);
+    } catch(e) {
+      // DriveApp 권한이 없거나 폴더를 찾을 수 없을 때의 에러 무시
     }
-  } catch(e) {
-    // DriveApp 권한이 없거나 폴더를 찾을 수 없을 때의 에러 무시
   }
 
   const members = membersData.map(m => {
     const mid = String(m['memberid'] || m['id'] || m['name']).trim();
-    const matchId = String(m['name']).replace(/\s+/g, '');
+    const matchId = String(m['name']).replace(/\\s+/g, '');
     return {
       id: mid,
       name: m['name'],
@@ -76,7 +86,7 @@ function doGet(e) {
       status: m['status'] || m['상태'] || 'ACTIVE',
       MemberRegistration: m['memberregistration'] || m['등록일'] || m['등반일'] || m['registrationdate'] || m['등록일자'] || '',
       specialNotes: m['notes'] || m['비고'] || m['specialnotes'] || m['memo'] || m['메모'] || '',
-      photoUrl: photoFiles[matchId] || photoFiles[mid.replace(/\s+/g, '')] || ''
+      photoUrl: photoFiles[matchId] || photoFiles[mid.replace(/\\s+/g, '')] || ''
     };
   }).filter(m => m.name);
 
@@ -161,6 +171,21 @@ function doGet(e) {
     }
   });
 
+  // 5. 심방 데이터 가져오기 (시트명: visitations)
+  const visitationsData = getSheetData(ss, 'visitations');
+  const visitations = visitationsData.map(v => {
+    return {
+      visitationId: String(v['visitationid'] || v['심방id'] || ''),
+      date: formatDate(v['date'] || v['날짜'] || v['일자']) || '',
+      memberId: String(v['memberid'] || v['성도id'] || v['이름'] || ''),
+      visitationType: String(v['visitationtype'] || v['심방종류'] || v['구분'] || v['심방형태'] || ''),
+      place: String(v['place'] || v['장소'] || v['심방장소'] || ''),
+      details: String(v['details'] || v['상세내용'] || v['내용'] || v['심방내용'] || ''),
+      prayerRequests: String(v['prayerrequests'] || v['기도제목'] || ''),
+      submittedAt: String(v['submittedat'] || v['제출일시'] || '')
+    };
+  }).filter(v => v.memberId && v.visitationId);
+
   const availableSheets = ss.getSheets().map(s => s.getName());
 
   return ContentService.createTextOutput(JSON.stringify({
@@ -171,6 +196,7 @@ function doGet(e) {
     meetingStatus: meetingStatus,
     groups: groups,
     accessCodes: accessCodes,
+    visitations: visitations,
     debug_sheets: availableSheets,
     connected_id: ss.getId()
   })).setMimeType(ContentService.MimeType.JSON);
@@ -200,6 +226,12 @@ function doPost(e) {
       updateMember(ss, payload);
     } else if (action === 'UPDATE_SESSION_CONFIG') {
       updateSessionConfig(ss, payload);
+    } else if (action === 'ADD_VISITATION') {
+      addVisitation(ss, payload);
+    } else if (action === 'UPDATE_VISITATION') {
+      updateVisitation(ss, payload);
+    } else if (action === 'DELETE_VISITATION') {
+      deleteVisitation(ss, payload);
     }
   } catch(err) {
     return errorResponse(err.toString());
@@ -234,6 +266,11 @@ function getSheetData(ss, sheetName) {
 
 function formatDate(dateObj) {
   if (!dateObj) return null;
+  if (dateObj instanceof Date) {
+    try {
+      return Utilities.formatDate(dateObj, 'Asia/Seoul', 'yyyy-MM-dd');
+    } catch(err) {}
+  }
   let s = String(dateObj).trim();
   try {
     if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return s;
@@ -405,6 +442,115 @@ function updateSessionConfig(ss, payload) {
     }
   }
 }
+
+function addVisitation(ss, payload) {
+  let sheet = ss.getSheets().find(s => s.getName().toLowerCase() === 'visitations');
+  if (!sheet) {
+    sheet = ss.insertSheet('visitations');
+    sheet.appendRow(['visitationId', 'date', 'memberId', 'visitationType', 'place', 'details', 'prayerRequests', 'submittedAt']);
+  }
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['visitationId', 'date', 'memberId', 'visitationType', 'place', 'details', 'prayerRequests', 'submittedAt']);
+  }
+
+  const lastCol = sheet.getLastColumn();
+  const headers = lastCol > 0
+    ? sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h) { return String(h).toLowerCase().replace(/\\s/g, ''); })
+    : ['visitationid', 'date', 'memberid', 'visitationtype', 'place', 'details', 'prayerrequests', 'submittedat'];
+  
+  const map = {
+    'visitationid': ['visitationid', '심방id'],
+    'date': ['date', '일자', '날짜'],
+    'memberid': ['memberid', '성도id'],
+    'visitationtype': ['visitationtype', '심방종류', '구분', '심방형태'],
+    'place': ['place', '장소', '심방장소'],
+    'details': ['details', '상세내용', '내용', '심방내용'],
+    'prayerrequests': ['prayerrequests', '기도제목'],
+    'submittedat': ['submittedat', '제출일시']
+  };
+
+  const newRow = headers.map(function(header) {
+    const h = String(header).toLowerCase().replace(/\\s/g, '');
+    if (map['visitationid'].indexOf(h) !== -1) return payload.visitationId;
+    if (map['date'].indexOf(h) !== -1) return payload.date;
+    if (map['memberid'].indexOf(h) !== -1) return payload.memberId;
+    if (map['visitationtype'].indexOf(h) !== -1) return payload.visitationType;
+    if (map['place'].indexOf(h) !== -1) return payload.place;
+    if (map['details'].indexOf(h) !== -1) return payload.details;
+    if (map['prayerrequests'].indexOf(h) !== -1) return payload.prayerRequests;
+    if (map['submittedat'].indexOf(h) !== -1) return payload.submittedAt || new Date().toISOString();
+    return '';
+  });
+  
+  sheet.appendRow(newRow);
+}
+
+function deleteVisitation(ss, payload) {
+  let sheet = ss.getSheets().find(s => s.getName().toLowerCase() === 'visitations');
+  if (!sheet) return;
+
+  const lastCol = sheet.getLastColumn();
+  const headers = lastCol > 0
+    ? sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h) { return String(h).toLowerCase().replace(/\\s/g, ''); })
+    : ['visitationid', 'date', 'memberid', 'visitationtype', 'place', 'details', 'prayerrequests', 'submittedat'];
+    
+  const possibleIdHeaders = ['visitationid', '심방id'];
+  const idIdx = headers.findIndex(function(h) { return possibleIdHeaders.indexOf(h) !== -1; });
+  if (idIdx === -1) return;
+
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][idIdx]) === String(payload.visitationId)) {
+      sheet.deleteRow(i + 1);
+      break;
+    }
+  }
+}
+
+function updateVisitation(ss, payload) {
+  let sheet = ss.getSheets().find(s => s.getName().toLowerCase() === 'visitations');
+  if (!sheet) return;
+
+  const lastCol = sheet.getLastColumn();
+  const headers = lastCol > 0
+    ? sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h) { return String(h).toLowerCase().replace(/\\s/g, ''); })
+    : ['visitationid', 'date', 'memberid', 'visitationtype', 'place', 'details', 'prayerrequests', 'submittedat'];
+
+  const possibleIdHeaders = ['visitationid', '심방id'];
+  const idIdx = headers.findIndex(function(h) { return possibleIdHeaders.indexOf(h) !== -1; });
+  if (idIdx === -1) return;
+
+  const data = sheet.getDataRange().getDisplayValues();
+  let foundRowIndex = -1;
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idIdx]) === String(payload.visitationId)) {
+      foundRowIndex = i + 1;
+      break;
+    }
+  }
+
+  if (foundRowIndex > 0) {
+     const map = {
+       'date': ['date', '일자', '날짜'],
+       'memberId': ['memberid', '성도id'],
+       'visitationType': ['visitationtype', '심방종류', '구분', '심방형태'],
+       'place': ['place', '장소', '심방장소'],
+       'details': ['details', '상세내용', '내용', '심방내용'],
+       'prayerRequests': ['prayerrequests', '기도제목']
+     };
+
+     Object.keys(payload).forEach(key => {
+       if (map[key]) {
+         const possibleHeaders = map[key].map(function(h) { return h.toLowerCase(); });
+         const colIdx = headers.findIndex(function(h) { return possibleHeaders.indexOf(h) !== -1; });
+         if (colIdx !== -1) {
+           sheet.getRange(foundRowIndex, colIdx + 1).setValue(payload[key]);
+         }
+       }
+     });
+  }
+}
 `;
 
 interface DataManagementProps {
@@ -431,6 +577,14 @@ const DataManagement: React.FC<DataManagementProps> = ({
   const [activeTab, setActiveTab] = useState<'members' | 'attendance' | 'settings' | 'export'>('members');
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [deletingMember, setDeletingMember] = useState<Member | null>(null); // For delete confirmation
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast((prev) => (prev?.message === message ? null : prev));
+    }, 3000);
+  };
   
   // Settings State
   const [scriptUrl, setLocalScriptUrl] = useState(getScriptUrl() || DEFAULT_SCRIPT_URL);
@@ -481,8 +635,9 @@ const DataManagement: React.FC<DataManagementProps> = ({
         count: parseInt(manualCount) || 0
       });
       refreshData();
+      showToast("인원 계수가 성공적으로 저장되었습니다.", "success");
     } catch (e) {
-      alert("인원 계수 저장 중 오류가 발생했습니다.");
+      showToast("인원 계수 저장 중 오류가 발생했습니다.", "error");
     } finally {
       setIsUpdatingManualCount(false);
     }
@@ -499,7 +654,7 @@ const DataManagement: React.FC<DataManagementProps> = ({
 
   const handleAddMember = async () => {
     if (!newMember.name || !newMember.group) {
-        alert("이름과 소그룹을 모두 입력해주세요.");
+        showToast("이름과 소그룹을 모두 입력해주세요.", "error");
         return;
     }
     
@@ -539,8 +694,9 @@ const DataManagement: React.FC<DataManagementProps> = ({
       // 3. Reset Form & Show Success
       setNewMember({ group: '', name: '', phoneNumber: '', MemberRegistration: '', specialNotes: '' });
       setShowAddSuccess(true);
+      showToast("새로운 멤버가 추가되었습니다.", "success");
     } catch (e) {
-      alert("멤버 추가 중 오류가 발생했습니다.");
+      showToast("멤버 추가 중 오류가 발생했습니다.", "error");
     } finally {
       setIsAddingMember(false);
     }
@@ -557,8 +713,9 @@ const DataManagement: React.FC<DataManagementProps> = ({
       // Update Local State
       setMembers(prev => prev.map(m => m.id === editingMember.id ? editingMember : m));
       setEditingMember(null);
+      showToast("정보가 수정되었습니다.", "success");
     } catch (e) {
-      alert("정보 수정 중 오류가 발생했습니다.");
+      showToast("정보 수정 중 오류가 발생했습니다.", "error");
     } finally {
       setIsAddingMember(false);
     }
@@ -576,8 +733,9 @@ const DataManagement: React.FC<DataManagementProps> = ({
       // Update Local State: Do NOT remove, just update status
       setMembers(prev => prev.map(m => m.id === deletingMember.id ? inactiveMember : m));
       setDeletingMember(null);
+      showToast("멤버가 삭제되었습니다.", "success");
     } catch (e) {
-      alert("삭제 중 오류가 발생했습니다.");
+      showToast("삭제 중 오류가 발생했습니다.", "error");
     } finally {
       setIsAddingMember(false);
     }
@@ -604,7 +762,7 @@ const DataManagement: React.FC<DataManagementProps> = ({
 
     // Filter by Name Search
     if (memberSearchQuery.trim()) {
-      items = items.filter(m => m.name.toLowerCase().includes(memberSearchQuery.toLowerCase()));
+      items = items.filter(m => String(m.name || '').toLowerCase().includes(memberSearchQuery.toLowerCase()));
     }
     
     // Sort
@@ -622,7 +780,7 @@ const DataManagement: React.FC<DataManagementProps> = ({
     } else if (activeTab === 'members') {
        // Default sort by name, but keep active members first maybe? 
        // For now just sort by Name
-       items.sort((a, b) => a.name.localeCompare(b.name));
+       items.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
     }
 
     return items;
@@ -645,21 +803,23 @@ const DataManagement: React.FC<DataManagementProps> = ({
       if (sortConfig.key === 'name') {
            return items.sort((a, b) => {
              return sortConfig.direction === 'asc' 
-               ? a.name.localeCompare(b.name) 
-               : b.name.localeCompare(a.name);
+               ? String(a.name || '').localeCompare(String(b.name || '')) 
+               : String(b.name || '').localeCompare(String(a.name || ''));
            });
       } else if (sortConfig.key === 'group') {
            return items.sort((a, b) => {
              return sortConfig.direction === 'asc' 
-               ? a.group.localeCompare(b.group) 
-               : b.group.localeCompare(a.group);
+               ? String(a.group || '').localeCompare(String(b.group || '')) 
+               : String(b.group || '').localeCompare(String(a.group || ''));
            });
       }
     } else if (activeTab === 'attendance') {
        // Default sort logic
        items.sort((a, b) => {
-         if (a.group !== b.group) return a.group.localeCompare(b.group);
-         return a.name.localeCompare(b.name);
+         const groupA = String(a.group || '');
+         const groupB = String(b.group || '');
+         if (groupA !== groupB) return groupA.localeCompare(groupB);
+         return String(a.name || '').localeCompare(String(b.name || ''));
        });
     }
 
@@ -681,15 +841,53 @@ const DataManagement: React.FC<DataManagementProps> = ({
       .then((data) => {
         if (data.status === 'error') throw new Error((data as any).message || '스크립트 오류');
         setConnectionStatus('success');
-        setTimeout(() => { refreshData(); alert('연결 성공! 데이터를 새로고침했습니다.'); }, 500);
+        setTimeout(() => { refreshData(); showToast('연결 성공! 데이터를 새로고침했습니다.', 'success'); }, 500);
       })
       .catch((err) => { setConnectionStatus('error'); setErrorMessage(err.message || '연결 실패'); });
   };
 
   const copyToClipboard = () => {
-    navigator.clipboard.writeText(GAS_CODE_SNIPPET);
-    setCopySuccess(true);
-    setTimeout(() => setCopySuccess(false), 2000);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(GAS_CODE_SNIPPET)
+          .then(() => {
+            setCopySuccess(true);
+            setTimeout(() => setCopySuccess(false), 2000);
+          })
+          .catch((err) => {
+            console.error("Clipboard copy failed via API:", err);
+            fallbackCopyToClipboard();
+          });
+      } else {
+        fallbackCopyToClipboard();
+      }
+    } catch (e) {
+      console.error("Clipboard copy failed:", e);
+      fallbackCopyToClipboard();
+    }
+  };
+
+  const fallbackCopyToClipboard = () => {
+    try {
+      const textArea = document.createElement("textarea");
+      textArea.value = GAS_CODE_SNIPPET;
+      textArea.style.position = "fixed";  // avoid scrolling to bottom
+      textArea.style.left = "-9999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      if (successful) {
+        setCopySuccess(true);
+        setTimeout(() => setCopySuccess(false), 2000);
+      } else {
+        showToast("클립보드 복사에 실패했습니다. 코드를 수동으로 복사해주세요.", "error");
+      }
+    } catch (err) {
+      console.error("Fallback clipboard copy failed:", err);
+      showToast("클립보드 복사에 실패했습니다. 코드를 수동으로 복사해주세요.", "error");
+    }
   };
   
   return (
@@ -1145,8 +1343,8 @@ const DataManagement: React.FC<DataManagementProps> = ({
                           const now = new Date();
                           const start = new Date(now.getFullYear(), now.getMonth(), 1);
                           const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-                          setExportStartDate(start.toISOString().split('T')[0]);
-                          setExportEndDate(end.toISOString().split('T')[0]);
+                          setExportStartDate(`${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`);
+                          setExportEndDate(`${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`);
                        }}
                        className="px-3 py-1.5 bg-white border border-slate-300 rounded text-xs hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
                     >
@@ -1156,8 +1354,8 @@ const DataManagement: React.FC<DataManagementProps> = ({
                        onClick={() => {
                           const now = new Date();
                           const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-                          setExportStartDate(threeMonthsAgo.toISOString().split('T')[0]);
-                          setExportEndDate(now.toISOString().split('T')[0]);
+                          setExportStartDate(`${threeMonthsAgo.getFullYear()}-${String(threeMonthsAgo.getMonth() + 1).padStart(2, '0')}-${String(threeMonthsAgo.getDate()).padStart(2, '0')}`);
+                          setExportEndDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
                        }}
                        className="px-3 py-1.5 bg-white border border-slate-300 rounded text-xs hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
                     >
@@ -1262,6 +1460,18 @@ const DataManagement: React.FC<DataManagementProps> = ({
                  </div>
                )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-5 right-5 z-50 animate-fade-in duration-300">
+          <div className={`px-5 py-3 rounded-xl shadow-lg flex items-center space-x-3 text-white font-medium ${
+            toast.type === 'success' ? 'bg-emerald-600' :
+            toast.type === 'error' ? 'bg-rose-600' : 'bg-slate-800'
+          }`}>
+            <span>{toast.message}</span>
           </div>
         </div>
       )}

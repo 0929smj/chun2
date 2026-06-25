@@ -1,17 +1,27 @@
-import { Member, AttendanceRecord, PrayerRecord, AttendanceType, MeetingStatus } from '../types';
+import { Member, AttendanceRecord, PrayerRecord, AttendanceType, MeetingStatus, Visitation } from '../types';
 
 const STORAGE_KEY = 'church_admin_script_url';
 
 // Default URL provided for the application (Moved from DataManagement to be shared)
 export const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwFZIjVfw9UlhW7i5fSmDcJgW4gppEPkPo-z-hFanukgJgjPFvm_1AqqNBtz-oZCOHTQg/exec";
 
-// Returns local storage URL if exists, otherwise defaults to the hardcoded URL
+// Returns local storage URL if exists, otherwise returns null to default to local mock data
 export const getScriptUrl = () => {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  return stored ? stored : DEFAULT_SCRIPT_URL;
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch (e) {
+    console.warn("Storage access is restricted/blocked in this environment:", e);
+    return null;
+  }
 };
 
-export const setScriptUrl = (url: string) => localStorage.setItem(STORAGE_KEY, url);
+export const setScriptUrl = (url: string) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, url);
+  } catch (e) {
+    console.warn("Storage write is restricted/blocked in this environment:", e);
+  }
+};
 
 interface SheetDataResponse {
   members: Member[];
@@ -19,6 +29,7 @@ interface SheetDataResponse {
   prayers: PrayerRecord[];
   meetingStatus: MeetingStatus[];
   groups: string[];
+  visitations?: Visitation[];
   accessCodes?: string[]; // Added for authentication
   status: 'success' | 'error';
   debug_sheets?: string[];
@@ -44,14 +55,14 @@ export const fetchSheetData = async (): Promise<SheetDataResponse> => {
       // If response is not JSON (likely HTML), it usually means a Google Login page redirection
       // due to incorrect deployment permissions (not set to "Anyone").
       const text = await response.text();
-      console.error("Received non-JSON response:", text.substring(0, 500));
+      console.warn("Received non-JSON response:", text.substring(0, 500));
       throw new Error("올바르지 않은 응답 형식입니다. 배포 권한이 '모든 사용자'로 설정되었는지 확인하세요. (HTML 응답 감지됨)");
     }
 
     const data = await response.json();
     return data;
   } catch (error: any) {
-    console.error('Failed to fetch sheet data:', error);
+    console.warn('Failed to fetch sheet data:', error);
     // Preserve the specific error message if possible
     if (error.message && error.message.includes('Failed to fetch')) {
         throw new Error("서버에 접근할 수 없습니다. URL이 정확한지, 인터넷이 연결되어 있는지 확인하세요. (CORS 오류 가능성)");
@@ -75,6 +86,6 @@ export const sendAction = async (action: string, payload: any) => {
       body: JSON.stringify({ action, payload }),
     });
   } catch (error) {
-    console.error(`Failed to send action ${action}:`, error);
+    console.warn(`Failed to send action ${action}:`, error);
   }
 };

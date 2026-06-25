@@ -146,108 +146,111 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
         </div>
 
         {/* Weekly Stats Table */}
-        <div className="overflow-x-auto custom-scrollbar border-t border-slate-100 pt-6">
+        <div className="border-t border-slate-100 pt-6">
           <h4 className="text-sm font-bold text-slate-600 mb-4">주별 상세 데이터</h4>
-          <table className="w-full text-xs md:text-sm text-center text-slate-500 border-collapse">
-            <thead className="text-xs text-slate-700 uppercase bg-slate-50">
-              <tr>
-                <th scope="col" className="px-2 md:px-4 py-3 border sticky left-0 bg-slate-50 z-20 min-w-[60px] md:min-w-[80px]">울</th>
-                <th scope="col" className="px-2 md:px-4 py-3 border sticky left-[60px] md:left-[80px] bg-slate-50 z-20 min-w-[50px] md:min-w-[60px]">구분</th>
-                {weeklyStats.map(stat => (
-                  <th key={stat.date} scope="col" className="px-1 md:px-2 py-3 border min-w-[50px] md:min-w-[70px]">
-                    <span className="font-bold text-slate-600">{stat.date.substring(5)}</span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {/* Overall Ministry Event Row */}
-              <tr className="bg-white border-b">
-                <td colSpan={2} className="px-2 md:px-4 py-2 font-bold text-indigo-700 border sticky left-0 bg-indigo-50 z-10">사역</td>
-                {weeklyStats.map(stat => (
-                  <td key={stat.date} className="px-1 md:px-2 py-2 border text-[10px] md:text-xs text-indigo-600 font-bold bg-indigo-50/30 whitespace-normal break-keep align-middle">
-                    {getEventName(stat.date)}
-                  </td>
-                ))}
-              </tr>
+          <div className="max-h-[calc(100vh-250px)] lg:max-h-[calc(100vh-280px)] overflow-auto custom-scrollbar border border-slate-200/80 rounded-xl bg-white shadow-sm">
+            <table className="w-full text-xs md:text-sm text-center text-slate-600 border-collapse">
+              <thead className="text-xs text-slate-700 uppercase bg-slate-50 border-b border-slate-200 sticky top-0 z-30">
+                <tr>
+                  <th scope="col" className="px-2 py-3 border border-slate-200 sticky top-0 left-0 bg-slate-50 z-40 w-[65px] min-w-[65px] max-w-[65px] md:w-[90px] md:min-w-[90px] md:max-w-[90px] font-semibold text-slate-700">울</th>
+                  <th scope="col" className="px-2 py-3 border border-slate-200 sticky top-0 left-[65px] md:left-[90px] bg-slate-50 z-40 w-[55px] min-w-[55px] max-w-[55px] md:w-[70px] md:min-w-[70px] md:max-w-[70px] font-semibold text-slate-700">구분</th>
+                  {weeklyStats.map(stat => (
+                    <th key={stat.date} scope="col" className="px-2 py-3 border border-slate-200 min-w-[55px] md:min-w-[75px] font-semibold text-slate-600 sticky top-0 bg-slate-50 z-30">
+                      <span>{stat.date.substring(5)}</span>
+                    </th>
+                  ))}
+                </tr>
 
-              {/* Total Stats Rows */}
-              <tr className="bg-slate-50/30 border-b">
-                <td rowSpan={3} className="px-2 md:px-4 py-2 font-bold text-slate-900 border sticky left-0 bg-slate-100 z-10 whitespace-nowrap align-middle">전체</td>
-                <td className="px-2 md:px-4 py-2 font-bold text-blue-600 border sticky left-[60px] md:left-[80px] bg-slate-50/30 z-10">예배</td>
-                {weeklyStats.map(stat => {
-                  const canceled = isMeetingCanceled(stat.date, AttendanceType.Worship);
-                  return (
-                    <td key={stat.date} className={`px-1 md:px-2 py-2 border font-medium ${canceled ? 'bg-slate-100/50 text-slate-300' : ''}`}>
-                      {canceled ? '-' : stat.worshipCount}
+                {/* Overall Ministry Event Row */}
+                <tr className="bg-white border-b border-slate-200 normal-case">
+                  <td className="px-2 py-2.5 font-bold text-indigo-700 border border-slate-200 sticky left-0 bg-[#f0f4ff] z-40 w-[65px] min-w-[65px] max-w-[65px] md:w-[90px] md:min-w-[90px] md:max-w-[90px] text-center">사역</td>
+                  <td className="px-2 py-2.5 font-bold text-indigo-700 border border-slate-200 sticky left-[65px] md:left-[90px] bg-[#f0f4ff] z-40 w-[55px] min-w-[55px] max-w-[55px] md:w-[70px] md:min-w-[70px] md:max-w-[70px] text-center">이벤트</td>
+                  {weeklyStats.map(stat => (
+                    <td key={stat.date} className="px-2 py-2.5 border border-slate-200 text-[10px] md:text-xs text-indigo-600 font-bold bg-[#f5f8ff] whitespace-normal break-keep align-middle">
+                      {getEventName(stat.date)}
                     </td>
-                  );
-                })}
-              </tr>
-              <tr className="bg-slate-50/30 border-b">
-                <td className="px-2 md:px-4 py-2 font-bold text-indigo-600 border sticky left-[60px] md:left-[80px] bg-slate-50/30 z-10">집회</td>
-                {weeklyStats.map(stat => {
-                  const canceled = isMeetingCanceled(stat.date, AttendanceType.Gathering);
-                  return (
-                    <td key={stat.date} className={`px-1 md:px-2 py-2 border font-medium ${canceled ? 'bg-slate-100/50 text-slate-300' : ''}`}>
-                      {canceled ? '-' : (
-                        <>
-                          {stat.gatheringCount}
-                          {(stat as any).isManualCount && (
-                            <span className="text-[9px] text-slate-400 block italic leading-none mt-0.5">(계수)</span>
-                          )}
-                        </>
-                      )}
-                    </td>
-                  );
-                })}
-              </tr>
-              <tr className="bg-slate-50/30 border-b-2 border-slate-200">
-                <td className="px-2 md:px-4 py-2 font-bold text-emerald-600 border sticky left-[60px] md:left-[80px] bg-slate-50/30 z-10">울모임</td>
-                {weeklyStats.map(stat => {
-                  const canceled = isMeetingCanceled(stat.date, AttendanceType.Wool);
-                  return (
-                    <td key={stat.date} className={`px-1 md:px-2 py-2 border font-medium ${canceled ? 'bg-slate-100/50 text-slate-300' : ''}`}>
-                      {canceled ? '-' : stat.woolCount}
-                    </td>
-                  );
-                })}
-              </tr>
+                  ))}
+                </tr>
+
+                {/* Total Stats Rows */}
+                <tr className="bg-slate-50 border-b border-slate-200 normal-case">
+                  <td rowSpan={3} className="px-2 py-2.5 font-bold text-slate-800 border border-slate-200 sticky left-0 bg-slate-100 z-40 whitespace-nowrap align-middle w-[65px] min-w-[65px] max-w-[65px] md:w-[90px] md:min-w-[90px] md:max-w-[90px]">전체</td>
+                  <td className="px-2 py-2 font-bold text-blue-600 border border-slate-200 sticky left-[65px] md:left-[90px] bg-[#eff6ff] z-40 w-[55px] min-w-[55px] max-w-[55px] md:w-[70px] md:min-w-[70px] md:max-w-[70px]">예배</td>
+                  {weeklyStats.map(stat => {
+                    const canceled = isMeetingCanceled(stat.date, AttendanceType.Worship);
+                    return (
+                      <td key={stat.date} className={`px-2 py-2 border border-slate-200 font-medium ${canceled ? 'bg-slate-100 text-slate-300' : 'text-slate-700 bg-[#f8fafc]'}`}>
+                        {canceled ? '-' : stat.worshipCount}
+                      </td>
+                    );
+                  })}
+                </tr>
+                <tr className="bg-slate-50 border-b border-slate-200 normal-case">
+                  <td className="px-2 py-2 font-bold text-indigo-600 border border-slate-200 sticky left-[65px] md:left-[90px] bg-[#f5f3ff] z-40 w-[55px] min-w-[55px] max-w-[55px] md:w-[70px] md:min-w-[70px] md:max-w-[70px]">집회</td>
+                  {weeklyStats.map(stat => {
+                    const canceled = isMeetingCanceled(stat.date, AttendanceType.Gathering);
+                    return (
+                      <td key={stat.date} className={`px-2 py-2 border border-slate-200 font-medium ${canceled ? 'bg-slate-100 text-slate-300' : 'text-slate-700 bg-[#f8fafc]'}`}>
+                        {canceled ? '-' : (
+                          <>
+                            {stat.gatheringCount}
+                            {(stat as any).isManualCount && (
+                              <span className="text-[9px] text-slate-400 block italic leading-none mt-0.5">(계수)</span>
+                            )}
+                          </>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+                <tr className="bg-slate-50 border-b-2 border-slate-200 normal-case">
+                  <td className="px-2 py-2 font-bold text-emerald-600 border border-slate-200 sticky left-[65px] md:left-[90px] bg-[#f0fdf4] z-40 w-[55px] min-w-[55px] max-w-[55px] md:w-[70px] md:min-w-[70px] md:max-w-[70px]">울모임</td>
+                  {weeklyStats.map(stat => {
+                    const canceled = isMeetingCanceled(stat.date, AttendanceType.Wool);
+                    return (
+                      <td key={stat.date} className={`px-2 py-2 border border-slate-200 font-medium ${canceled ? 'bg-slate-100 text-slate-300' : 'text-slate-700 bg-[#f8fafc]'}`}>
+                        {canceled ? '-' : stat.woolCount}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
 
               {/* Individual Group Stats Rows */}
               {weeklyGroupStats.map((group, groupIdx) => (
                 <React.Fragment key={group.groupName}>
-                  <tr className={`${groupIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50'} hover:bg-blue-50/50 transition-colors`}>
-                    <td rowSpan={3} className={`px-2 md:px-4 py-2 font-bold text-slate-700 border-x border-t sticky left-0 z-10 whitespace-normal break-all align-middle text-[10px] md:text-sm ${groupIdx % 2 === 0 ? 'bg-slate-50' : 'bg-slate-100'}`}>
+                  <tr className="bg-white border-b border-slate-200 hover:bg-slate-50/40 transition-colors">
+                    <td rowSpan={3} className={`px-2 py-2 font-bold text-slate-700 border border-slate-200 sticky left-0 z-10 whitespace-normal break-all align-middle text-[10px] md:text-sm ${groupIdx % 2 === 0 ? 'bg-[#fafafa]' : 'bg-[#f4f4f4]'} w-[65px] min-w-[65px] max-w-[65px] md:w-[90px] md:min-w-[90px] md:max-w-[90px]`}>
                       {group.groupName}
                     </td>
-                    <td className={`px-2 md:px-3 py-1.5 text-blue-600 font-bold border sticky left-[60px] md:left-[80px] z-10 text-[10px] md:text-xs ${groupIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>예배</td>
+                    <td className={`px-2 py-1.5 text-blue-600 font-bold border border-slate-200 sticky left-[65px] md:left-[90px] z-10 text-[10px] md:text-xs ${groupIdx % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'} w-[55px] min-w-[55px] max-w-[55px] md:w-[70px] md:min-w-[70px] md:max-w-[70px]`}>예배</td>
                     {group.weeklyData.map(stat => {
                       const canceled = isMeetingCanceled(stat.date, AttendanceType.Worship);
                       return (
-                        <td key={stat.date} className={`px-1 md:px-2 py-1.5 border text-[10px] md:text-xs ${canceled ? 'bg-slate-100/30 text-slate-300' : ''}`}>
+                        <td key={stat.date} className={`px-2 py-1.5 border border-slate-200 text-[10px] md:text-xs ${canceled ? 'bg-slate-100 text-slate-300' : 'text-slate-600'}`}>
                           {canceled ? '-' : stat.worshipCount}
                         </td>
                       );
                     })}
                   </tr>
-                  <tr className={`${groupIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50'} hover:bg-blue-50/50 transition-colors text-slate-400`}>
-                    <td className={`px-2 md:px-3 py-1.5 text-indigo-600 font-bold border sticky left-[60px] md:left-[80px] z-10 text-[10px] md:text-xs ${groupIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>집회</td>
+                  <tr className="bg-white border-b border-slate-200 hover:bg-slate-50/40 transition-colors">
+                    <td className={`px-2 py-1.5 text-indigo-600 font-bold border border-slate-200 sticky left-[65px] md:left-[90px] z-10 text-[10px] md:text-xs ${groupIdx % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'} w-[55px] min-w-[55px] max-w-[55px] md:w-[70px] md:min-w-[70px] md:max-w-[70px]`}>집회</td>
                     {group.weeklyData.map(stat => {
                       const canceled = isMeetingCanceled(stat.date, AttendanceType.Gathering);
                       return (
-                        <td key={stat.date} className={`px-1 md:px-2 py-1.5 border text-[10px] md:text-xs ${canceled ? 'bg-slate-100/30 text-slate-300' : ''}`}>
+                        <td key={stat.date} className={`px-2 py-1.5 border border-slate-200 text-[10px] md:text-xs ${canceled ? 'bg-slate-100 text-slate-300' : 'text-slate-600'}`}>
                           {canceled ? '-' : stat.gatheringCount}
                         </td>
                       );
                     })}
                   </tr>
-                  <tr className={`${groupIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50'} hover:bg-blue-50/50 transition-colors text-slate-400 border-b-2 ${groupIdx === weeklyGroupStats.length - 1 ? 'border-slate-300' : 'border-slate-300'}`}>
-                    <td className={`px-2 md:px-3 py-1.5 text-emerald-600 font-bold border sticky left-[60px] md:left-[80px] z-10 text-[10px] md:text-xs ${groupIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>울모임</td>
+                  <tr className="bg-white border-b border-slate-200 hover:bg-slate-50/40 transition-colors">
+                    <td className={`px-2 py-1.5 text-emerald-600 font-bold border border-slate-200 sticky left-[65px] md:left-[90px] z-10 text-[10px] md:text-xs ${groupIdx % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'} w-[55px] min-w-[55px] max-w-[55px] md:w-[70px] md:min-w-[70px] md:max-w-[70px]`}>울모임</td>
                     {group.weeklyData.map(stat => {
                       const canceled = isMeetingCanceled(stat.date, AttendanceType.Wool);
                       return (
-                        <td key={stat.date} className={`px-1 md:px-2 py-1.5 border text-[10px] md:text-xs ${canceled ? 'bg-slate-100/30 text-slate-300' : ''}`}>
+                        <td key={stat.date} className={`px-2 py-1.5 border border-slate-200 text-[10px] md:text-xs ${canceled ? 'bg-slate-100 text-slate-300' : 'text-slate-600'}`}>
                           {canceled ? '-' : stat.woolCount}
                         </td>
                       );
@@ -259,6 +262,7 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
           </table>
         </div>
       </div>
+    </div>
 
       {/* Monthly Average Chart */}
       <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-100">
@@ -267,7 +271,7 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={monthlyStats} margin={{ top: 20, right: 0, left: -20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis dataKey="month" stroke="#94a3b8" fontSize={10} />
+              <XAxis dataKey="month" stroke="#94a3b8" fontSize={10} interval={0} />
               <YAxis stroke="#94a3b8" fontSize={10} />
               <Tooltip 
                 cursor={{ fill: '#f1f5f9' }}
@@ -324,9 +328,17 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
         <h3 className="text-lg font-bold text-slate-800 mb-4 md:mb-6">소그룹별 누적 참여 현황</h3>
         <div className="h-64 md:h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={groupStats} margin={{ top: 20, right: 0, left: -20, bottom: 5 }}>
+            <BarChart data={groupStats} margin={{ top: 20, right: 0, left: -20, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis dataKey="groupName" stroke="#94a3b8" fontSize={10} />
+              <XAxis 
+                dataKey="groupName" 
+                stroke="#94a3b8" 
+                fontSize={10} 
+                interval={0}
+                angle={-45}
+                textAnchor="end"
+                height={60}
+              />
               <YAxis stroke="#94a3b8" fontSize={10} />
               <Tooltip 
                 cursor={{ fill: '#f1f5f9' }}

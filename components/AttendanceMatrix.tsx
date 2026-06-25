@@ -25,7 +25,7 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
       return SUNDAYS_2026;
     }
     const monthIndex = parseInt(selectedMonth, 10);
-    return SUNDAYS_2026.filter(date => new Date(date).getMonth() === monthIndex);
+    return SUNDAYS_2026.filter(date => (parseInt(date.substring(5, 7), 10) - 1) === monthIndex);
   }, [selectedMonth]);
 
   // Filter Members
@@ -40,7 +40,7 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
     // Filter by Search Query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
-      result = result.filter(m => m.name.toLowerCase().includes(query));
+      result = result.filter(m => String(m.name || '').toLowerCase().includes(query));
     }
 
     return result;
@@ -49,8 +49,10 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
   // Sorting: Group -> Name
   const sortedMembers = useMemo(() => {
     return [...filteredMembers].sort((a, b) => {
-      if (a.group !== b.group) return a.group.localeCompare(b.group);
-      return a.name.localeCompare(b.name);
+      const groupA = String(a.group || '');
+      const groupB = String(b.group || '');
+      if (groupA !== groupB) return groupA.localeCompare(groupB);
+      return String(a.name || '').localeCompare(String(b.name || ''));
     });
   }, [filteredMembers]);
 
@@ -73,6 +75,53 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
       return r.memberId === memberId && currentMonthSundays.includes(r.date) && r.types.includes(type);
     }).length;
   };
+
+  const overallTotals = useMemo(() => {
+    return currentMonthSundays.map(date => {
+      // Find all records on this date for active members
+      const activeMemberIds = new Set(members.map(m => m.id));
+      const dateRecords = records.filter(r => r.date === date && activeMemberIds.has(r.memberId));
+
+      const worshipCount = dateRecords.filter(r => r.types.includes(AttendanceType.Worship)).length;
+      
+      const statusGathering = meetingStatus.find(s => s.date === date && s.type === AttendanceType.Gathering);
+      const mCount = statusGathering?.manualAssemblyCount || 0;
+      const dbGatheringCount = dateRecords.filter(r => r.types.includes(AttendanceType.Gathering)).length;
+      const gatheringCount = Math.max(dbGatheringCount, mCount);
+      const isManualCount = mCount > dbGatheringCount && !statusGathering?.isCanceled;
+
+      const woolCount = dateRecords.filter(r => r.types.includes(AttendanceType.Wool)).length;
+
+      const worshipCanceled = isMeetingCanceled(date, AttendanceType.Worship);
+      const gatheringCanceled = isMeetingCanceled(date, AttendanceType.Gathering);
+      const woolCanceled = isMeetingCanceled(date, AttendanceType.Wool);
+
+      return {
+        date,
+        worshipCount: worshipCanceled ? 0 : worshipCount,
+        worshipCanceled,
+        gatheringCount: gatheringCanceled ? 0 : gatheringCount,
+        gatheringCanceled,
+        isManualCount,
+        woolCount: woolCanceled ? 0 : woolCount,
+        woolCanceled
+      };
+    });
+  }, [members, records, currentMonthSundays, meetingStatus]);
+
+  const overallSums = useMemo(() => {
+    let worshipSum = 0;
+    let gatheringSum = 0;
+    let woolSum = 0;
+
+    overallTotals.forEach(t => {
+      if (!t.worshipCanceled) worshipSum += t.worshipCount;
+      if (!t.gatheringCanceled) gatheringSum += t.gatheringCount;
+      if (!t.woolCanceled) woolSum += t.woolCount;
+    });
+
+    return { worshipSum, gatheringSum, woolSum };
+  }, [overallTotals]);
 
   // Render Cell Logic
   const renderCell = (memberId: string, date: string, type: AttendanceType, activeColorClass: string, hoverClass: string) => {
@@ -163,16 +212,16 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
         </div>
       </header>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-        <div className="overflow-x-auto custom-scrollbar">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="max-h-[calc(100vh-230px)] lg:max-h-[calc(100vh-250px)] overflow-auto custom-scrollbar">
           <table className="w-full text-sm text-left text-slate-500 border-collapse">
-            <thead className="text-xs text-slate-700 uppercase bg-slate-50">
+            <thead className="text-xs text-slate-700 uppercase bg-slate-100 border-b border-slate-200 sticky top-0 z-30">
               <tr>
-                <th scope="col" className="px-2 md:px-4 py-3 sticky left-0 bg-slate-50 z-20 w-20 md:w-24 border border-slate-200">이름</th>
-                <th scope="col" className="px-2 md:px-4 py-3 w-24 md:w-32 border border-slate-200">소그룹</th>
-                <th scope="col" className="px-2 py-3 w-12 md:w-16 border border-slate-200 text-center">구분</th>
+                <th scope="col" className="px-2 md:px-4 py-3 sticky top-0 left-0 bg-slate-100 z-40 w-20 md:w-24 border border-slate-200 font-semibold text-slate-700">이름</th>
+                <th scope="col" className="px-2 md:px-4 py-3 sticky top-0 bg-slate-100 z-30 w-24 md:w-32 border border-slate-200 font-semibold text-slate-700">소그룹</th>
+                <th scope="col" className="px-2 py-3 sticky top-0 bg-slate-100 z-30 w-12 md:w-16 border border-slate-200 text-center font-semibold text-slate-700">구분</th>
                 {currentMonthSundays.map(date => (
-                  <th key={date} scope="col" className="px-1 md:px-2 py-3 text-center border border-slate-200 min-w-[50px]">
+                  <th key={date} scope="col" className="px-1 md:px-2 py-3 sticky top-0 bg-slate-100 z-30 text-center border border-slate-200 min-w-[50px] font-semibold text-slate-600">
                     <div className="flex flex-col items-center">
                       <span>{date.substring(5)}</span>
                       {getEventName(date) && (
@@ -181,15 +230,59 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
                     </div>
                   </th>
                 ))}
-                <th scope="col" className="px-1 md:px-2 py-3 text-center border border-slate-200 min-w-[40px] md:min-w-[50px]">계</th>
+                <th scope="col" className="px-1 md:px-2 py-3 sticky top-0 bg-slate-100 z-30 text-center border border-slate-200 min-w-[40px] md:min-w-[50px] font-semibold text-slate-700">계</th>
+              </tr>
+
+              {/* Total Stats Rows */}
+              <tr className="bg-slate-50 border-b border-slate-200 normal-case">
+                <td rowSpan={3} className="px-2 md:px-4 py-2.5 font-bold text-slate-800 border border-slate-200 sticky left-0 bg-slate-100 z-40 text-center align-middle whitespace-nowrap w-20 md:w-24">전체</td>
+                <td rowSpan={3} className="px-2 md:px-4 py-2.5 border border-slate-200 bg-slate-50 text-center align-middle whitespace-nowrap text-xs text-slate-400 w-24 md:w-32">-</td>
+                <td className="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-bold text-blue-600 border border-slate-200 bg-blue-50/80 w-12 md:w-16">예배</td>
+                {overallTotals.map(t => (
+                  <td key={`overall-worship-${t.date}`} className={`px-1 md:px-2 py-2 text-center border border-slate-200 font-bold text-slate-700 bg-slate-50/60 text-xs`}>
+                    {t.worshipCanceled ? '-' : t.worshipCount}
+                  </td>
+                ))}
+                <td className="px-1 md:px-2 py-2 text-center font-bold text-slate-700 border border-slate-200 bg-slate-100/90 text-xs">
+                  {overallSums.worshipSum}
+                </td>
+              </tr>
+              <tr className="bg-slate-50 border-b border-slate-200 normal-case">
+                <td className="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-bold text-indigo-600 border border-slate-200 bg-indigo-50/80 w-12 md:w-16">집회</td>
+                {overallTotals.map(t => (
+                  <td key={`overall-gathering-${t.date}`} className={`px-1 md:px-2 py-2 text-center border border-slate-200 font-bold text-slate-700 bg-slate-50/60 text-xs`}>
+                    {t.gatheringCanceled ? '-' : (
+                      <>
+                        {t.gatheringCount}
+                        {t.isManualCount && (
+                          <span className="text-[9px] text-slate-400 block font-normal normal-case leading-none mt-0.5">(계수)</span>
+                        )}
+                      </>
+                    )}
+                  </td>
+                ))}
+                <td className="px-1 md:px-2 py-2 text-center font-bold text-slate-700 border border-slate-200 bg-slate-100/90 text-xs">
+                  {overallSums.gatheringSum}
+                </td>
+              </tr>
+              <tr className="bg-slate-50 border-b-2 border-slate-200 normal-case">
+                <td className="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-bold text-emerald-600 border border-slate-200 bg-emerald-50/80 w-12 md:w-16">울</td>
+                {overallTotals.map(t => (
+                  <td key={`overall-wool-${t.date}`} className={`px-1 md:px-2 py-2 text-center border border-slate-200 font-bold text-slate-700 bg-slate-50/60 text-xs`}>
+                    {t.woolCanceled ? '-' : t.woolCount}
+                  </td>
+                ))}
+                <td className="px-1 md:px-2 py-2 text-center font-bold text-slate-700 border border-slate-200 bg-slate-100/90 text-xs">
+                  {overallSums.woolSum}
+                </td>
               </tr>
             </thead>
             <tbody>
               {sortedMembers.map((member, mIdx) => (
                 <React.Fragment key={member.id}>
                   {/* Row 1: Worship */}
-                  <tr className="bg-white border-b hover:bg-slate-50">
-                    <td rowSpan={3} className={`px-2 md:px-4 py-3 font-medium text-slate-900 sticky left-0 bg-white z-10 border border-slate-200 ${mIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} group relative`}>
+                  <tr className="bg-white border-b border-slate-200 hover:bg-slate-50/40 transition-colors">
+                    <td rowSpan={3} className={`px-2 md:px-4 py-3 font-medium text-slate-900 sticky left-0 z-10 border border-slate-200 ${mIdx % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'} group relative`}>
                       <div className="flex items-center gap-2">
                          {member.photoUrl ? (
                            <img src={member.photoUrl} alt={member.name} className="w-6 h-6 md:w-8 md:h-8 rounded-full object-cover border border-slate-200" referrerPolicy="no-referrer" />

@@ -1,6 +1,6 @@
 {
   "name": "Church Attendance Admin",
   "description": "A comprehensive dashboard for managing church small group attendance, prayer requests, and statistical analysis.",
-  "requestFramePermissions": [],
-  "majorCapabilities": []
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

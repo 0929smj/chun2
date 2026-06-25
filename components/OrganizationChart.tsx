@@ -3,7 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { Member, AttendanceRecord, MeetingStatus, AttendanceType } from '../types';
 import { Phone, Calendar } from 'lucide-react';
 import { SUNDAYS_2026 } from '../services/mockData';
-import * as d3 from 'd3-force';
+import { 
+  forceSimulation, 
+  forceManyBody, 
+  forceRadial, 
+  forceX, 
+  forceY, 
+  forceCollide, 
+  SimulationNodeDatum 
+} from 'd3-force';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface OrganizationChartProps {
@@ -12,7 +20,7 @@ interface OrganizationChartProps {
   meetingStatus: MeetingStatus[];
 }
 
-interface RankedNode extends d3.SimulationNodeDatum {
+interface RankedNode extends SimulationNodeDatum {
   id: string;
   node: Member;
   type: 'leader' | 'member';
@@ -164,13 +172,13 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
   const structuredData = useMemo(() => {
     const dict: Record<string, { leader: Member | null; members: Member[] }> = {};
     const sortedMembers = [...members].sort((a, b) => {
-      const nameA = a.name.replace(/\*/g, '').trim();
-      const nameB = b.name.replace(/\*/g, '').trim();
+      const nameA = String(a.name || '').replace(/\*/g, '').trim();
+      const nameB = String(b.name || '').replace(/\*/g, '').trim();
       return nameA.localeCompare(nameB);
     });
 
     sortedMembers.forEach((m) => {
-      const gName = m.group && m.group.trim() ? m.group.trim() : '미소속';
+      const gName = m.group && String(m.group).trim() ? String(m.group).trim() : '미소속';
       if (!dict[gName]) dict[gName] = { leader: null, members: [] };
       
       const roleUpper = String(m.role || '').toUpperCase().trim();
@@ -188,9 +196,12 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
     const statsCache = new Map();
     
     const now = new Date();
-    const targetDate = new Date(2026, now.getMonth(), now.getDate()); 
-    const comparisonDate = now.getFullYear() >= 2026 ? now : targetDate;
-    const allPassedSundays = SUNDAYS_2026.filter(d => new Date(d) <= comparisonDate);
+    const targetDate = now.getFullYear() >= 2026 ? now : new Date(2026, now.getMonth(), now.getDate()); 
+    const y = targetDate.getFullYear();
+    const m = String(targetDate.getMonth() + 1).padStart(2, '0');
+    const dVal = String(targetDate.getDate()).padStart(2, '0');
+    const comparisonDateStr = `${y}-${m}-${dVal}`;
+    const allPassedSundays = SUNDAYS_2026.filter(d => d <= comparisonDateStr);
 
     return (m: Member) => {
       if (statsCache.has(m.id)) return statsCache.get(m.id);
@@ -409,12 +420,12 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
       });
     }
 
-    const simulation = d3.forceSimulation(nodes)
-      .force('charge', d3.forceManyBody().strength(d => d.id === 'CENTER' ? 0 : -10))
-      .force('radial', d3.forceRadial<RankedNode>(d => Math.hypot(d.targetX - cx, d.targetY - cy), cx, cy).strength(2.0))
-      .force('x', d3.forceX<RankedNode>(d => d.targetX).strength(1.2))
-      .force('y', d3.forceY<RankedNode>(d => d.targetY).strength(1.2))
-      .force('collide', d3.forceCollide<RankedNode>().radius(d => {
+    const simulation = forceSimulation(nodes)
+      .force('charge', forceManyBody().strength(d => d.id === 'CENTER' ? 0 : -10))
+      .force('radial', forceRadial<RankedNode>(d => Math.hypot(d.targetX - cx, d.targetY - cy), cx, cy).strength(2.0))
+      .force('x', forceX<RankedNode>(d => d.targetX).strength(1.2))
+      .force('y', forceY<RankedNode>(d => d.targetY).strength(1.2))
+      .force('collide', forceCollide<RankedNode>().radius(d => {
         if (d.id === 'CENTER') return 0;
         if (d.type === 'leader') return 84; 
         return 72; 
@@ -429,11 +440,12 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
   }, [structuredData, focusedGroup, dimensions, getStats]);
 
   const getDisplayName = (m: Member) => {
-    const displayMatch = m.name.match(/^(\d{2})\s*(.+)$/);
+    const nameStr = String(m.name || '');
+    const displayMatch = nameStr.match(/^(\d{2})\s*(.+)$/);
     if (displayMatch) {
       return { num: displayMatch[1], name: displayMatch[2] };
     }
-    return { num: '', name: m.name };
+    return { num: '', name: nameStr };
   };
 
   const navigateToProfile = (memberId: string) => {

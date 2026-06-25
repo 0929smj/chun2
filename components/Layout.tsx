@@ -1,12 +1,13 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, CalendarDays, BookOpen, Users, Menu, X, UserSearch, Network } from 'lucide-react';
+import { LayoutDashboard, CalendarDays, BookOpen, Users, Menu, X, UserSearch, Network, Heart } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
+  isVisitationMode?: boolean;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children }) => {
+const Layout: React.FC<LayoutProps> = ({ children, isVisitationMode = false }) => {
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
   const location = useLocation();
   const isOrgPage = location.pathname === '/org';
@@ -19,6 +20,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { to: '/prayer', icon: BookOpen, label: '기도 제목' },
     { to: '/profile', icon: UserSearch, label: '개인별 현황' },
     { to: '/org', icon: Network, label: '조직도' },
+    ...(isVisitationMode ? [{ to: '/visitation', icon: Heart, label: '심방 기록' }] : []),
     { to: '/manage', icon: Users, label: '데이터 관리' },
   ];
 
@@ -68,7 +70,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       {/* Main Content */}
       <main className={`flex-1 pt-16 lg:pt-0 w-full relative flex flex-col ${isOrgPage ? 'h-screen lg:h-full overflow-hidden' : 'overflow-auto'}`}>
-        <div className={`mx-auto ${isOrgPage ? 'max-w-none w-full flex-1 flex flex-col overflow-hidden p-4 lg:p-6' : 'p-4 lg:p-8 max-w-7xl'}`}>
+        <div className={`mx-auto w-full ${isOrgPage ? 'max-w-none flex-1 flex flex-col overflow-hidden p-4 lg:p-6' : 'p-4 sm:p-6 lg:p-8 xl:p-10 max-w-[1800px]'}`}>
           {children}
         </div>
       </main>

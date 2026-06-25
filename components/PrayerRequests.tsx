@@ -39,8 +39,8 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
     if (!isALeader && isBLeader) return 1;
 
     // 2. Alphabetical Check
-    const nameA = a.name.replace(/\*/g, '').trim();
-    const nameB = b.name.replace(/\*/g, '').trim();
+    const nameA = String(a.name || '').replace(/\*/g, '').trim();
+    const nameB = String(b.name || '').replace(/\*/g, '').trim();
 
     return nameA.localeCompare(nameB);
   };
@@ -60,11 +60,12 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
 
     members.forEach(member => {
        const record = records.find(r => r.memberId === member.id);
-       if (!groups[member.group]) groups[member.group] = [];
+       const gName = member.group && String(member.group).trim() ? String(member.group).trim() : '미소속';
+       if (!groups[gName]) groups[gName] = [];
        
        // Only show if there is an actual record for this date.
        if (record) {
-         groups[member.group].push({ member, record });
+         groups[gName].push({ member, record });
        }
     });
     return groups;
@@ -82,7 +83,7 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
     // Priority 1: Search Query
     if (searchQuery.trim()) {
        const query = searchQuery.toLowerCase().trim();
-       targetMembers = members.filter(m => m.name.toLowerCase().includes(query));
+       targetMembers = members.filter(m => String(m.name || '').toLowerCase().includes(query));
     }
     // Priority 2: Specific Member Selected via Dropdown
     else if (selectedMemberId) {
@@ -104,7 +105,7 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
     return targetMembers.map(member => {
        const myRecords = prayerRecords
         .filter(r => r.memberId === member.id)
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        .sort((a, b) => b.date.localeCompare(a.date));
        return { member, records: myRecords };
     });
   }, [searchQuery, selectedMemberId, selectedGroup, members, prayerRecords]);

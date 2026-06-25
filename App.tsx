@@ -7,9 +7,10 @@ import PrayerRequests from './components/PrayerRequests';
 import DataManagement from './components/DataManagement';
 import IndividualProfile from './components/IndividualProfile';
 import OrganizationChart from './components/OrganizationChart';
+import VisitationManagement from './components/VisitationManagement';
 import { INITIAL_MEMBERS, INITIAL_ATTENDANCE, INITIAL_PRAYER_RECORDS, INITIAL_MEETING_STATUS } from './services/mockData';
 import { fetchSheetData, sendAction, getScriptUrl } from './services/sheetService';
-import { Member, AttendanceRecord, PrayerRecord, AttendanceType, MeetingStatus } from './types';
+import { Member, AttendanceRecord, PrayerRecord, AttendanceType, MeetingStatus, Visitation } from './types';
 import { Lock } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -18,12 +19,14 @@ const App: React.FC = () => {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [prayerRecords, setPrayerRecords] = useState<PrayerRecord[]>([]);
   const [meetingStatus, setMeetingStatus] = useState<MeetingStatus[]>([]);
+  const [visitations, setVisitations] = useState<Visitation[]>([]);
   const [groups, setGroups] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [usingMock, setUsingMock] = useState(false);
   
   // Auth State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isVisitationMode, setIsVisitationMode] = useState(false);
   const [inputPassword, setInputPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [validAccessCodes, setValidAccessCodes] = useState<string[]>([]);
@@ -36,64 +39,124 @@ const App: React.FC = () => {
   // Function to clean attendance records based on meeting status
   // This ensures that if a meeting is canceled (FALSE in DB), any accidental 'Present' record is ignored.
   const cleanAttendanceData = (rawRecords: AttendanceRecord[], rawStatus: MeetingStatus[]): AttendanceRecord[] => {
-    return rawRecords.map(record => {
-      // Filter out types that are marked as canceled in the meeting status
-      const validTypes = record.types.filter(type => {
-        const statusForDateAndType = rawStatus.find(s => s.date === record.date && s.type === type);
-        // If status exists and isCanceled is true, drop this attendance type
-        if (statusForDateAndType && statusForDateAndType.isCanceled) {
-          return false;
+    if (!Array.isArray(rawRecords)) return [];
+    return rawRecords
+      .map(record => {
+        if (!record || !Array.isArray(record.types)) {
+          return { ...record, types: [] };
         }
-        return true;
-      });
+        // Filter out types that are marked as canceled in the meeting status
+        const validTypes = record.types.filter(type => {
+          if (!rawStatus) return true;
+          const statusForDateAndType = rawStatus.find(s => s && s.date === record.date && s.type === type);
+          // If status exists and isCanceled is true, drop this attendance type
+          if (statusForDateAndType && statusForDateAndType.isCanceled) {
+            return false;
+          }
+          return true;
+        });
 
-      return { ...record, types: validTypes };
-    }).filter(record => record.types.length > 0); // Remove records that became empty
+        return { ...record, types: validTypes };
+      })
+      .filter(record => record && Array.isArray(record.types) && record.types.length > 0); // Remove records that became empty
   };
 
-  // Load data function
+  // Load data function (With SWR: Stale-While-Revalidate caching pattern for instant load)
   const loadData = async () => {
-    setLoading(true);
+    const cacheKey = 'church_admin_cached_data';
+    let hasCache = false;
+
+    // Step 1: Attempt to load cached data from localStorage instantly to bypass any API lag
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && typeof parsed === 'object') {
+          setMembers(parsed.members || []);
+          setMeetingStatus(parsed.meetingStatus || []);
+          setPrayerRecords(parsed.prayers || []);
+          setValidAccessCodes(parsed.accessCodes || []);
+          setRecords(parsed.records || []);
+          setGroups(parsed.groups || []);
+          setVisitations(parsed.visitations || []);
+          setUsingMock(parsed.usingMock || false);
+          hasCache = true;
+          setLoading(false); // Disable initial spinner immediately!
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to read cached data from localStorage:", e);
+    }
+
+    // Only show loading spinner on first-ever load when there is absolutely no cache
+    if (!hasCache) {
+      setLoading(true);
+    }
+
     const scriptUrl = getScriptUrl();
 
-    // With the new auto-connect logic, scriptUrl should be the default one if not set locally
     if (scriptUrl) {
       try {
         const data = await fetchSheetData();
+        
+        if (!data || typeof data !== 'object') {
+          throw new Error("Invalid response format received from sheet service");
+        }
         
         const fetchedMembers = data.members || [];
         const fetchedMeetingStatus = data.meetingStatus || [];
         const fetchedRecords = data.attendance || [];
         const fetchedPrayers = data.prayers || [];
         const fetchedAccessCodes = data.accessCodes || [];
+        const fetchedVisitations = data.visitations || [];
+        let fetchedGroups: string[] = [];
 
-        // 1. Set Basic Data
+        if (data.groups && data.groups.length > 0) {
+          fetchedGroups = data.groups;
+        } else {
+          fetchedGroups = Array.from(new Set(fetchedMembers.map(m => m.group))).sort();
+        }
+
+        const cleanedRecords = cleanAttendanceData(fetchedRecords, fetchedMeetingStatus);
+
+        // Update state with fresh data in background/foreground seamlessly
         setMembers(fetchedMembers);
         setMeetingStatus(fetchedMeetingStatus);
         setPrayerRecords(fetchedPrayers);
         setValidAccessCodes(fetchedAccessCodes);
-
-        // 2. Clean Attendance Records (Requirement 1: Strict consistency)
-        const cleanedRecords = cleanAttendanceData(fetchedRecords, fetchedMeetingStatus);
         setRecords(cleanedRecords);
-        
-        // If groups are returned from API, use them. Otherwise derive from members.
-        if (data.groups && data.groups.length > 0) {
-          setGroups(data.groups);
-        } else {
-          const derivedGroups = Array.from(new Set(fetchedMembers.map(m => m.group))).sort();
-          setGroups(derivedGroups);
+        setGroups(fetchedGroups);
+        setVisitations(fetchedVisitations);
+        setUsingMock(false);
+
+        // Update localStorage Cache for subsequent instant loads
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({
+            members: fetchedMembers,
+            meetingStatus: fetchedMeetingStatus,
+            prayers: fetchedPrayers,
+            accessCodes: fetchedAccessCodes,
+            records: cleanedRecords,
+            groups: fetchedGroups,
+            visitations: fetchedVisitations,
+            usingMock: false
+          }));
+        } catch (cacheErr) {
+          console.warn("Failed to write fresh data to localStorage cache:", cacheErr);
         }
 
-        setUsingMock(false);
       } catch (e) {
-        console.error("Failed to load live data, falling back to mock", e);
-        loadMockData();
-        setUsingMock(true); 
+        console.warn("Failed to load live data, falling back to cached or mock:", e);
+        if (!hasCache) {
+          loadMockData();
+          setUsingMock(true); 
+        }
       }
     } else {
-      loadMockData();
-      setUsingMock(true);
+      if (!hasCache) {
+        loadMockData();
+        setUsingMock(true);
+      }
     }
     setLoading(false);
   };
@@ -110,6 +173,30 @@ const App: React.FC = () => {
     const mockGroups = Array.from(new Set(INITIAL_MEMBERS.map(m => m.group))).sort();
     setGroups(mockGroups);
 
+    // Seed mock visitations
+    setVisitations([
+      {
+        visitationId: 'v-1',
+        date: '2026-06-20',
+        memberId: INITIAL_MEMBERS[0]?.id || 'm-1',
+        visitationType: '전화심방',
+        place: '전화',
+        details: '최근 회사 일로 지쳐 있어서 위로의 대화를 나누고 격려했습니다. 주일 예배 참석을 위해 기도하기로 하였습니다.',
+        prayerRequests: '업무 스트레스 해소와 신앙 회복',
+        submittedAt: '2026-06-20T14:30:00.000Z'
+      },
+      {
+        visitationId: 'v-2',
+        date: '2026-06-18',
+        memberId: INITIAL_MEMBERS[1]?.id || 'm-2',
+        visitationType: '대면심방',
+        place: '교회 근처 카페',
+        details: '가정 내의 소통을 위한 기도제목을 나누었습니다. 울모임에 기쁘게 동참할 수 있도록 조언을 건넸습니다.',
+        prayerRequests: '가정의 평안과 자녀의 신앙 정착',
+        submittedAt: '2026-06-18T19:00:00.000Z'
+      }
+    ]);
+
     // Set a default mock access code for demo purposes (fallback)
     setValidAccessCodes(['18870691']); 
   };
@@ -120,9 +207,14 @@ const App: React.FC = () => {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // Master password override: 18870691
-    if (inputPassword.trim() === '18870691' || validAccessCodes.includes(inputPassword.trim())) {
+    const pw = inputPassword.trim();
+    if (pw === '7980') {
       setIsAuthenticated(true);
+      setIsVisitationMode(true);
+      setLoginError('');
+    } else if (pw === '18870691' || validAccessCodes.includes(pw)) {
+      setIsAuthenticated(true);
+      setIsVisitationMode(false);
       setLoginError('');
     } else {
       setLoginError('비밀번호가 올바르지 않습니다.');
@@ -175,6 +267,83 @@ const App: React.FC = () => {
     });
   };
 
+  // Helper to safely write visitations to local storage cache under all circumstances
+  const saveVisitationsToCache = (updatedVisitations: Visitation[]) => {
+    const cacheKey = 'church_admin_cached_data';
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      let baseData: any = {
+        members,
+        meetingStatus,
+        prayers: prayerRecords,
+        accessCodes: validAccessCodes,
+        records,
+        groups,
+        visitations: updatedVisitations,
+        usingMock
+      };
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          baseData = {
+            ...parsed,
+            visitations: updatedVisitations
+          };
+        } catch (e) {
+          // ignore parsing error
+        }
+      }
+      localStorage.setItem(cacheKey, JSON.stringify(baseData));
+    } catch (e) {
+      console.warn("Failed to write updated visitations to local storage cache:", e);
+    }
+  };
+
+  // Handler to add visitation record
+  const handleAddVisitation = async (vPayload: Omit<Visitation, 'visitationId' | 'submittedAt'>) => {
+    const newVisitation: Visitation = {
+      ...vPayload,
+      visitationId: `v-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      submittedAt: new Date().toISOString()
+    };
+
+    // Optimistic UI update
+    setVisitations(prev => {
+      const nextList = [newVisitation, ...prev];
+      saveVisitationsToCache(nextList);
+      return nextList;
+    });
+
+    // Send action to DB
+    await sendAction('ADD_VISITATION', newVisitation);
+  };
+
+  // Handler to delete visitation record
+  const handleDeleteVisitation = async (visitationId: string) => {
+    // Optimistic UI update
+    setVisitations(prev => {
+      const nextList = prev.filter(v => v.visitationId !== visitationId);
+      saveVisitationsToCache(nextList);
+      return nextList;
+    });
+
+    // Send action to DB
+    await sendAction('DELETE_VISITATION', { visitationId });
+  };
+
+  // Handler to update visitation record
+  const handleUpdateVisitation = async (updatedV: Visitation) => {
+    // Optimistic UI update
+    setVisitations(prev => {
+      const nextList = prev.map(v => v.visitationId === updatedV.visitationId ? updatedV : v);
+      saveVisitationsToCache(nextList);
+      return nextList;
+    });
+
+    // Send action to DB
+    await sendAction('UPDATE_VISITATION', updatedV);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-slate-50">
@@ -225,7 +394,7 @@ const App: React.FC = () => {
 
   return (
     <HashRouter>
-      <Layout>
+      <Layout isVisitationMode={isVisitationMode}>
         {usingMock && (
           <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs text-amber-700 text-center">
             현재 <strong>설정/데모 모드</strong>입니다. <strong>[데이터 관리 &gt; DB 연결 설정]</strong>에서 스크립트를 업데이트하고 연결하세요.
@@ -264,7 +433,30 @@ const App: React.FC = () => {
                 prayerRecords={prayerRecords}
                 meetingStatus={meetingStatus}
                 availableGroups={groups}
+                isVisitationMode={isVisitationMode}
+                visitations={visitations}
+                onAddVisitation={handleAddVisitation}
+                onUpdateVisitation={handleUpdateVisitation}
               />
+            } 
+          />
+          <Route 
+            path="/visitation" 
+            element={
+              isVisitationMode ? (
+                <VisitationManagement 
+                  members={activeMembers} 
+                  visitations={visitations} 
+                  setVisitations={setVisitations}
+                  availableGroups={groups}
+                  usingMock={usingMock}
+                  onAddVisitation={handleAddVisitation}
+                  onUpdateVisitation={handleUpdateVisitation}
+                  onDeleteVisitation={handleDeleteVisitation}
+                />
+              ) : (
+                <Navigate to="/" replace />
+              )
             } 
           />
           <Route 

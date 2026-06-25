@@ -68,3 +68,14 @@ export interface GroupStats {
   totalWool: number;
   members: number;
 }
+
+export interface Visitation {
+  visitationId: string;
+  date: string; // YYYY-MM-DD
+  memberId: string;
+  visitationType: string; // 예: 전화심방, 대면심방, SNS심방 등
+  place: string; // 장소
+  details: string; // 심방내용
+  prayerRequests: string; // 기도제목
+  submittedAt: string; // 등록시간
+}
