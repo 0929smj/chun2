@@ -17,6 +17,53 @@ interface IndividualProfileProps {
   onUpdateVisitation?: (visitation: Visitation) => void;
 }
 
+interface SearchResultItem {
+  member: Member;
+  score: number;
+  matchField: string;
+  matchedSnippet: string;
+}
+
+const getSnippet = (text: string, query: string, maxLength: number = 40): string => {
+  const index = text.toLowerCase().indexOf(query.toLowerCase());
+  if (index === -1) return text.slice(0, maxLength);
+  if (text.length <= maxLength) return text;
+  
+  const start = Math.max(0, index - Math.floor(maxLength / 2));
+  const end = Math.min(text.length, start + maxLength);
+  
+  let snippet = text.slice(start, end);
+  if (start > 0) snippet = '...' + snippet;
+  if (end < text.length) snippet = snippet + '...';
+  
+  return snippet;
+};
+
+const escapeRegExp = (string: string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+const renderHighlightedText = (text: string, highlight: string) => {
+  if (!highlight.trim()) {
+    return <span>{text}</span>;
+  }
+  const regex = new RegExp(`(${escapeRegExp(highlight)})`, 'gi');
+  const parts = text.split(regex);
+  return (
+    <span>
+      {parts.map((part, i) => 
+        regex.test(part) ? (
+          <mark key={i} className="bg-amber-100 text-amber-950 font-semibold px-0.5 rounded">
+            {part}
+          </mark>
+        ) : (
+          part
+        )
+      )}
+    </span>
+  );
+};
+
 const IndividualProfile: React.FC<IndividualProfileProps> = ({ 
   members, 
   records, 
@@ -32,6 +79,163 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('');
   const [selectedMemberId, setSelectedMemberId] = useState('');
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+
+  // Filtered members and match details for universal autocomplete search
+  const searchFilteredMembers = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    
+    const query = searchQuery.trim().toLowerCase();
+    const results: SearchResultItem[] = [];
+
+    for (const member of members) {
+      let bestScore = 0;
+      let bestMatchField = '';
+      let bestMatchedSnippet = '';
+
+      const nameStr = String(member.name || '');
+      const nameLower = nameStr.toLowerCase();
+      
+      // 1. Name Match
+      if (nameLower === query) {
+        bestScore = 100;
+        bestMatchField = '이름';
+        bestMatchedSnippet = `이름: ${nameStr}`;
+      } else if (nameLower.includes(query)) {
+        bestScore = 80;
+        bestMatchField = '이름';
+        bestMatchedSnippet = `이름: ${nameStr}`;
+      }
+
+      // 2. Group Match
+      const groupStr = String(member.group || '');
+      const groupLower = groupStr.toLowerCase();
+      if (groupLower.includes(query)) {
+        const score = 50;
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatchField = '소그룹';
+          bestMatchedSnippet = `소그룹: ${groupStr}`;
+        }
+      }
+
+      // 3. Special Notes Match
+      const notesStr = String(member.specialNotes || '');
+      const notesLower = notesStr.toLowerCase();
+      if (notesStr && notesLower.includes(query)) {
+        const score = 40;
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatchField = '특이사항';
+          bestMatchedSnippet = getSnippet(notesStr, query);
+        }
+      }
+
+      // 4. Latest Prayer Request Match
+      const lprStr = String(member.latestPrayerRequest || '');
+      const lprLower = lprStr.toLowerCase();
+      if (lprStr && lprLower.includes(query)) {
+        const score = 45;
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatchField = '최근 기도제목';
+          bestMatchedSnippet = getSnippet(lprStr, query);
+        }
+      }
+
+      // 5. Prayer Records Match
+      if (prayerRecords && prayerRecords.length > 0) {
+        const myPrayerRecords = prayerRecords.filter(p => p.memberId === member.id);
+        for (const pr of myPrayerRecords) {
+          const contentStr = String(pr.content || '');
+          const contentLower = contentStr.toLowerCase();
+          if (contentStr && contentLower.includes(query)) {
+            const score = 45;
+            if (score > bestScore) {
+              bestScore = score;
+              bestMatchField = '기도제목 기록';
+              bestMatchedSnippet = `[${pr.date}] ${getSnippet(contentStr, query)}`;
+            }
+          }
+          const noteStr = String(pr.note || '');
+          const noteLower = noteStr.toLowerCase();
+          if (noteStr && noteLower.includes(query)) {
+            const score = 35;
+            if (score > bestScore) {
+              bestScore = score;
+              bestMatchField = '기록 메모';
+              bestMatchedSnippet = `[${pr.date}] ${getSnippet(noteStr, query)}`;
+            }
+          }
+        }
+      }
+
+      // 6. Visitations Match
+      if (visitations && visitations.length > 0) {
+        const myVisitations = visitations.filter(v => v.memberId === member.id);
+        for (const v of myVisitations) {
+          const detailsStr = String(v.details || '');
+          const detailsLower = detailsStr.toLowerCase();
+          if (detailsStr && detailsLower.includes(query)) {
+            const score = 48;
+            if (score > bestScore) {
+              bestScore = score;
+              bestMatchField = '심방내용';
+              bestMatchedSnippet = `[${v.date}] ${getSnippet(detailsStr, query)}`;
+            }
+          }
+          
+          const placeStr = String(v.place || '');
+          const placeLower = placeStr.toLowerCase();
+          if (placeStr && placeLower.includes(query)) {
+            const score = 55;
+            if (score > bestScore) {
+              bestScore = score;
+              bestMatchField = '심방장소';
+              bestMatchedSnippet = `[${v.date} 심방] 장소: ${getSnippet(placeStr, query)}`;
+            }
+          }
+
+          const prStr = String(v.prayerRequests || '');
+          const prLower = prStr.toLowerCase();
+          if (prStr && prLower.includes(query)) {
+            const score = 45;
+            if (score > bestScore) {
+              bestScore = score;
+              bestMatchField = '심방 기도';
+              bestMatchedSnippet = `[${v.date}] ${getSnippet(prStr, query)}`;
+            }
+          }
+        }
+      }
+
+      if (bestScore > 0) {
+        results.push({
+          member,
+          score: bestScore,
+          matchField: bestMatchField,
+          matchedSnippet: bestMatchedSnippet
+        });
+      }
+    }
+
+    return results.sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      return String(a.member.name).localeCompare(String(b.member.name));
+    });
+  }, [members, searchQuery, prayerRecords, visitations]);
+
+  // Scroll active suggestion into view
+  useEffect(() => {
+    if (activeSuggestionIndex >= 0) {
+      const activeEl = document.getElementById(`suggestion-item-${activeSuggestionIndex}`);
+      if (activeEl) {
+        activeEl.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [activeSuggestionIndex]);
 
   // Visitation Form states
   const [isVisitationFormOpen, setIsVisitationFormOpen] = useState(false);
@@ -124,12 +328,15 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
     );
   };
 
-  // Automatically fetch location on open
+  // Auto-fetch location on mobile/tablet when opening the visitation form for password '7980' (isVisitationMode)
   useEffect(() => {
-    if (isVisitationFormOpen && !editingVisitation && !formPlace) {
-      fetchCurrentLocationAddress();
+    if (isVisitationMode && isVisitationFormOpen && !editingVisitation && !formPlace) {
+      const isMobileOrTablet = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      if (isMobileOrTablet) {
+        fetchCurrentLocationAddress();
+      }
     }
-  }, [isVisitationFormOpen, editingVisitation]);
+  }, [isVisitationMode, isVisitationFormOpen, editingVisitation]);
 
   useEffect(() => {
     if (isVisitationFormOpen) {
@@ -219,6 +426,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setSearchQuery(val);
+    setActiveSuggestionIndex(-1); // Reset suggestion selection index on change
     
     // Clear dropdowns if typing
     if (val) {
@@ -230,6 +438,32 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
       if (matched.length === 1) {
         setSelectedMemberId(matched[0].id);
       }
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!searchQuery || targetMember) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveSuggestionIndex(prev => 
+        prev < searchFilteredMembers.length - 1 ? prev + 1 : prev
+      );
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveSuggestionIndex(prev => (prev > 0 ? prev - 1 : -1));
+    } else if (e.key === 'Enter') {
+      if (activeSuggestionIndex >= 0 && activeSuggestionIndex < searchFilteredMembers.length) {
+        e.preventDefault();
+        const selected = searchFilteredMembers[activeSuggestionIndex].member;
+        setSearchQuery('');
+        setSelectedGroup(selected.group);
+        setSelectedMemberId(selected.id);
+        setActiveSuggestionIndex(-1);
+      }
+    } else if (e.key === 'Escape') {
+      setSearchQuery('');
+      setActiveSuggestionIndex(-1);
     }
   };
 
@@ -403,38 +637,61 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
            {/* Direct Search */}
            <div className="w-full md:flex-1">
              <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center text-indigo-700">
-                <Search size={14} className="mr-1" /> 이름 검색
+                <Search size={14} className="mr-1" /> 만능 검색 (이름, 기도제목, 대화내용, 장소 등)
              </label>
              <div className="relative">
                 <input 
                   type="text" 
                   className="w-full border border-indigo-200 rounded-lg pl-10 pr-4 py-2.5 text-sm focus:ring-indigo-500 focus:border-indigo-500 bg-indigo-50/30"
-                  placeholder="성도 이름 입력..."
+                  placeholder="이름, 대화 내용, 기도제목, 장소 등으로 검색..."
                   value={searchQuery}
                   onChange={handleSearch}
+                  onKeyDown={handleKeyDown}
                 />
                 <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-indigo-400">
                   <Search size={18} />
                 </div>
                 {/* Search Suggestions */}
                 {searchQuery && !targetMember && (
-                  <div className="absolute z-10 w-full bg-white border border-slate-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-auto">
-                    {members.filter(m => String(m.name || '').toLowerCase().includes(searchQuery.toLowerCase())).map(m => (
+                  <div className="absolute z-50 w-full bg-white border border-slate-200 rounded-lg shadow-lg mt-1 max-h-60 overflow-auto divide-y divide-slate-100">
+                    {searchFilteredMembers.map((item, idx) => (
                       <div 
-                        key={m.id} 
-                        className="px-4 py-2 hover:bg-slate-50 cursor-pointer text-sm flex justify-between"
+                        key={item.member.id} 
+                        id={`suggestion-item-${idx}`}
+                        className={`px-4 py-2.5 cursor-pointer text-sm flex flex-col transition-colors ${
+                          idx === activeSuggestionIndex 
+                            ? 'bg-indigo-50/80 border-l-2 border-indigo-600' 
+                            : 'hover:bg-slate-50/80'
+                        }`}
                         onClick={() => {
                           setSearchQuery('');
-                          setSelectedGroup(m.group);
-                          setSelectedMemberId(m.id);
+                          setSelectedGroup(item.member.group);
+                          setSelectedMemberId(item.member.id);
+                          setActiveSuggestionIndex(-1);
                         }}
                       >
-                        <span className="font-bold text-slate-700">{m.name}</span>
-                        <span className="text-slate-400 text-xs">{m.group}</span>
+                        <div className="flex justify-between items-center mb-1">
+                          <span className={`font-bold ${idx === activeSuggestionIndex ? 'text-indigo-900' : 'text-slate-800'}`}>
+                            {item.member.name}
+                          </span>
+                          <span className="text-slate-400 text-[10px] font-medium bg-slate-100 px-1.5 py-0.5 rounded">
+                            {item.member.group}
+                          </span>
+                        </div>
+                        {item.matchedSnippet && (
+                          <div className="text-xs text-slate-500 truncate leading-relaxed flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[9px] bg-indigo-50 text-indigo-700 px-1.5 py-0.2 rounded border border-indigo-100 flex-shrink-0 font-medium">
+                              {item.matchField}
+                            </span>
+                            <span className="truncate text-slate-600 font-mono text-[11px]">
+                              {renderHighlightedText(item.matchedSnippet, searchQuery)}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     ))}
-                    {members.filter(m => String(m.name || '').toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
-                      <div className="px-4 py-2 text-sm text-slate-400">검색 결과가 없습니다.</div>
+                    {searchFilteredMembers.length === 0 && (
+                      <div className="px-4 py-3 text-sm text-slate-400 text-center">검색 결과가 없습니다.</div>
                     )}
                   </div>
                 )}
@@ -545,9 +802,9 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                    <span className="text-[10px] md:text-xs font-normal text-slate-400 bg-slate-50 px-2 py-1 rounded">모임 취소일 제외 계산</span>
                 </h4>
                 
-                <div className="flex flex-col md:flex-row gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                    {/* Stats Grid - Responsive: 1 col on mobile, 2 cols on tablet+ */}
-                   <div className="flex-1 grid grid-cols-2 gap-3 md:gap-4">
+                   <div className="lg:col-span-2 grid grid-cols-2 gap-3 md:gap-4">
                       <div className="bg-blue-50 p-3 md:p-4 rounded-xl border border-blue-100 flex flex-col justify-center">
                          <span className="text-[10px] md:text-xs font-bold text-blue-600 uppercase">예배 출석률</span>
                          <div className="flex items-end mt-1 md:mt-2">
@@ -579,7 +836,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                    </div>
 
                    {/* Radar Chart */}
-                   <div className="flex-1 h-56 md:h-64 min-h-[220px] flex items-center justify-center">
+                   <div className="lg:col-span-1 h-56 md:h-64 min-h-[220px] flex items-center justify-center">
                       <ResponsiveContainer width="100%" height="100%">
                          <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
                             <PolarGrid stroke="#e2e8f0" />
@@ -599,6 +856,97 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                    </div>
                 </div>
              </div>
+          </div>
+
+          {/* Timelines Section */}
+          <div className={`grid grid-cols-1 ${isVisitationMode ? 'lg:grid-cols-2' : ''} gap-6`}>
+             {/* Prayer History Timeline */}
+             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6">
+                <h4 className="font-bold text-slate-700 mb-6 flex items-center">
+                   <Quote size={18} className="mr-2 text-indigo-500" /> 기도제목 타임라인
+                </h4>
+                <div className="relative pl-4 space-y-6 before:absolute before:left-0 before:top-2 before:bottom-0 before:w-0.5 before:bg-slate-100">
+                   {myPrayerHistory.length > 0 ? (
+                      myPrayerHistory.map(record => (
+                        <div key={record.id} className="relative">
+                           <div className="absolute -left-[21px] top-1.5 w-3 h-3 rounded-full bg-indigo-400 border-2 border-white shadow-sm"></div>
+                           <span className="text-xs font-bold text-slate-400 block mb-1">{record.date}</span>
+                           <div className="bg-slate-50 p-3 md:p-4 rounded-lg border border-slate-100">
+                              {record.content && <p className="text-slate-700 text-sm mb-2">{record.content}</p>}
+                              {record.note && (
+                                 <div className="flex items-start text-xs text-amber-700 bg-amber-50 p-2 rounded mt-2">
+                                    <FileText size={12} className="mr-1 mt-0.5" /> {record.note}
+                                  </div>
+                              )}
+                           </div>
+                        </div>
+                      ))
+                   ) : (
+                      <div className="text-slate-400 text-sm py-4">등록된 기도제목이 없습니다.</div>
+                   )}
+                </div>
+             </div>
+
+             {/* Visitation History Timeline */}
+             {isVisitationMode && (
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6">
+                   <div className="flex items-center justify-between mb-6 gap-2">
+                      <h4 className="font-bold text-slate-700 flex items-center">
+                         <Heart size={18} className="mr-2 text-rose-500 fill-rose-100" /> 심방 기록 히스토리
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingVisitation(null);
+                          setIsVisitationFormOpen(true);
+                        }}
+                        className="flex items-center gap-1 text-[11px] font-bold text-rose-600 hover:text-rose-700 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 transition-colors cursor-pointer"
+                      >
+                        <Plus size={12} /> 심방 추가
+                      </button>
+                   </div>
+                   <div className="relative pl-4 space-y-6 before:absolute before:left-0 before:top-2 before:bottom-0 before:w-0.5 before:bg-slate-100">
+                      {myVisitationHistory.length > 0 ? (
+                         myVisitationHistory.map(v => (
+                           <div key={v.visitationId} className="relative">
+                              <div className="absolute -left-[21px] top-1.5 w-3 h-3 rounded-full bg-rose-400 border-2 border-white shadow-sm"></div>
+                              <div className="flex items-center justify-between mb-1">
+                                 <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold text-slate-400">{v.date}</span>
+                                    <button
+                                      onClick={() => {
+                                        setEditingVisitation(v);
+                                        setIsVisitationFormOpen(true);
+                                      }}
+                                      className="text-slate-400 hover:text-indigo-600 p-0.5 rounded transition-colors cursor-pointer"
+                                      title="심방기록 수정"
+                                    >
+                                      <Edit2 size={12} />
+                                    </button>
+                                 </div>
+                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-100">
+                                   {v.visitationType}
+                                 </span>
+                              </div>
+                              <div className="bg-slate-50 p-3 md:p-4 rounded-lg border border-slate-100 text-sm">
+                                 <div className="mb-1.5 text-slate-500 text-xs flex items-center gap-1">
+                                   <MapPin size={12} className="text-slate-400" /> {v.place}
+                                 </div>
+                                 <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{v.details}</p>
+                                 {v.prayerRequests && (
+                                    <div className="mt-2 text-indigo-900 bg-indigo-50/50 border border-indigo-100/70 p-2.5 rounded text-xs leading-relaxed">
+                                      🙏 {v.prayerRequests}
+                                    </div>
+                                 )}
+                              </div>
+                           </div>
+                         ))
+                      ) : (
+                         <div className="text-slate-400 text-sm py-4">등록된 심방 기록이 없습니다.</div>
+                      )}
+                   </div>
+                </div>
+             )}
           </div>
 
           {/* Yearly Attendance Grid */}
@@ -666,85 +1014,6 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                 <div className="flex items-center"><span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-emerald-500 mr-1"></span> L: 울모임</div>
                 <div className="flex items-center"><span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-slate-200 mr-1"></span> - : 모임 없음</div>
              </div>
-          </div>
-
-          {/* Timelines Section */}
-          <div className={`grid grid-cols-1 ${isVisitationMode ? 'lg:grid-cols-2' : ''} gap-6`}>
-             {/* Prayer History Timeline */}
-             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6">
-                <h4 className="font-bold text-slate-700 mb-6 flex items-center">
-                   <Quote size={18} className="mr-2 text-indigo-500" /> 기도제목 타임라인
-                </h4>
-                <div className="relative pl-4 space-y-6 before:absolute before:left-0 before:top-2 before:bottom-0 before:w-0.5 before:bg-slate-100">
-                   {myPrayerHistory.length > 0 ? (
-                      myPrayerHistory.map(record => (
-                        <div key={record.id} className="relative">
-                           <div className="absolute -left-[21px] top-1.5 w-3 h-3 rounded-full bg-indigo-400 border-2 border-white shadow-sm"></div>
-                           <span className="text-xs font-bold text-slate-400 block mb-1">{record.date}</span>
-                           <div className="bg-slate-50 p-3 md:p-4 rounded-lg border border-slate-100">
-                              {record.content && <p className="text-slate-700 text-sm mb-2">{record.content}</p>}
-                              {record.note && (
-                                 <div className="flex items-start text-xs text-amber-700 bg-amber-50 p-2 rounded mt-2">
-                                    <FileText size={12} className="mr-1 mt-0.5" /> {record.note}
-                                 </div>
-                              )}
-                           </div>
-                        </div>
-                      ))
-                   ) : (
-                      <div className="text-slate-400 text-sm py-4">등록된 기도제목이 없습니다.</div>
-                   )}
-                </div>
-             </div>
-
-             {/* Visitation History Timeline */}
-             {isVisitationMode && (
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6">
-                   <h4 className="font-bold text-slate-700 mb-6 flex items-center">
-                      <Heart size={18} className="mr-2 text-rose-500 fill-rose-100" /> 심방 기록 히스토리
-                   </h4>
-                   <div className="relative pl-4 space-y-6 before:absolute before:left-0 before:top-2 before:bottom-0 before:w-0.5 before:bg-slate-100">
-                      {myVisitationHistory.length > 0 ? (
-                         myVisitationHistory.map(v => (
-                           <div key={v.visitationId} className="relative">
-                              <div className="absolute -left-[21px] top-1.5 w-3 h-3 rounded-full bg-rose-400 border-2 border-white shadow-sm"></div>
-                              <div className="flex items-center justify-between mb-1">
-                                 <div className="flex items-center gap-2">
-                                    <span className="text-xs font-bold text-slate-400">{v.date}</span>
-                                    <button
-                                      onClick={() => {
-                                        setEditingVisitation(v);
-                                        setIsVisitationFormOpen(true);
-                                      }}
-                                      className="text-slate-400 hover:text-indigo-600 p-0.5 rounded transition-colors cursor-pointer"
-                                      title="심방기록 수정"
-                                    >
-                                      <Edit2 size={12} />
-                                    </button>
-                                 </div>
-                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-100">
-                                   {v.visitationType}
-                                 </span>
-                              </div>
-                              <div className="bg-slate-50 p-3 md:p-4 rounded-lg border border-slate-100 text-sm">
-                                 <div className="mb-1.5 text-slate-500 text-xs flex items-center gap-1">
-                                   <MapPin size={12} className="text-slate-400" /> {v.place}
-                                 </div>
-                                 <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{v.details}</p>
-                                 {v.prayerRequests && (
-                                    <div className="mt-2 text-indigo-900 bg-indigo-50/50 border border-indigo-100/70 p-2.5 rounded text-xs leading-relaxed">
-                                      🙏 {v.prayerRequests}
-                                    </div>
-                                 )}
-                              </div>
-                           </div>
-                         ))
-                      ) : (
-                         <div className="text-slate-400 text-sm py-4">등록된 심방 기록이 없습니다.</div>
-                      )}
-                   </div>
-                </div>
-             )}
           </div>
         </>
       ) : (

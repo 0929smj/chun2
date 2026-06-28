@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Member, Visitation } from '../types';
-import { Plus, Search, Calendar, MapPin, Heart, Clipboard, Trash2, Edit2, X, Filter, Sparkles, Phone, MessageSquare, AlertCircle } from 'lucide-react';
+import { Plus, Search, Calendar, MapPin, Heart, Clipboard, Trash2, Edit2, X, Filter, Sparkles, Phone, MessageSquare, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface VisitationManagementProps {
   members: Member[];
@@ -45,6 +45,33 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
   const [formDetails, setFormDetails] = useState('');
   const [formPrayerRequests, setFormPrayerRequests] = useState('1. \n2. \n3. ');
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+
+  // Scroll active suggestion into view for visitation management
+  useEffect(() => {
+    if (activeSuggestionIndex >= 0) {
+      const activeEl = document.getElementById(`visitation-suggestion-item-${activeSuggestionIndex}`);
+      if (activeEl) {
+        activeEl.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [activeSuggestionIndex]);
+  const [memberSelectMode, setMemberSelectMode] = useState<'search' | 'group'>('search');
+  const [selectedFormGroup, setSelectedFormGroup] = useState<string>('');
+
+  // Calendar Filter states
+  const [selectedFilterDate, setSelectedFilterDate] = useState<string>('');
+  const [isCalendarFilterOpen, setIsCalendarFilterOpen] = useState(false);
+  const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date().getMonth() + 1);
+
+  const activeVisitationDatesSet = useMemo(() => {
+    const s = new Set<string>();
+    visitations.forEach(v => {
+      if (v.date) s.add(v.date);
+    });
+    return s;
+  }, [visitations]);
 
   // Visitation types options
   const VISITATION_TYPES = ['대면심방', '전화심방', 'SNS심방', '가정방문', '병원심방', '기타심방'];
@@ -135,10 +162,13 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
     );
   };
 
-  // Automatically fetch location for new entries
+  // Auto-fetch location on mobile/tablet when entering 'entry' subtab for password '7980' (the authorized visitation mode)
   useEffect(() => {
     if (activeSubTab === 'entry' && !editingVisitation && !formPlace) {
-      fetchCurrentLocationAddress();
+      const isMobileOrTablet = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      if (isMobileOrTablet) {
+        fetchCurrentLocationAddress();
+      }
     }
   }, [activeSubTab, editingVisitation]);
 
@@ -164,19 +194,26 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
       setFormDetails('');
       setFormPrayerRequests('1. \n2. \n3. ');
       setMemberSearchQuery('');
+      setSelectedFormGroup('');
+      setMemberSelectMode('search');
     }
   }, [editingVisitation, memberMap]);
 
-  // Filter members list in the dropdown based on search
-  const filteredFormMembers = useMemo(() => {
-    if (!memberSearchQuery) return members.filter(m => m.status !== 'INACTIVE');
+  // Filter members list in the dropdown based on search name
+  const filteredFormMembersSearch = useMemo(() => {
+    if (!memberSearchQuery.trim()) return [];
     return members
       .filter(m => m.status !== 'INACTIVE')
-      .filter(m => 
-        m.name.toLowerCase().includes(memberSearchQuery.toLowerCase()) ||
-        m.group.toLowerCase().includes(memberSearchQuery.toLowerCase())
-      );
+      .filter(m => m.name.toLowerCase().includes(memberSearchQuery.toLowerCase()));
   }, [members, memberSearchQuery]);
+
+  // Filter members list in the dropdown based on selected group
+  const filteredFormMembersByGroup = useMemo(() => {
+    if (!selectedFormGroup) return [];
+    return members
+      .filter(m => m.status !== 'INACTIVE')
+      .filter(m => m.group === selectedFormGroup);
+  }, [members, selectedFormGroup]);
 
   // Handle submitting new or edited visitation
   const handleSubmit = (e: React.FormEvent) => {
@@ -218,6 +255,8 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
     setFormDetails('');
     setFormPrayerRequests('1. \n2. \n3. ');
     setMemberSearchQuery('');
+    setSelectedFormGroup('');
+    setMemberSelectMode('search');
     setEditingVisitation(null);
     setActiveSubTab('management');
   };
@@ -243,10 +282,13 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
         // Type match
         const matchesType = selectedType === 'ALL' || v.visitationType === selectedType;
 
-        return matchesSearch && matchesGroup && matchesType;
+        // Date match
+        const matchesDate = !selectedFilterDate || v.date === selectedFilterDate;
+
+        return matchesSearch && matchesGroup && matchesType && matchesDate;
       })
       .sort((a, b) => b.date.localeCompare(a.date)); // Sort by date descending
-  }, [visitations, memberMap, searchTerm, selectedGroup, selectedType]);
+  }, [visitations, memberMap, searchTerm, selectedGroup, selectedType, selectedFilterDate]);
 
   // Statistics
   const stats = useMemo(() => {
@@ -339,14 +381,15 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
               {formMemberId ? (
                 <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2.5 flex items-center justify-between">
                   <div>
-                    <span className="font-bold text-indigo-800 text-sm">{memberMap[formMemberId]?.name}</span>
-                    <span className="text-xs text-indigo-500 ml-1.5">({memberMap[formMemberId]?.group} • {memberMap[formMemberId]?.role})</span>
+                    <span className="font-bold text-indigo-800 text-xs sm:text-sm">{memberMap[formMemberId]?.name}</span>
+                    <span className="text-[10px] sm:text-xs text-indigo-500 ml-1.5">({memberMap[formMemberId]?.group} • {memberMap[formMemberId]?.role})</span>
                   </div>
                   <button 
                     type="button" 
                     onClick={() => {
                       setFormMemberId('');
                       setMemberSearchQuery('');
+                      setSelectedFormGroup('');
                     }}
                     className="text-indigo-400 hover:text-indigo-600 p-1 rounded-full hover:bg-indigo-100 transition-colors"
                   >
@@ -354,37 +397,151 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                   </button>
                 </div>
               ) : (
-                <div className="space-y-1.5">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
-                    <input
-                      type="text"
-                      value={memberSearchQuery}
-                      onChange={(e) => setMemberSearchQuery(e.target.value)}
-                      placeholder="성도 이름 또는 소그룹 검색..."
-                      className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
-                    />
+                <div className="space-y-2">
+                  {/* Selection Mode Toggle */}
+                  <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMemberSelectMode('search');
+                        setMemberSearchQuery('');
+                      }}
+                      className={`flex-1 py-1 text-center font-bold rounded-md transition-all ${
+                        memberSelectMode === 'search'
+                          ? 'bg-white text-indigo-700 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      이름으로 검색
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMemberSelectMode('group');
+                        setSelectedFormGroup('');
+                      }}
+                      className={`flex-1 py-1 text-center font-bold rounded-md transition-all ${
+                        memberSelectMode === 'group'
+                          ? 'bg-white text-indigo-700 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      소그룹별 선택
+                    </button>
                   </div>
-                  <div className="border border-slate-200 rounded-lg max-h-[100px] overflow-y-auto p-1 bg-slate-50 space-y-0.5">
-                    {filteredFormMembers.length === 0 ? (
-                      <p className="text-[11px] text-slate-400 p-2 text-center">검색 결과가 없습니다.</p>
-                    ) : (
-                      filteredFormMembers.map(m => (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => {
-                            setFormMemberId(m.id);
-                            setMemberSearchQuery(m.name);
+
+                  {memberSelectMode === 'search' ? (
+                    <div className="space-y-1.5">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                        <input
+                          type="text"
+                          value={memberSearchQuery}
+                          onChange={(e) => {
+                            setMemberSearchQuery(e.target.value);
+                            setActiveSuggestionIndex(-1);
                           }}
-                          className="w-full text-left px-2.5 py-1 text-[11px] rounded transition-colors flex items-center justify-between hover:bg-indigo-50 text-slate-700"
-                        >
-                          <span>{m.name} ({m.group})</span>
-                          <span className="text-slate-400 text-[10px]">{m.role}</span>
-                        </button>
-                      ))
-                    )}
-                  </div>
+                          onKeyDown={(e) => {
+                            if (!memberSearchQuery.trim()) return;
+                            if (e.key === 'ArrowDown') {
+                              e.preventDefault();
+                              setActiveSuggestionIndex(prev => 
+                                prev < filteredFormMembersSearch.length - 1 ? prev + 1 : prev
+                              );
+                            } else if (e.key === 'ArrowUp') {
+                              e.preventDefault();
+                              setActiveSuggestionIndex(prev => (prev > 0 ? prev - 1 : -1));
+                            } else if (e.key === 'Enter') {
+                              if (activeSuggestionIndex >= 0 && activeSuggestionIndex < filteredFormMembersSearch.length) {
+                                e.preventDefault();
+                                const selected = filteredFormMembersSearch[activeSuggestionIndex];
+                                setFormMemberId(selected.id);
+                                setMemberSearchQuery(selected.name);
+                                setActiveSuggestionIndex(-1);
+                              }
+                            } else if (e.key === 'Escape') {
+                              setMemberSearchQuery('');
+                              setActiveSuggestionIndex(-1);
+                            }
+                          }}
+                          placeholder="성도 이름을 입력하세요..."
+                          className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                        />
+                      </div>
+                      {memberSearchQuery.trim() ? (
+                        <div className="border border-slate-200 rounded-lg max-h-[120px] overflow-y-auto p-1 bg-slate-50 space-y-0.5">
+                          {filteredFormMembersSearch.length === 0 ? (
+                            <p className="text-[11px] text-slate-400 p-2 text-center">검색 결과가 없습니다.</p>
+                          ) : (
+                            filteredFormMembersSearch.map((m, idx) => (
+                              <button
+                                key={m.id}
+                                id={`visitation-suggestion-item-${idx}`}
+                                type="button"
+                                onClick={() => {
+                                  setFormMemberId(m.id);
+                                  setMemberSearchQuery(m.name);
+                                  setActiveSuggestionIndex(-1);
+                                }}
+                                className={`w-full text-left px-2.5 py-1 text-[11px] rounded transition-colors flex items-center justify-between outline-none ${
+                                  idx === activeSuggestionIndex 
+                                    ? 'bg-indigo-100 text-indigo-900 font-semibold border-l-2 border-indigo-600' 
+                                    : 'hover:bg-indigo-50/50 text-slate-700'
+                                }`}
+                              >
+                                <span>{m.name} ({m.group})</span>
+                                <span className="text-slate-400 text-[10px]">{m.role}</span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-400 text-center py-2 bg-slate-50 rounded border border-dashed border-slate-200">
+                          이름을 검색창에 입력하면 매칭 명단이 여기에 표시됩니다.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <select
+                        value={selectedFormGroup}
+                        onChange={(e) => setSelectedFormGroup(e.target.value)}
+                        className="w-full p-1.5 border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 outline-none bg-white cursor-pointer"
+                      >
+                        <option value="">-- 소그룹 선택 --</option>
+                        {availableGroups.map(g => (
+                          <option key={g} value={g}>{g}</option>
+                        ))}
+                      </select>
+
+                      {selectedFormGroup ? (
+                        <div className="border border-slate-200 rounded-lg max-h-[120px] overflow-y-auto p-1 bg-slate-50 space-y-0.5">
+                          {filteredFormMembersByGroup.length === 0 ? (
+                            <p className="text-[11px] text-slate-400 p-2 text-center">이 그룹에 소속된 성도가 없습니다.</p>
+                          ) : (
+                            filteredFormMembersByGroup.map(m => (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => {
+                                  setFormMemberId(m.id);
+                                  setMemberSearchQuery(m.name);
+                                }}
+                                className="w-full text-left px-2.5 py-1 text-[11px] rounded transition-colors flex items-center justify-between hover:bg-indigo-50 text-slate-700"
+                              >
+                                <span>{m.name}</span>
+                                <span className="text-slate-400 text-[10px]">{m.role}</span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-400 text-center py-2 bg-slate-50 rounded border border-dashed border-slate-200">
+                          소그룹을 선택하면 성도 명단이 여기에 표시됩니다.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -521,6 +678,21 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
               />
             </div>
             <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsCalendarFilterOpen(!isCalendarFilterOpen)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  selectedFilterDate 
+                    ? 'bg-rose-50 border-rose-200 text-rose-700' 
+                    : isCalendarFilterOpen
+                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                    : 'bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <Calendar size={14} />
+                <span className="whitespace-nowrap">{selectedFilterDate ? `${selectedFilterDate.substring(5)}` : '날짜 필터'}</span>
+              </button>
+
               <select
                 value={selectedGroup}
                 onChange={(e) => setSelectedGroup(e.target.value)}
@@ -545,6 +717,120 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
             </div>
           </div>
 
+          {/* Custom Month-view Calendar Filter */}
+          {isCalendarFilterOpen && (
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-700">심방 일자별 필터</span>
+                  {selectedFilterDate && (
+                    <span className="text-[10px] bg-rose-50 text-rose-600 border border-rose-100 px-1.5 py-0.5 rounded-md font-medium">
+                      필터: {selectedFilterDate}
+                    </span>
+                  )}
+                </div>
+                
+                <div className="flex items-center justify-between sm:justify-end gap-2">
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (calendarMonth === 1) {
+                          setCalendarMonth(12);
+                          setCalendarYear(y => y - 1);
+                        } else {
+                          setCalendarMonth(m => m - 1);
+                        }
+                      }}
+                      className="p-1 rounded hover:bg-slate-100 text-slate-600 cursor-pointer"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <span className="text-xs font-bold text-slate-800 min-w-[70px] text-center">
+                      {calendarYear}년 {calendarMonth}월
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (calendarMonth === 12) {
+                          setCalendarMonth(1);
+                          setCalendarYear(y => y + 1);
+                        } else {
+                          setCalendarMonth(m => m + 1);
+                        }
+                      }}
+                      className="p-1 rounded hover:bg-slate-100 text-slate-600 cursor-pointer"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                  
+                  {selectedFilterDate && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFilterDate('')}
+                      className="text-[10px] text-slate-500 hover:text-slate-800 border border-slate-200 hover:border-slate-300 rounded px-2 py-1 bg-slate-50 font-semibold cursor-pointer"
+                    >
+                      전체 날짜 보기
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Calendar Grid */}
+              <div className="max-w-md mx-auto">
+                {/* Days of week */}
+                <div className="grid grid-cols-7 gap-1 text-center mb-1 text-[10px] font-semibold text-slate-400">
+                  <span className="text-rose-500">일</span>
+                  <span>월</span>
+                  <span>화</span>
+                  <span>수</span>
+                  <span>목</span>
+                  <span>금</span>
+                  <span className="text-blue-500">토</span>
+                </div>
+
+                {/* Days numbers */}
+                <div className="grid grid-cols-7 gap-1">
+                  {/* Empty slots for starting week day */}
+                  {Array.from({ length: new Date(calendarYear, calendarMonth - 1, 1).getDay() }).map((_, idx) => (
+                    <div key={`empty-${idx}`} className="h-7" />
+                  ))}
+                  
+                  {/* Active day buttons */}
+                  {Array.from({ length: new Date(calendarYear, calendarMonth, 0).getDate() }).map((_, idx) => {
+                    const day = idx + 1;
+                    const dateString = `${calendarYear}-${String(calendarMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const hasVisitation = activeVisitationDatesSet.has(dateString);
+                    const isSelected = selectedFilterDate === dateString;
+                    
+                    return (
+                      <button
+                        key={`day-${day}`}
+                        type="button"
+                        disabled={!hasVisitation}
+                        onClick={() => setSelectedFilterDate(dateString)}
+                        className={`h-7 rounded-lg text-xs flex flex-col items-center justify-center relative transition-all ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white font-bold shadow-sm cursor-pointer'
+                            : hasVisitation
+                            ? 'bg-indigo-50 text-indigo-700 font-bold hover:bg-indigo-100 cursor-pointer border border-indigo-200/50'
+                            : 'text-slate-300 cursor-not-allowed opacity-30 font-light'
+                        }`}
+                        title={hasVisitation ? `${dateString} (심방 기록 있음)` : ''}
+                      >
+                        <span>{day}</span>
+                        {hasVisitation && !isSelected && (
+                          <span className="absolute bottom-1 w-1 h-1 rounded-full bg-indigo-500" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Main List */}
           <div className="space-y-3">
             {filteredVisitations.length === 0 ? (
@@ -565,35 +851,39 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                   return (
                     <div key={v.visitationId} className="bg-white rounded-xl shadow-sm border border-slate-200 hover:border-slate-300 transition-all overflow-hidden flex flex-col justify-between text-xs">
                       <div className="p-4">
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <div className="flex items-center gap-2">
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <div className="flex items-start gap-2.5 min-w-0">
                             {member?.photoUrl ? (
                               <img
                                 src={member.photoUrl}
                                 alt={member.name}
                                 referrerPolicy="no-referrer"
-                                className="w-8 h-8 rounded-full object-cover border border-slate-200"
+                                className="w-9 h-9 rounded-full object-cover border border-slate-200 flex-shrink-0"
                               />
                             ) : (
-                              <div className="w-8 h-8 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-700 font-bold border border-indigo-100">
+                              <div className="w-9 h-9 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-700 font-bold border border-indigo-100 flex-shrink-0">
                                 {member?.name?.substring(0, 2)}
                               </div>
                             )}
-                            <div>
-                              <div className="flex items-center gap-1.5">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
                                 <span className="font-bold text-slate-900 text-sm">{member?.name}</span>
-                                <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium">
+                                <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
                                   {member?.group} • {member?.role}
                                 </span>
                               </div>
-                              <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
-                                <span className="flex items-center gap-0.5"><Calendar size={11} /> {v.date}</span>
-                                <span className="flex items-center gap-0.5"><MapPin size={11} /> {v.place}</span>
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-500 mt-1 min-w-0">
+                                <span className="flex items-center gap-0.5 whitespace-nowrap"><Calendar size={11} className="text-slate-400" /> {v.date}</span>
+                                <span className="hidden sm:inline text-slate-300">•</span>
+                                <span className="flex items-center gap-0.5 min-w-0" title={v.place}>
+                                  <MapPin size={11} className="text-slate-400 flex-shrink-0" /> 
+                                  <span className="truncate">{v.place}</span>
+                                </span>
                               </div>
                             </div>
                           </div>
                           
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          <span className={`text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0 ${
                             v.visitationType === '대면심방' || v.visitationType === '가정방문'
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               : v.visitationType === '전화심방'
