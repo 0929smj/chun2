@@ -17,6 +17,20 @@ interface IndividualProfileProps {
   onUpdateVisitation?: (visitation: Visitation) => void;
 }
 
+import { runUniversalSearch } from '../services/searchAlgorithm';
+
+interface IndividualProfileProps {
+  members: Member[];
+  records: AttendanceRecord[];
+  prayerRecords: PrayerRecord[];
+  meetingStatus: MeetingStatus[];
+  availableGroups: string[];
+  isVisitationMode?: boolean;
+  visitations?: Visitation[];
+  onAddVisitation?: (visitation: Omit<Visitation, 'visitationId' | 'submittedAt'>) => void;
+  onUpdateVisitation?: (visitation: Visitation) => void;
+}
+
 interface SearchResultItem {
   member: Member;
   score: number;
@@ -24,36 +38,35 @@ interface SearchResultItem {
   matchedSnippet: string;
 }
 
-const getSnippet = (text: string, query: string, maxLength: number = 40): string => {
-  const index = text.toLowerCase().indexOf(query.toLowerCase());
-  if (index === -1) return text.slice(0, maxLength);
-  if (text.length <= maxLength) return text;
-  
-  const start = Math.max(0, index - Math.floor(maxLength / 2));
-  const end = Math.min(text.length, start + maxLength);
-  
-  let snippet = text.slice(start, end);
-  if (start > 0) snippet = '...' + snippet;
-  if (end < text.length) snippet = snippet + '...';
-  
-  return snippet;
-};
-
 const escapeRegExp = (string: string) => {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 };
 
-const renderHighlightedText = (text: string, highlight: string) => {
-  if (!highlight.trim()) {
+const renderHighlightedText = (text: string, query: string) => {
+  if (!text) return <span></span>;
+  const trimmed = query.trim();
+  if (!trimmed) {
     return <span>{text}</span>;
   }
-  const regex = new RegExp(`(${escapeRegExp(highlight)})`, 'gi');
+  
+  const tokens = trimmed.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) {
+    return <span>{text}</span>;
+  }
+
+  const escapedTokens = tokens
+    .map(t => escapeRegExp(t))
+    .sort((a, b) => b.length - a.length);
+  
+  const pattern = `(${escapedTokens.join('|')})`;
+  const regex = new RegExp(pattern, 'gi');
   const parts = text.split(regex);
+  
   return (
     <span>
       {parts.map((part, i) => 
         regex.test(part) ? (
-          <mark key={i} className="bg-amber-100 text-amber-950 font-semibold px-0.5 rounded">
+          <mark key={i} className="bg-amber-100 text-amber-950 font-semibold px-0.5 rounded border-b border-amber-300">
             {part}
           </mark>
         ) : (
@@ -83,148 +96,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
 
   // Filtered members and match details for universal autocomplete search
   const searchFilteredMembers = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    
-    const query = searchQuery.trim().toLowerCase();
-    const results: SearchResultItem[] = [];
-
-    for (const member of members) {
-      let bestScore = 0;
-      let bestMatchField = '';
-      let bestMatchedSnippet = '';
-
-      const nameStr = String(member.name || '');
-      const nameLower = nameStr.toLowerCase();
-      
-      // 1. Name Match
-      if (nameLower === query) {
-        bestScore = 100;
-        bestMatchField = '이름';
-        bestMatchedSnippet = `이름: ${nameStr}`;
-      } else if (nameLower.includes(query)) {
-        bestScore = 80;
-        bestMatchField = '이름';
-        bestMatchedSnippet = `이름: ${nameStr}`;
-      }
-
-      // 2. Group Match
-      const groupStr = String(member.group || '');
-      const groupLower = groupStr.toLowerCase();
-      if (groupLower.includes(query)) {
-        const score = 50;
-        if (score > bestScore) {
-          bestScore = score;
-          bestMatchField = '소그룹';
-          bestMatchedSnippet = `소그룹: ${groupStr}`;
-        }
-      }
-
-      // 3. Special Notes Match
-      const notesStr = String(member.specialNotes || '');
-      const notesLower = notesStr.toLowerCase();
-      if (notesStr && notesLower.includes(query)) {
-        const score = 40;
-        if (score > bestScore) {
-          bestScore = score;
-          bestMatchField = '특이사항';
-          bestMatchedSnippet = getSnippet(notesStr, query);
-        }
-      }
-
-      // 4. Latest Prayer Request Match
-      const lprStr = String(member.latestPrayerRequest || '');
-      const lprLower = lprStr.toLowerCase();
-      if (lprStr && lprLower.includes(query)) {
-        const score = 45;
-        if (score > bestScore) {
-          bestScore = score;
-          bestMatchField = '최근 기도제목';
-          bestMatchedSnippet = getSnippet(lprStr, query);
-        }
-      }
-
-      // 5. Prayer Records Match
-      if (prayerRecords && prayerRecords.length > 0) {
-        const myPrayerRecords = prayerRecords.filter(p => p.memberId === member.id);
-        for (const pr of myPrayerRecords) {
-          const contentStr = String(pr.content || '');
-          const contentLower = contentStr.toLowerCase();
-          if (contentStr && contentLower.includes(query)) {
-            const score = 45;
-            if (score > bestScore) {
-              bestScore = score;
-              bestMatchField = '기도제목 기록';
-              bestMatchedSnippet = `[${pr.date}] ${getSnippet(contentStr, query)}`;
-            }
-          }
-          const noteStr = String(pr.note || '');
-          const noteLower = noteStr.toLowerCase();
-          if (noteStr && noteLower.includes(query)) {
-            const score = 35;
-            if (score > bestScore) {
-              bestScore = score;
-              bestMatchField = '기록 메모';
-              bestMatchedSnippet = `[${pr.date}] ${getSnippet(noteStr, query)}`;
-            }
-          }
-        }
-      }
-
-      // 6. Visitations Match
-      if (visitations && visitations.length > 0) {
-        const myVisitations = visitations.filter(v => v.memberId === member.id);
-        for (const v of myVisitations) {
-          const detailsStr = String(v.details || '');
-          const detailsLower = detailsStr.toLowerCase();
-          if (detailsStr && detailsLower.includes(query)) {
-            const score = 48;
-            if (score > bestScore) {
-              bestScore = score;
-              bestMatchField = '심방내용';
-              bestMatchedSnippet = `[${v.date}] ${getSnippet(detailsStr, query)}`;
-            }
-          }
-          
-          const placeStr = String(v.place || '');
-          const placeLower = placeStr.toLowerCase();
-          if (placeStr && placeLower.includes(query)) {
-            const score = 55;
-            if (score > bestScore) {
-              bestScore = score;
-              bestMatchField = '심방장소';
-              bestMatchedSnippet = `[${v.date} 심방] 장소: ${getSnippet(placeStr, query)}`;
-            }
-          }
-
-          const prStr = String(v.prayerRequests || '');
-          const prLower = prStr.toLowerCase();
-          if (prStr && prLower.includes(query)) {
-            const score = 45;
-            if (score > bestScore) {
-              bestScore = score;
-              bestMatchField = '심방 기도';
-              bestMatchedSnippet = `[${v.date}] ${getSnippet(prStr, query)}`;
-            }
-          }
-        }
-      }
-
-      if (bestScore > 0) {
-        results.push({
-          member,
-          score: bestScore,
-          matchField: bestMatchField,
-          matchedSnippet: bestMatchedSnippet
-        });
-      }
-    }
-
-    return results.sort((a, b) => {
-      if (b.score !== a.score) {
-        return b.score - a.score;
-      }
-      return String(a.member.name).localeCompare(String(b.member.name));
-    });
+    return runUniversalSearch(members, searchQuery, prayerRecords, visitations);
   }, [members, searchQuery, prayerRecords, visitations]);
 
   // Scroll active suggestion into view
@@ -331,7 +203,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
   // Auto-fetch location on mobile/tablet when opening the visitation form for password '7980' (isVisitationMode)
   useEffect(() => {
     if (isVisitationMode && isVisitationFormOpen && !editingVisitation && !formPlace) {
-      const isMobileOrTablet = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isMobileOrTablet = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && window.innerWidth < 1024;
       if (isMobileOrTablet) {
         fetchCurrentLocationAddress();
       }
@@ -671,9 +543,14 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                         }}
                       >
                         <div className="flex justify-between items-center mb-1">
-                          <span className={`font-bold ${idx === activeSuggestionIndex ? 'text-indigo-900' : 'text-slate-800'}`}>
-                            {item.member.name}
-                          </span>
+                          <div className="flex items-center">
+                            <span className={`font-bold ${idx === activeSuggestionIndex ? 'text-indigo-900' : 'text-slate-800'}`}>
+                              {item.member.name}
+                            </span>
+                            <span className="text-[9px] text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded ml-2 font-semibold">
+                              정확도 {Math.min(100, Math.max(30, Math.round(item.score)))}%
+                            </span>
+                          </div>
                           <span className="text-slate-400 text-[10px] font-medium bg-slate-100 px-1.5 py-0.5 rounded">
                             {item.member.group}
                           </span>

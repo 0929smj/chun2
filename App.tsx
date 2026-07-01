@@ -205,6 +205,42 @@ const App: React.FC = () => {
     loadData();
   }, []);
 
+  useEffect(() => {
+    // Synchronize with system dark mode preference
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleThemeChange = (e: MediaQueryListEvent | MediaQueryList) => {
+      if (e.matches) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    };
+
+    handleThemeChange(mediaQuery);
+
+    try {
+      mediaQuery.addEventListener('change', handleThemeChange);
+    } catch (err) {
+      try {
+        mediaQuery.addListener(handleThemeChange);
+      } catch (err2) {
+        console.error(err2);
+      }
+    }
+
+    return () => {
+      try {
+        mediaQuery.removeEventListener('change', handleThemeChange);
+      } catch (err) {
+        try {
+          mediaQuery.removeListener(handleThemeChange);
+        } catch (err2) {
+          console.error(err2);
+        }
+      }
+    };
+  }, []);
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const pw = inputPassword.trim();
@@ -411,6 +447,7 @@ const App: React.FC = () => {
                 meetingStatus={meetingStatus}
                 availableGroups={groups}
                 onToggleAttendance={toggleAttendance}
+                isVisitationMode={isVisitationMode}
               />
             } 
           />

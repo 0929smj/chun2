@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Member, AttendanceRecord, MeetingStatus, AttendanceType } from '../types';
-import { Phone, Calendar } from 'lucide-react';
+import { Phone, Calendar, Sparkles, Heart, X } from 'lucide-react';
 import { SUNDAYS_2026 } from '../services/mockData';
 import { 
   forceSimulation, 
@@ -47,8 +47,14 @@ interface Edge {
 
 const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records, meetingStatus }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [focusedGroup, setFocusedGroup] = useState<string | null>(null);
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
+  
+  // Check if we are in visitation selection mode
+  const selectingForVisitation = location.state?.selectingForVisitation || false;
+  const originalFormState = location.state?.formState || null;
+  const [confirmSelectionMember, setConfirmSelectionMember] = useState<Member | null>(null);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const touchTimer = useRef<NodeJS.Timeout | null>(null);
@@ -479,19 +485,63 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
          setFocusedGroup(groupName);
          setActiveTooltip(null);
        } else {
-         navigateToProfile(memberId);
+         if (selectingForVisitation) {
+           const selectedMember = members.find(m => m.id === memberId);
+           if (selectedMember) {
+             setConfirmSelectionMember(selectedMember);
+           }
+         } else {
+           navigateToProfile(memberId);
+         }
        }
     } else {
-       navigateToProfile(memberId);
+       if (selectingForVisitation) {
+         const selectedMember = members.find(m => m.id === memberId);
+         if (selectedMember) {
+           setConfirmSelectionMember(selectedMember);
+         }
+       } else {
+         navigateToProfile(memberId);
+       }
     }
   };
 
   return (
     <div className="h-full flex flex-col space-y-4 flex-1 overflow-hidden">
       <header className="flex-shrink-0">
-        <h2 className="text-2xl md:text-3xl font-bold text-slate-800">연결 조직도</h2>
-        <p className="text-sm text-slate-500">리더를 클릭하면 하위 멤버가 나타납니다. 화면에 나온 멤버나 다시 리더를 클릭하면 상세 프로필로 이동합니다.</p>
+        <h2 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-slate-100">연결 조직도</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400">리더를 클릭하면 하위 멤버가 나타납니다. 화면에 나온 멤버나 다시 리더를 클릭하면 상세 프로필로 이동합니다.</p>
       </header>
+
+      {selectingForVisitation && (
+        <div className="bg-indigo-600 dark:bg-indigo-750 text-white py-1.5 sm:py-2 px-3 sm:px-4 rounded-xl shadow-[0_4px_12px_rgba(79,70,229,0.12)] flex items-center justify-between gap-3 border border-indigo-500/30 animate-fadeIn shrink-0">
+          <div className="flex items-center gap-2">
+            <Sparkles size={14} className="text-amber-300 animate-pulse shrink-0" />
+            <div className="text-left leading-none">
+              <span className="text-[11px] sm:text-xs font-bold tracking-tight">심방 대상 성도 선택 중</span>
+              <span className="hidden xs:inline-block text-[10px] text-indigo-200 ml-2">
+                조직도에서 성도를 클릭하면 즉시 대상자로 지정됩니다.
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              navigate('/visitation', { 
+                state: { 
+                  fromOrgChart: true,
+                  formState: originalFormState 
+                } 
+              });
+            }}
+            title="선택 취소"
+            className="p-1 sm:px-2 py-1 bg-indigo-700/60 hover:bg-indigo-800 text-white/90 hover:text-white font-bold rounded-lg text-[10px] flex items-center gap-1 cursor-pointer active:scale-95 transition-all whitespace-nowrap"
+          >
+            <span className="hidden sm:inline">선택 취소</span>
+            <X size={12} className="shrink-0" />
+          </button>
+        </div>
+      )}
 
       <div 
         ref={containerRef}
@@ -658,6 +708,65 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
         </div>
         </div>
       </div>
+
+      {/* Confirmation Modal for Visitation Selection */}
+      <AnimatePresence>
+        {confirmSelectionMember && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fadeIn">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl max-w-sm w-full space-y-5 text-center font-sans"
+            >
+              <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                <Heart size={28} className="text-indigo-600 dark:text-indigo-400 animate-pulse" />
+              </div>
+              
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">심방 대상 성도 선택</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">선택하신 성도를 심방 대상자로 지정할까요?</p>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 flex flex-col items-center gap-1.5">
+                <span className="text-lg font-black text-slate-800 dark:text-slate-100">{confirmSelectionMember.name}</span>
+                <span className="text-xs text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-0.5 rounded-full border border-indigo-100/50 dark:border-indigo-900/30">
+                  {confirmSelectionMember.group} • {confirmSelectionMember.role}
+                </span>
+                {confirmSelectionMember.phoneNumber && (
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">{confirmSelectionMember.phoneNumber}</span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setConfirmSelectionMember(null)}
+                  className="py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-xs transition-all cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigate('/visitation', {
+                      state: {
+                        fromOrgChart: true,
+                        selectedMemberId: confirmSelectionMember.id,
+                        formState: originalFormState
+                      }
+                    });
+                    setConfirmSelectionMember(null);
+                  }}
+                  className="py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-all cursor-pointer shadow-md shadow-indigo-500/10"
+                >
+                  심방 대상 지정
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

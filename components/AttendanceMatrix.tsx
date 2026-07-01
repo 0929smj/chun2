@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Member, AttendanceRecord, AttendanceType, MeetingStatus } from '../types';
 import { SUNDAYS_2026 } from '../services/mockData';
 import { Check, Search, MessageSquare } from 'lucide-react';
@@ -9,13 +10,24 @@ interface AttendanceMatrixProps {
   meetingStatus: MeetingStatus[];
   availableGroups: string[];
   onToggleAttendance: (memberId: string, date: string, type: AttendanceType) => void;
+  isVisitationMode?: boolean;
 }
 
-const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, meetingStatus, availableGroups, onToggleAttendance }) => {
+const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ 
+  members, 
+  records, 
+  meetingStatus, 
+  availableGroups, 
+  onToggleAttendance,
+  isVisitationMode = false
+}) => {
+  const navigate = useNavigate();
   // Store selectedMonth as string to handle 'all'
   const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth())); 
   const [filterGroup, setFilterGroup] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [excludeZeroAttendance, setExcludeZeroAttendance] = useState<boolean>(false);
+  const [sortBy, setSortBy] = useState<'group' | 'attendance' | 'age'>('group');
 
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
@@ -43,18 +55,68 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
       result = result.filter(m => String(m.name || '').toLowerCase().includes(query));
     }
 
-    return result;
-  }, [members, filterGroup, searchQuery]);
+    // Filter by Zero Attendance if active and inside visitation mode (Admin)
+    if (isVisitationMode && excludeZeroAttendance) {
+      result = result.filter(member => {
+        const worshipCount = records.filter(r => r.memberId === member.id && currentMonthSundays.includes(r.date) && r.types.includes(AttendanceType.Worship)).length;
+        const gatheringCount = records.filter(r => r.memberId === member.id && currentMonthSundays.includes(r.date) && r.types.includes(AttendanceType.Gathering)).length;
+        const woolCount = records.filter(r => r.memberId === member.id && currentMonthSundays.includes(r.date) && r.types.includes(AttendanceType.Wool)).length;
+        return (worshipCount + gatheringCount + woolCount) > 0;
+      });
+    }
 
-  // Sorting: Group -> Name
+    return result;
+  }, [members, filterGroup, searchQuery, isVisitationMode, excludeZeroAttendance, records, currentMonthSundays]);
+
+  // Helper to parse birth year from member name (e.g., "91홍길동" -> 1991, "01김철수" -> 2001)
+  const parseBirthYear = (name: string): number | null => {
+    const match = name.match(/^(\d{2})/);
+    if (!match) return null;
+    const num = parseInt(match[1], 10);
+    return num >= 50 ? 1900 + num : 2000 + num;
+  };
+
+  // Map to store total attendance count for each member in the selected period (currentMonthSundays)
+  const memberAttendanceMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    filteredMembers.forEach(m => {
+      const worshipCount = records.filter(r => r.memberId === m.id && currentMonthSundays.includes(r.date) && r.types.includes(AttendanceType.Worship)).length;
+      const gatheringCount = records.filter(r => r.memberId === m.id && currentMonthSundays.includes(r.date) && r.types.includes(AttendanceType.Gathering)).length;
+      const woolCount = records.filter(r => r.memberId === m.id && currentMonthSundays.includes(r.date) && r.types.includes(AttendanceType.Wool)).length;
+      map[m.id] = worshipCount + gatheringCount + woolCount;
+    });
+    return map;
+  }, [filteredMembers, records, currentMonthSundays]);
+
+  // Sorting based on selected sortBy state
   const sortedMembers = useMemo(() => {
     return [...filteredMembers].sort((a, b) => {
+      if (sortBy === 'attendance') {
+        const totalA = memberAttendanceMap[a.id] || 0;
+        const totalB = memberAttendanceMap[b.id] || 0;
+        if (totalA !== totalB) return totalB - totalA; // Descending (high to low)
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      }
+
+      if (sortBy === 'age') {
+        const yearA = parseBirthYear(a.name);
+        const yearB = parseBirthYear(b.name);
+        if (yearA !== null && yearB !== null) {
+          if (yearA !== yearB) return yearA - yearB; // Ascending (older first: e.g. 1991 before 1995)
+          return String(a.name || '').localeCompare(String(b.name || ''));
+        }
+        if (yearA !== null) return -1; // Keep numeric prefix ahead
+        if (yearB !== null) return 1;
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      }
+
+      // Default: 'group' (Group -> Name)
       const groupA = String(a.group || '');
       const groupB = String(b.group || '');
       if (groupA !== groupB) return groupA.localeCompare(groupB);
       return String(a.name || '').localeCompare(String(b.name || ''));
     });
-  }, [filteredMembers]);
+  }, [filteredMembers, sortBy, memberAttendanceMap]);
 
   const getStatus = (memberId: string, date: string, type: AttendanceType) => {
     const record = records.find(r => r.memberId === memberId && r.date === date && r.types.includes(type));
@@ -136,7 +198,7 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
         <td 
           key={`${memberId}-${date}-${type}`} 
           onClick={() => onToggleAttendance(memberId, date, type)}
-          className={`px-1 md:px-2 py-2 border border-slate-200 text-center cursor-pointer transition-colors ${hoverClass}`}
+          className={`px-1 md:px-2 py-2 border border-slate-200 dark:border-slate-800 text-center cursor-pointer transition-colors ${hoverClass}`}
         >
           <div className={`flex justify-center ${activeColorClass}`}>
              <Check size={16} strokeWidth={3} />
@@ -147,7 +209,7 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
 
     if (canceled) {
       return (
-        <td key={`${memberId}-${date}-${type}`} className="px-1 md:px-2 py-2 border border-slate-200 text-center bg-slate-100 text-slate-400">
+        <td key={`${memberId}-${date}-${type}`} className="px-1 md:px-2 py-2 border border-slate-200 dark:border-slate-800 text-center bg-slate-100 dark:bg-slate-850 text-slate-400 dark:text-slate-600">
            -
         </td>
       );
@@ -155,124 +217,163 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
 
     return (
       <td 
-        key={`${memberId}-${date}-${type}`} 
+        key={`${memberId}-${date}-${type}`}
         onClick={() => onToggleAttendance(memberId, date, type)}
-        className={`px-1 md:px-2 py-2 border border-slate-200 text-center cursor-pointer transition-colors ${hoverClass}`}
+        className={`px-1 md:px-2 py-2 border border-slate-200 dark:border-slate-800 text-center cursor-pointer transition-colors ${hoverClass}`}
       >
       </td>
     );
   };
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-3">
+      <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between px-1">
         <div>
-          <h2 className="text-2xl md:text-3xl font-bold text-slate-800">출석 상세 현황</h2>
-          <p className="text-sm text-slate-500">클릭하여 출석 상태를 바로 수정할 수 있습니다.</p>
+          <h2 className="text-sm md:text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+            <span className="w-1 h-3 bg-indigo-600 rounded-full inline-block"></span>
+            출석 상세 현황
+          </h2>
+          <p className="hidden md:block text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">클릭하여 출석 상태를 바로 수정할 수 있습니다.</p>
         </div>
         
-        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center w-full md:w-auto">
-            {/* Search Input */}
-            <div className="relative flex-1 sm:flex-none">
-              <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                <Search size={16} className="text-slate-400" />
-              </div>
-              <input 
-                type="text" 
-                className="bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:w-40 pl-10 p-2.5" 
-                placeholder="이름 검색" 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+        {/* Modern & Compact Filters Layout */}
+        <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto">
+          {/* Compact Name Search */}
+          <div className="relative flex-1 min-w-[120px] sm:flex-initial sm:w-36">
+            <div className="absolute inset-y-0 left-0 flex items-center pl-2 pointer-events-none">
+              <Search size={12} className="text-slate-400 dark:text-slate-500" />
             </div>
+            <input 
+              type="text" 
+              className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-[11px] rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-2 h-8 transition-all outline-none" 
+              placeholder="이름 검색" 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
 
-            <div className="flex gap-2">
-              <select
-                className="bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:w-32 p-2.5 flex-1"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-              >
-                <option value="all">1년 전체</option>
-                {months.map((m, idx) => (
-                  <option key={m} value={idx}>{m}월</option>
-                ))}
-              </select>
+          {/* Compact Month Select */}
+          <div className="w-[80px] sm:w-20">
+            <select
+              className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-[11px] rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full px-1.5 h-8 transition-all cursor-pointer outline-none"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+            >
+              <option value="all" className="dark:bg-slate-900">전체 월</option>
+              {months.map((m, idx) => (
+                <option key={m} value={idx} className="dark:bg-slate-900">{m}월</option>
+              ))}
+            </select>
+          </div>
 
+          {/* Compact Group Select */}
+          <div className="flex-1 min-w-[110px] sm:flex-initial sm:w-32">
+            <select
+              className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-[11px] rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full px-1.5 h-8 truncate transition-all cursor-pointer outline-none"
+              value={filterGroup}
+              onChange={(e) => setFilterGroup(e.target.value)}
+            >
+              <option value="all" className="dark:bg-slate-900">전체 소그룹/울</option>
+              {availableGroups.map(g => (
+                <option key={g} value={g} className="dark:bg-slate-900">{g}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Compact Sort Select */}
+          {isVisitationMode && (
+            <div className="w-[100px] sm:w-28">
               <select
-                className="bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:w-40 p-2.5 flex-1"
-                value={filterGroup}
-                onChange={(e) => setFilterGroup(e.target.value)}
+                className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-[11px] rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full px-1.5 h-8 transition-all cursor-pointer outline-none"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'group' | 'attendance' | 'age')}
               >
-                <option value="all">전체 소그룹/울</option>
-                {availableGroups.map(g => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
+                <option value="group" className="dark:bg-slate-900">소그룹 정렬</option>
+                <option value="attendance" className="dark:bg-slate-900">출석 높은 순</option>
+                <option value="age" className="dark:bg-slate-900">또래 순(나이순)</option>
               </select>
             </div>
+          )}
+
+          {/* Aesthetic Toggle Switch for Exclude Zero */}
+          {isVisitationMode && (
+            <div 
+              onClick={() => setExcludeZeroAttendance(!excludeZeroAttendance)}
+              className="flex items-center gap-1.5 px-2.5 h-8 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-lg cursor-pointer transition-all select-none"
+            >
+              <span className="text-slate-600 dark:text-slate-400 font-semibold text-[10px] whitespace-nowrap">출석 0회 제외</span>
+              <button 
+                type="button" 
+                className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${excludeZeroAttendance ? 'bg-indigo-600 border-indigo-600' : 'bg-slate-200 dark:bg-slate-700 border-slate-200 dark:border-slate-700'}`}
+              >
+                <span className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${excludeZeroAttendance ? 'translate-x-3' : 'translate-x-0'}`} />
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="max-h-[calc(100vh-230px)] lg:max-h-[calc(100vh-250px)] overflow-auto custom-scrollbar">
-          <table className="w-full text-sm text-left text-slate-500 border-collapse">
-            <thead className="text-xs text-slate-700 uppercase bg-slate-100 border-b border-slate-200 sticky top-0 z-30">
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+        <div className="max-h-[calc(100vh-270px)] sm:max-h-[calc(100vh-240px)] overflow-auto custom-scrollbar">
+          <table className="w-full text-sm text-left text-slate-500 dark:text-slate-400 border-collapse">
+            <thead className="text-xs text-slate-700 dark:text-slate-300 uppercase bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-35">
               <tr>
-                <th scope="col" className="px-2 md:px-4 py-3 sticky top-0 left-0 bg-slate-100 z-40 w-20 md:w-24 border border-slate-200 font-semibold text-slate-700">이름</th>
-                <th scope="col" className="px-2 md:px-4 py-3 sticky top-0 bg-slate-100 z-30 w-24 md:w-32 border border-slate-200 font-semibold text-slate-700">소그룹</th>
-                <th scope="col" className="px-2 py-3 sticky top-0 bg-slate-100 z-30 w-12 md:w-16 border border-slate-200 text-center font-semibold text-slate-700">구분</th>
+                <th scope="col" className="px-1 py-2.5 sticky top-0 left-0 bg-slate-100 dark:bg-slate-800 z-40 w-[98px] min-w-[98px] max-w-[98px] border border-slate-200 dark:border-slate-700 font-semibold text-slate-700 dark:text-slate-300 text-center text-xs">이름</th>
+                <th scope="col" className="hidden sm:table-cell px-1 py-2.5 sm:sticky top-0 sm:left-[98px] bg-slate-100 dark:bg-slate-800 sm:z-40 w-[80px] min-w-[80px] max-w-[80px] border border-slate-200 dark:border-slate-700 font-semibold text-slate-700 dark:text-slate-300 text-center text-xs">소그룹</th>
+                <th scope="col" className="px-1 py-2.5 sticky sm:sticky top-0 left-[98px] sm:left-[178px] bg-slate-100 dark:bg-slate-800 z-40 sm:z-40 w-[44px] min-w-[44px] max-w-[44px] border border-slate-200 dark:border-slate-700 text-center font-semibold text-slate-700 dark:text-slate-300 text-xs">구분</th>
                 {currentMonthSundays.map(date => (
-                  <th key={date} scope="col" className="px-1 md:px-2 py-3 sticky top-0 bg-slate-100 z-30 text-center border border-slate-200 min-w-[50px] font-semibold text-slate-600">
-                    <div className="flex flex-col items-center">
-                      <span>{date.substring(5)}</span>
+                  <th key={date} scope="col" className="px-1 py-2.5 sticky top-0 bg-slate-100 dark:bg-slate-800 z-30 text-center border border-slate-200 dark:border-slate-700 min-w-[48px] font-semibold text-slate-600 dark:text-slate-400">
+                    <div className="flex flex-col items-center leading-tight">
+                      <span className="text-[10px] md:text-xs">{date.substring(5)}</span>
                       {getEventName(date) && (
-                        <span className="text-[10px] text-slate-400 font-normal mt-1 truncate max-w-[50px]">{getEventName(date)}</span>
+                        <span className="text-[8px] text-slate-400 dark:text-slate-500 font-normal mt-0.5 truncate max-w-[44px]">{getEventName(date)}</span>
                       )}
                     </div>
                   </th>
                 ))}
-                <th scope="col" className="px-1 md:px-2 py-3 sticky top-0 bg-slate-100 z-30 text-center border border-slate-200 min-w-[40px] md:min-w-[50px] font-semibold text-slate-700">계</th>
+                <th scope="col" className="px-1 py-2.5 sticky top-0 right-0 bg-slate-100 dark:bg-slate-800 z-40 text-center border border-slate-200 dark:border-slate-700 w-[44px] min-w-[44px] max-w-[44px] font-semibold text-slate-700 dark:text-slate-300 text-xs">계</th>
               </tr>
 
               {/* Total Stats Rows */}
-              <tr className="bg-slate-50 border-b border-slate-200 normal-case">
-                <td rowSpan={3} className="px-2 md:px-4 py-2.5 font-bold text-slate-800 border border-slate-200 sticky left-0 bg-slate-100 z-40 text-center align-middle whitespace-nowrap w-20 md:w-24">전체</td>
-                <td rowSpan={3} className="px-2 md:px-4 py-2.5 border border-slate-200 bg-slate-50 text-center align-middle whitespace-nowrap text-xs text-slate-400 w-24 md:w-32">-</td>
-                <td className="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-bold text-blue-600 border border-slate-200 bg-blue-50/80 w-12 md:w-16">예배</td>
+              <tr className="bg-slate-50 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-700 normal-case">
+                <td rowSpan={3} className="px-1 py-2 font-bold text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 sticky left-0 bg-slate-100 dark:bg-slate-800 z-30 text-center align-middle whitespace-nowrap w-[98px] min-w-[98px] max-w-[98px] text-xs">전체</td>
+                <td rowSpan={3} className="hidden sm:table-cell px-1 py-2 border border-slate-200 dark:border-slate-700 sm:sticky sm:left-[98px] bg-slate-50 dark:bg-slate-900/20 sm:z-25 text-center align-middle whitespace-nowrap text-xs text-slate-400 dark:text-slate-500 w-[80px] min-w-[80px] max-w-[80px]">-</td>
+                <td className="px-1 py-1.5 text-center text-[10px] font-bold text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 bg-[#eff6ff] dark:bg-blue-950/20 sticky sm:sticky left-[98px] sm:left-[178px] z-25 sm:z-25 w-[44px] min-w-[44px] max-w-[44px]">예배</td>
                 {overallTotals.map(t => (
-                  <td key={`overall-worship-${t.date}`} className={`px-1 md:px-2 py-2 text-center border border-slate-200 font-bold text-slate-700 bg-slate-50/60 text-xs`}>
+                  <td key={`overall-worship-${t.date}`} className={`px-1 py-1.5 text-center border border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 bg-slate-50/60 dark:bg-slate-900/30 text-xs`}>
                     {t.worshipCanceled ? '-' : t.worshipCount}
                   </td>
                 ))}
-                <td className="px-1 md:px-2 py-2 text-center font-bold text-slate-700 border border-slate-200 bg-slate-100/90 text-xs">
+                <td className="px-1 py-1.5 text-center font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 bg-slate-100/90 dark:bg-slate-800/90 sticky right-0 z-30 text-xs w-[44px] min-w-[44px] max-w-[44px]">
                   {overallSums.worshipSum}
                 </td>
               </tr>
-              <tr className="bg-slate-50 border-b border-slate-200 normal-case">
-                <td className="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-bold text-indigo-600 border border-slate-200 bg-indigo-50/80 w-12 md:w-16">집회</td>
+              <tr className="bg-slate-50 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-700 normal-case">
+                <td className="px-1 py-1.5 text-center text-[10px] font-bold text-indigo-600 dark:text-indigo-400 border border-slate-200 dark:border-slate-700 bg-[#e0e7ff] dark:bg-indigo-950/20 sticky sm:sticky left-[98px] sm:left-[178px] z-25 sm:z-25 w-[44px] min-w-[44px] max-w-[44px]">집회</td>
                 {overallTotals.map(t => (
-                  <td key={`overall-gathering-${t.date}`} className={`px-1 md:px-2 py-2 text-center border border-slate-200 font-bold text-slate-700 bg-slate-50/60 text-xs`}>
+                  <td key={`overall-gathering-${t.date}`} className={`px-1 py-1.5 text-center border border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 bg-slate-50/60 dark:bg-slate-900/30 text-xs`}>
                     {t.gatheringCanceled ? '-' : (
                       <>
                         {t.gatheringCount}
                         {t.isManualCount && (
-                          <span className="text-[9px] text-slate-400 block font-normal normal-case leading-none mt-0.5">(계수)</span>
+                          <span className="text-[8px] text-slate-400 dark:text-slate-500 block font-normal normal-case leading-none mt-0.5">(계수)</span>
                         )}
                       </>
                     )}
                   </td>
                 ))}
-                <td className="px-1 md:px-2 py-2 text-center font-bold text-slate-700 border border-slate-200 bg-slate-100/90 text-xs">
+                <td className="px-1 py-1.5 text-center font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 bg-slate-100/90 dark:bg-slate-800/90 sticky right-0 z-30 text-xs w-[44px] min-w-[44px] max-w-[44px]">
                   {overallSums.gatheringSum}
                 </td>
               </tr>
-              <tr className="bg-slate-50 border-b-2 border-slate-200 normal-case">
-                <td className="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-bold text-emerald-600 border border-slate-200 bg-emerald-50/80 w-12 md:w-16">울</td>
+              <tr className="bg-slate-50 dark:bg-slate-900/40 border-b-2 border-slate-200 dark:border-slate-700 normal-case">
+                <td className="px-1 py-1.5 text-center text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-slate-200 dark:border-slate-700 bg-[#ecfdf5] dark:bg-emerald-950/20 sticky sm:sticky left-[98px] sm:left-[178px] z-25 sm:z-25 w-[44px] min-w-[44px] max-w-[44px]">울</td>
                 {overallTotals.map(t => (
-                  <td key={`overall-wool-${t.date}`} className={`px-1 md:px-2 py-2 text-center border border-slate-200 font-bold text-slate-700 bg-slate-50/60 text-xs`}>
+                  <td key={`overall-wool-${t.date}`} className={`px-1 py-1.5 text-center border border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 bg-slate-50/60 dark:bg-slate-900/30 text-xs`}>
                     {t.woolCanceled ? '-' : t.woolCount}
                   </td>
                 ))}
-                <td className="px-1 md:px-2 py-2 text-center font-bold text-slate-700 border border-slate-200 bg-slate-100/90 text-xs">
+                <td className="px-1 py-1.5 text-center font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 bg-slate-100/90 dark:bg-slate-800/90 sticky right-0 z-30 text-xs w-[44px] min-w-[44px] max-w-[44px]">
                   {overallSums.woolSum}
                 </td>
               </tr>
@@ -281,63 +382,72 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({ members, records, m
               {sortedMembers.map((member, mIdx) => (
                 <React.Fragment key={member.id}>
                   {/* Row 1: Worship */}
-                  <tr className="bg-white border-b border-slate-200 hover:bg-slate-50/40 transition-colors">
-                    <td rowSpan={3} className={`px-2 md:px-4 py-3 font-medium text-slate-900 sticky left-0 z-10 border border-slate-200 ${mIdx % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'} group relative`}>
-                      <div className="flex items-center gap-2">
-                         {member.photoUrl ? (
-                           <img src={member.photoUrl} alt={member.name} className="w-6 h-6 md:w-8 md:h-8 rounded-full object-cover border border-slate-200" referrerPolicy="no-referrer" />
-                         ) : (
-                           <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-slate-200 flex items-center justify-center text-[10px] md:text-xs text-slate-500 font-bold border border-slate-300 shrink-0">
-                             {member.name.substring(0, 1)}
-                           </div>
-                         )}
-                         <span className="cursor-default decoration-dotted underline underline-offset-4 decoration-slate-300 whitespace-nowrap">{member.name}</span>
+                  <tr className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/40 dark:hover:bg-slate-800/30 transition-colors">
+                    <td rowSpan={3} className={`px-1 py-2 font-medium text-slate-900 dark:text-slate-100 sticky left-0 z-30 border border-slate-200 dark:border-slate-700 ${mIdx % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-[#fafafa] dark:bg-slate-900/60'} group relative w-[98px] min-w-[98px] max-w-[98px]`}>
+                      <div className="flex flex-col items-start gap-0.5 min-w-0">
+                        <div 
+                          onClick={() => navigate('/profile', { state: { memberId: member.id } })}
+                          className="flex items-center gap-1 min-w-0 w-full cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 group/name"
+                        >
+                           {member.photoUrl ? (
+                             <img src={member.photoUrl} alt={member.name} className="w-4 h-4 md:w-5 md:h-5 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0 group-hover/name:border-indigo-400" referrerPolicy="no-referrer" />
+                           ) : (
+                             <div className="w-4 h-4 md:w-5 md:h-5 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-[8px] text-slate-500 dark:text-slate-400 font-bold border border-slate-300 dark:border-slate-700 shrink-0 group-hover/name:border-indigo-400">
+                               {member.name.substring(0, 1)}
+                             </div>
+                           )}
+                           <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap group-hover/name:underline" title={member.name}>{member.name}</span>
+                        </div>
+                        {/* Mobile-only group display under the name */}
+                        <span className="block sm:hidden text-[9px] text-slate-400 dark:text-slate-500 font-medium truncate max-w-full pl-5" title={member.group}>
+                          {member.group}
+                        </span>
                       </div>
                       
                       {/* Modern Tooltip for Memo - Adjusted for mobile position */}
                       {member.specialNotes && (
                         <div className="hidden sm:block absolute left-full top-0 ml-2 w-56 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-                           <div className="bg-slate-800 text-white text-xs rounded-lg py-2 px-3 shadow-xl">
-                              <div className="flex items-center gap-1.5 mb-1 text-slate-300 font-bold border-b border-slate-600 pb-1">
-                                 <MessageSquare size={10} /> 비고 (Memo)
-                              </div>
-                              <p className="leading-relaxed">{member.specialNotes}</p>
-                              {/* Arrow */}
-                              <div className="absolute top-4 -left-1 w-2 h-2 bg-slate-800 transform rotate-45"></div>
-                           </div>
+                            <div className="bg-slate-850 dark:bg-slate-800 text-white text-xs rounded-lg py-2 px-3 shadow-xl border border-slate-750 dark:border-slate-700">
+                               <div className="flex items-center gap-1.5 mb-1 text-slate-300 font-bold border-b border-slate-700 pb-1">
+                                  <MessageSquare size={10} /> 비고 (Memo)
+                                </div>
+                                <p className="leading-relaxed text-slate-200">{member.specialNotes}</p>
+                                {/* Arrow */}
+                                <div className="absolute top-4 -left-1 w-2 h-2 bg-slate-850 dark:bg-slate-800 transform rotate-45"></div>
+                            </div>
                         </div>
                       )}
                     </td>
-                    <td rowSpan={3} className="px-2 md:px-4 py-3 border border-slate-200">
-                      <div className="font-semibold text-slate-700 text-xs md:text-sm">{member.group}</div>
+                    <td rowSpan={3} className={`hidden sm:table-cell px-1 py-2 border border-slate-200 dark:border-slate-700 sm:sticky sm:left-[98px] sm:z-25 ${mIdx % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-[#fafafa] dark:bg-slate-900/60'} w-[80px] min-w-[80px] max-w-[80px] text-center`}>
+                      <div className="font-semibold text-slate-700 dark:text-slate-300 text-[10px] md:text-xs truncate" title={member.group}>{member.group}</div>
                     </td>
-                    <td className="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-bold text-blue-600 border border-slate-200 bg-blue-50">예배</td>
+                    <td className={`px-1 py-1.5 text-center text-[10px] font-bold text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 bg-[#eff6ff] dark:bg-blue-950/20 sticky sm:sticky left-[98px] sm:left-[178px] z-25 sm:z-25 w-[44px] min-w-[44px] max-w-[44px]`}>예배</td>
                     {currentMonthSundays.map(date => 
-                      renderCell(member.id, date, AttendanceType.Worship, 'text-blue-600', 'hover:bg-blue-50')
+                      renderCell(member.id, date, AttendanceType.Worship, 'text-blue-600 dark:text-blue-400', 'hover:bg-blue-50 dark:hover:bg-blue-950/20')
                     )}
-                    <td className="px-1 md:px-2 py-2 text-center font-bold text-slate-700 border border-slate-200 bg-slate-50">
+                    <td className={`px-1 py-1.5 text-center font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 sticky right-0 z-20 w-[44px] min-w-[44px] max-w-[44px] text-xs`}>
                       {calculateTotal(member.id, AttendanceType.Worship)}
                     </td>
                   </tr>
                   
                   {/* Row 2: Gathering */}
-                  <tr className="bg-white border-b hover:bg-slate-50">
-                    <td className="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-bold text-indigo-600 border border-slate-200 bg-indigo-50">집회</td>
+                  <tr className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/40 dark:hover:bg-slate-800/30 transition-colors">
+                    <td className={`px-1 py-1.5 text-center text-[10px] font-bold text-indigo-600 dark:text-indigo-400 border border-slate-200 dark:border-slate-700 bg-[#e0e7ff] dark:bg-indigo-950/20 sticky sm:sticky left-[98px] sm:left-[178px] z-25 sm:z-25 w-[44px] min-w-[44px] max-w-[44px]`}>집회</td>
                     {currentMonthSundays.map(date => 
-                      renderCell(member.id, date, AttendanceType.Gathering, 'text-indigo-600', 'hover:bg-indigo-50')
+                      renderCell(member.id, date, AttendanceType.Gathering, 'text-indigo-600 dark:text-indigo-400', 'hover:bg-indigo-50 dark:hover:bg-indigo-950/20')
                     )}
-                    <td className="px-1 md:px-2 py-2 text-center font-bold text-slate-700 border border-slate-200 bg-slate-50">
+                    <td className={`px-1 py-1.5 text-center font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 sticky right-0 z-20 w-[44px] min-w-[44px] max-w-[44px] text-xs`}>
                       {calculateTotal(member.id, AttendanceType.Gathering)}
                     </td>
                   </tr>
 
                   {/* Row 3: Wool */}
-                  <tr className="bg-white border-b hover:bg-slate-50">
-                    <td className="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-bold text-emerald-600 border border-slate-200 bg-emerald-50">울</td>
+                  <tr className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 hover:bg-slate-50/40 dark:hover:bg-slate-800/30 transition-colors">
+                    <td className={`px-1 py-1.5 text-center text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-slate-200 dark:border-slate-700 bg-[#ecfdf5] dark:bg-emerald-950/20 sticky sm:sticky left-[98px] sm:left-[178px] z-25 sm:z-25 w-[44px] min-w-[44px] max-w-[44px]`}>울</td>
                     {currentMonthSundays.map(date => 
-                      renderCell(member.id, date, AttendanceType.Wool, 'text-emerald-600', 'hover:bg-emerald-50')
+                      renderCell(member.id, date, AttendanceType.Wool, 'text-emerald-600 dark:text-emerald-400', 'hover:bg-emerald-50 dark:hover:bg-emerald-950/20')
                     )}
-                    <td className="px-1 md:px-2 py-2 text-center font-bold text-slate-700 border border-slate-200 bg-slate-50">
+                    <td className={`px-1 py-1.5 text-center font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 sticky right-0 z-20 w-[44px] min-w-[44px] max-w-[44px] text-xs`}>
                       {calculateTotal(member.id, AttendanceType.Wool)}
                     </td>
                   </tr>

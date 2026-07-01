@@ -1,7 +1,22 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
+@theme {
+  --font-sans: "Inter", "Noto Sans KR", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Plus Jakarta Sans", "Noto Sans KR", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
 body {
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: var(--font-sans);
+  background-color: #fafbfc;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.dark body {
+  background-color: #030712;
+  color: #f8fafc;
 }
 
 /* Custom scrollbar for tables */
@@ -12,10 +27,89 @@ body {
 .custom-scrollbar::-webkit-scrollbar-track {
   background: #f1f5f9;
 }
+.dark .custom-scrollbar::-webkit-scrollbar-track {
+  background: #1e293b;
+}
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 4px;
 }
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #475569;
+}
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+.dark .recharts-default-tooltip {
+  background-color: #0f172a !important; /* slate-900 */
+  border: 1px solid #1e293b !important; /* slate-800 */
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3) !important;
+}
+
+.dark .recharts-tooltip-label {
+  color: #f8fafc !important; /* slate-50 */
+}
+
+.dark .recharts-tooltip-item {
+  color: #e2e8f0 !important; /* slate-200 */
+}
+
+/* --- Global Dark Mode Theme Overrides --- */
+.dark .bg-white {
+  background-color: #0f172a !important; /* slate-900 */
+}
+.dark .bg-slate-50 {
+  background-color: #0b0f19 !important; /* slate-900/950 mix */
+}
+.dark .bg-slate-100 {
+  background-color: #1e293b !important; /* slate-800 */
+}
+.dark .border-slate-100,
+.dark .border-slate-200,
+.dark .border-slate-300 {
+  border-color: #1e293b !important; /* slate-800 */
+}
+.dark .text-slate-900,
+.dark .text-slate-800 {
+  color: #f8fafc !important; /* slate-50 */
+}
+.dark .text-slate-700 {
+  color: #cbd5e1 !important; /* slate-300 */
+}
+.dark .text-slate-600,
+.dark .text-slate-500 {
+  color: #94a3b8 !important; /* slate-400 */
+}
+.dark .text-slate-400 {
+  color: #64748b !important; /* slate-500 */
+}
+.dark input, 
+.dark select, 
+.dark textarea {
+  background-color: #020617 !important; /* slate-950 */
+  color: #f8fafc !important;
+  border-color: #334155 !important; /* slate-700 */
+}
+.dark select option {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+}
+.dark .divide-slate-100 > * + * {
+  border-color: #1e293b !important;
+}
+.dark .divide-slate-200 > * + * {
+  border-color: #1e293b !important;
+}
+/* Ensure highlights and specific colored elements stay readable */
+.dark .bg-amber-100 {
+  background-color: rgba(251, 191, 36, 0.2) !important;
+  color: #fef08a !important;
+}
+.dark .bg-indigo-50\/30 {
+  background-color: rgba(99, 102, 241, 0.1) !important;
+}
+.dark .border-indigo-200 {
+  border-color: rgba(99, 102, 241, 0.3) !important;
+}
+
+
