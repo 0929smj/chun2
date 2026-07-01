@@ -432,7 +432,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
       </div>
 
       {/* Segmented Sub Tabs Navigation */}
-      <div className="flex bg-slate-100/60 dark:bg-slate-950/40 p-0.5 rounded-lg border border-slate-200/40 dark:border-slate-800/80 max-w-xs sm:max-w-md shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+      <div className="mx-auto w-full max-w-sm sm:max-w-lg flex bg-slate-100/60 dark:bg-slate-950/40 p-1 rounded-xl border border-slate-200/40 dark:border-slate-800/80 shadow-[0_2px_10px_rgba(0,0,0,0.02)] mb-1.5">
         <button
           onClick={() => {
             setActiveSubTab('entry');
@@ -440,31 +440,31 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
               setEditingVisitation(null);
             }
           }}
-          className={`flex-1 flex items-center justify-center gap-1 py-1 px-2.5 rounded-md text-[10px] sm:text-xs font-bold transition-all duration-300 cursor-pointer ${
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 sm:py-2.5 px-4 rounded-lg text-xs sm:text-sm font-bold transition-all duration-300 cursor-pointer ${
             activeSubTab === 'entry' && !editingVisitation
               ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-[0_2px_8px_rgba(0,0,0,0.04)] scale-[1.01]'
               : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
           }`}
         >
-          <Edit3 size={11} className={activeSubTab === 'entry' && !editingVisitation ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'} />
+          <Edit3 size={14} className={activeSubTab === 'entry' && !editingVisitation ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'} />
           심방 입력
         </button>
         <button
           onClick={() => setActiveSubTab('management')}
-          className={`flex-1 flex items-center justify-center gap-1 py-1 px-2.5 rounded-md text-[10px] sm:text-xs font-bold transition-all duration-300 cursor-pointer ${
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 sm:py-2.5 px-4 rounded-lg text-xs sm:text-sm font-bold transition-all duration-300 cursor-pointer ${
             activeSubTab === 'management'
               ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-[0_2px_8px_rgba(0,0,0,0.04)] scale-[1.01]'
               : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
           }`}
         >
-          <List size={11} className={activeSubTab === 'management' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'} />
+          <List size={14} className={activeSubTab === 'management' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'} />
           심방 목록
         </button>
         {editingVisitation && (
           <button
-            className="flex-1 flex items-center justify-center gap-1 py-1 px-2.5 rounded-md text-[10px] sm:text-xs font-bold bg-amber-500 text-white shadow-[0_2px_8px_rgba(245,158,11,0.2)] animate-pulse"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 sm:py-2.5 px-4 rounded-lg text-xs sm:text-sm font-bold bg-amber-500 text-white shadow-[0_2px_8px_rgba(245,158,11,0.2)] animate-pulse"
           >
-            <Edit2 size={10} />
+            <Edit2 size={13} />
             수정 ({memberMap[formMemberId]?.name || ''})
           </button>
         )}
@@ -479,39 +479,54 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
             {/* LEFT SIDE: DYNAMIC PROFILE SYNC CARD (성도 선택시에만 렌더링) */}
             {formMemberId && (
               <div className="lg:col-span-5 space-y-3 animate-fadeIn">
-                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/60 dark:border-slate-800 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02)] p-4 space-y-4 transition-all duration-300">
-                  <div className="flex items-center gap-3">
-                    {memberMap[formMemberId]?.photoUrl ? (
-                      <img
-                        src={memberMap[formMemberId]?.photoUrl}
-                        alt={memberMap[formMemberId]?.name}
-                        referrerPolicy="no-referrer"
-                        className="w-12 h-12 rounded-xl object-cover border border-indigo-100 dark:border-indigo-950 ring-2 ring-indigo-50/50 dark:ring-indigo-950/20"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl flex items-center justify-center text-indigo-600 dark:text-indigo-400 text-sm font-bold border border-indigo-100/50 dark:border-indigo-900/30">
-                        {memberMap[formMemberId]?.name?.substring(0, 2)}
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/60 dark:border-slate-800 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02)] p-4 space-y-4 transition-all duration-300 relative">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      {memberMap[formMemberId]?.photoUrl ? (
+                        <img
+                          src={memberMap[formMemberId]?.photoUrl}
+                          alt={memberMap[formMemberId]?.name}
+                          referrerPolicy="no-referrer"
+                          className="w-12 h-12 rounded-xl object-cover border border-indigo-100 dark:border-indigo-950 ring-2 ring-indigo-50/50 dark:ring-indigo-950/20 shrink-0"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl flex items-center justify-center text-indigo-600 dark:text-indigo-400 text-sm font-bold border border-indigo-100/50 dark:border-indigo-900/30 shrink-0">
+                          {memberMap[formMemberId]?.name?.substring(0, 2)}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h4 
+                            onClick={() => navigate('/profile', { state: { memberId: formMemberId } })}
+                            className="text-base font-bold text-slate-950 dark:text-slate-50 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer hover:underline truncate"
+                          >
+                            {memberMap[formMemberId]?.name}
+                          </h4>
+                          <span className="text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.2 rounded shrink-0">
+                            {memberMap[formMemberId]?.group}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.2 truncate">
+                          {memberMap[formMemberId]?.role || '성도'} • {memberMap[formMemberId]?.gender === 'MALE' ? '형제' : '자매'}
+                        </p>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono truncate">
+                          {memberMap[formMemberId]?.phone || '연락처 없음'}
+                        </p>
                       </div>
-                    )}
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <h4 
-                          onClick={() => navigate('/profile', { state: { memberId: formMemberId } })}
-                          className="text-base font-bold text-slate-950 dark:text-slate-50 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer hover:underline"
-                        >
-                          {memberMap[formMemberId]?.name}
-                        </h4>
-                        <span className="text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.2 rounded">
-                          {memberMap[formMemberId]?.group}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.2">
-                        {memberMap[formMemberId]?.role || '성도'} • {memberMap[formMemberId]?.gender === 'MALE' ? '형제' : '자매'}
-                      </p>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-                        {memberMap[formMemberId]?.phone || '연락처 없음'}
-                      </p>
                     </div>
+                    {/* deselect member button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormMemberId('');
+                        setMemberSearchQuery('');
+                        setSelectedFormGroup('');
+                      }}
+                      className="text-slate-400 dark:text-slate-500 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 p-1.5 rounded-full transition-all shrink-0 cursor-pointer"
+                      title="선택 취소"
+                    >
+                      <X size={16} />
+                    </button>
                   </div>
 
                   <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-3">
@@ -575,34 +590,9 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
 
             <form onSubmit={handleSubmit} className="space-y-3">
               {/* Target Member Selector */}
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">대상 성도 선택</label>
-                {formMemberId ? (
-                  <div className="bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 rounded-2xl p-3.5 flex items-center justify-between animate-fadeIn">
-                    <div className="flex items-center gap-2">
-                      <span 
-                        onClick={() => navigate('/profile', { state: { memberId: formMemberId } })}
-                        className="font-bold text-indigo-900 dark:text-indigo-300 text-sm hover:underline cursor-pointer"
-                      >
-                        {memberMap[formMemberId]?.name}
-                      </span>
-                      <span className="text-[11px] text-indigo-500 dark:text-indigo-400 font-medium bg-indigo-100/50 dark:bg-indigo-950/80 px-2 py-0.5 rounded-md">
-                        {memberMap[formMemberId]?.group} • {memberMap[formMemberId]?.role}
-                      </span>
-                    </div>
-                    <button 
-                      type="button" 
-                      onClick={() => {
-                        setFormMemberId('');
-                        setMemberSearchQuery('');
-                        setSelectedFormGroup('');
-                      }}
-                      className="text-indigo-400 hover:text-rose-500 p-1.5 rounded-full hover:bg-white dark:hover:bg-slate-900 transition-colors shadow-sm"
-                    >
-                      <X size={15} />
-                    </button>
-                  </div>
-                ) : (
+              {!formMemberId && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">대상 성도 선택</label>
                   <div className="space-y-2.5">
                     {/* Selection Mode Toggle */}
                     <div className="flex bg-slate-100/80 dark:bg-slate-800/60 p-1 rounded-xl border border-slate-200/60 dark:border-slate-800">
@@ -725,13 +715,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                               ))
                             )}
                           </div>
-                        ) : (
-                          <div className="animate-fadeIn">
-                            <p className="text-[11px] text-slate-400 dark:text-slate-500 text-center py-2.5 bg-slate-50/50 dark:bg-slate-950/20 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 animate-fadeIn">
-                              이름을 입력하면 실시간 지능형 매칭 결과가 명단에 표기됩니다.
-                            </p>
-                          </div>
-                        )}
+                        ) : null}
                       </div>
                     ) : (
                       <div className="space-y-1.5 animate-fadeIn">
@@ -789,27 +773,27 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                       </div>
                     )}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Date & Type Selection */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-0.5">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                <div className="space-y-1 min-w-0">
                   <label className="block text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">심방 일자</label>
                   <input
                     type="date"
                     required
                     value={formDate}
                     onChange={(e) => setFormDate(e.target.value)}
-                    className="w-full p-2 border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                    className="w-full h-10 px-2 sm:px-3 py-2 border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 rounded-xl text-[11px] sm:text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-slate-800 dark:text-slate-200 min-w-0"
                   />
                 </div>
-                <div className="space-y-0.5">
+                <div className="space-y-1 min-w-0">
                   <label className="block text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">심방 구분</label>
                   <select
                     value={formType}
                     onChange={(e) => setFormType(e.target.value)}
-                    className="w-full p-2 border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none cursor-pointer text-slate-800 dark:text-slate-200"
+                    className="w-full h-10 px-2 sm:px-3 py-2 border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 rounded-xl text-[11px] sm:text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none cursor-pointer text-slate-800 dark:text-slate-200 min-w-0"
                   >
                     {VISITATION_TYPES.map(t => (
                       <option key={t} value={t}>{t}</option>
@@ -845,7 +829,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                   placeholder="예: 강남구 역삼동, 교회 소예배실, 성도 가정 등"
                   value={formPlace}
                   onChange={(e) => setFormPlace(e.target.value)}
-                  className="w-full p-2 border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                  className="w-full h-10 px-3 py-2 border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-slate-800 dark:text-slate-200"
                 />
                 {gpsError && (
                   <p className="text-[9px] text-rose-500 flex items-center gap-1 font-medium mt-0.5 animate-fadeIn">
