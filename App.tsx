@@ -490,6 +490,9 @@ const App: React.FC = () => {
                   onAddVisitation={handleAddVisitation}
                   onUpdateVisitation={handleUpdateVisitation}
                   onDeleteVisitation={handleDeleteVisitation}
+                  records={records}
+                  meetingStatus={meetingStatus}
+                  prayerRecords={prayerRecords}
                 />
               ) : (
                 <Navigate to="/" replace />

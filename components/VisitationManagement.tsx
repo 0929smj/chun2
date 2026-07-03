@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Member, Visitation } from '../types';
+import { Member, Visitation, AttendanceRecord, PrayerRecord, AttendanceType, MeetingStatus } from '../types';
+import { SUNDAYS_2026 } from '../services/mockData';
 import { Plus, Search, Calendar, MapPin, Heart, Clipboard, Trash2, Edit2, Edit3, List, X, Filter, Sparkles, Phone, MessageSquare, AlertCircle, ChevronLeft, ChevronRight, Home, Activity, UserPlus, Network } from 'lucide-react';
 import { runUniversalSearch, runVisitationSearch } from '../services/searchAlgorithm';
 
@@ -52,6 +53,9 @@ interface VisitationManagementProps {
   onAddVisitation: (visitation: Omit<Visitation, 'visitationId' | 'submittedAt'>) => void;
   onUpdateVisitation: (visitation: Visitation) => void;
   onDeleteVisitation: (visitationId: string) => void;
+  records?: AttendanceRecord[];
+  meetingStatus?: MeetingStatus[];
+  prayerRecords?: PrayerRecord[];
 }
 
 const VisitationManagement: React.FC<VisitationManagementProps> = ({
@@ -62,7 +66,10 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
   usingMock,
   onAddVisitation,
   onUpdateVisitation,
-  onDeleteVisitation
+  onDeleteVisitation,
+  records = [],
+  meetingStatus = [],
+  prayerRecords = []
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -164,6 +171,70 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
     });
     return map;
   }, [members]);
+
+  // Target member for form stats calculation
+  const targetMemberForStats = useMemo(() => {
+    if (formMemberId) {
+      return memberMap[formMemberId] || null;
+    }
+    return null;
+  }, [formMemberId, memberMap]);
+
+  // Calculate statistics for selected member in the form
+  const formMemberStats = useMemo(() => {
+    if (!targetMemberForStats) return null;
+
+    const now = new Date();
+    const targetDate = now.getFullYear() >= 2026 ? now : new Date(2026, now.getMonth(), now.getDate()); 
+    const y = targetDate.getFullYear();
+    const m = String(targetDate.getMonth() + 1).padStart(2, '0');
+    const dVal = String(targetDate.getDate()).padStart(2, '0');
+    const comparisonDateStr = `${y}-${m}-${dVal}`;
+
+    let passedSundays = SUNDAYS_2026.filter(d => d <= comparisonDateStr);
+    
+    const regDate = targetMemberForStats.MemberRegistration || (targetMemberForStats as any).registrationDate;
+    if (regDate) {
+      let normReg = String(regDate).trim();
+      if (/^\d{4}$/.test(normReg)) {
+        normReg = `${normReg}-01-01`;
+      } else if (/^\d{4}-\d{2}$/.test(normReg)) {
+        normReg = `${normReg}-01`;
+      }
+      passedSundays = passedSundays.filter(d => d >= normReg);
+    }
+
+    let possibleWorship = 0;
+    let possibleGathering = 0;
+    let possibleWool = 0;
+
+    passedSundays.forEach(date => {
+      const wCanceled = meetingStatus.some(s => s.date === date && s.type === AttendanceType.Worship && s.isCanceled);
+      const gCanceled = meetingStatus.some(s => s.date === date && s.type === AttendanceType.Gathering && s.isCanceled);
+      const lCanceled = meetingStatus.some(s => s.date === date && s.type === AttendanceType.Wool && s.isCanceled);
+
+      if (!wCanceled) possibleWorship++;
+      if (!gCanceled) possibleGathering++;
+      if (!lCanceled) possibleWool++;
+    });
+
+    const myRecords = records.filter(r => r.memberId === targetMemberForStats.id && passedSundays.includes(r.date));
+    
+    const worshipCount = myRecords.filter(r => r.types.includes(AttendanceType.Worship)).length;
+    const gatheringCount = myRecords.filter(r => r.types.includes(AttendanceType.Gathering)).length;
+    const woolCount = myRecords.filter(r => r.types.includes(AttendanceType.Wool)).length;
+    
+    const prayerCount = prayerRecords.filter(r => r.memberId === targetMemberForStats.id).length;
+
+    const calcRate = (count: number, total: number) => total === 0 ? 0 : Math.round((count / total) * 100);
+
+    return {
+      worshipRate: calcRate(worshipCount, possibleWorship),
+      gatheringRate: calcRate(gatheringCount, possibleGathering),
+      woolRate: calcRate(woolCount, possibleWool),
+      prayerCount
+    };
+  }, [targetMemberForStats, records, prayerRecords, meetingStatus]);
 
   // Geolocation lookup & reverse geocoding to Korea "Gu Dong" format
   const fetchCurrentLocationAddress = () => {
@@ -530,6 +601,30 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                   </div>
 
                   <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-3">
+                    {formMemberStats && (
+                      <div>
+                        <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold tracking-wider block mb-1.5">출석률 및 활동 요약</span>
+                        <div className="grid grid-cols-4 gap-2 text-center">
+                          <div className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100/50 dark:border-blue-900/30 p-2 rounded-xl">
+                            <span className="text-[9px] text-blue-500 dark:text-blue-400 font-bold block mb-0.5">예배</span>
+                            <span className="text-xs font-extrabold text-blue-700 dark:text-blue-300">{formMemberStats.worshipRate}%</span>
+                          </div>
+                          <div className="bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100/50 dark:border-indigo-900/30 p-2 rounded-xl">
+                            <span className="text-[9px] text-indigo-500 dark:text-indigo-400 font-bold block mb-0.5">집회</span>
+                            <span className="text-xs font-extrabold text-indigo-700 dark:text-indigo-300">{formMemberStats.gatheringRate}%</span>
+                          </div>
+                          <div className="bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100/50 dark:border-emerald-900/30 p-2 rounded-xl">
+                            <span className="text-[9px] text-emerald-500 dark:text-emerald-400 font-bold block mb-0.5">울모임</span>
+                            <span className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">{formMemberStats.woolRate}%</span>
+                          </div>
+                          <div className="bg-amber-50/50 dark:bg-amber-950/20 border border-amber-100/50 dark:border-amber-900/30 p-2 rounded-xl">
+                            <span className="text-[9px] text-amber-500 dark:text-amber-400 font-bold block mb-0.5">기도제목</span>
+                            <span className="text-xs font-extrabold text-amber-700 dark:text-amber-300">{formMemberStats.prayerCount}건</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div>
                       <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold tracking-wider block mb-0.5">성도 특이사항</span>
                       <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed bg-slate-50 dark:bg-slate-950/20 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800/80">
