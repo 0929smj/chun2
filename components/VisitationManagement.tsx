@@ -4,6 +4,7 @@ import { Member, Visitation, AttendanceRecord, PrayerRecord, AttendanceType, Mee
 import { SUNDAYS_2026 } from '../services/mockData';
 import { Plus, Search, Calendar, MapPin, Heart, Clipboard, Trash2, Edit2, Edit3, List, X, Filter, Sparkles, Phone, MessageSquare, AlertCircle, ChevronLeft, ChevronRight, Home, Activity, UserPlus, Network } from 'lucide-react';
 import { runUniversalSearch, runVisitationSearch } from '../services/searchAlgorithm';
+import { hasActualPrayerContent, parsePrayerRequests } from '../services/utils';
 
 const escapeRegExp = (string: string) => {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -75,13 +76,31 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
   const location = useLocation();
   const wasEditingRef = useRef(false);
 
+  // Helper to load state from sessionStorage
+  const loadSessionState = <T,>(key: string, defaultValue: T): T => {
+    try {
+      const stored = sessionStorage.getItem(key);
+      if (stored !== null) {
+        return JSON.parse(stored) as T;
+      }
+    } catch (e) {
+      console.warn("Failed to parse sessionStorage key:", key, e);
+    }
+    return defaultValue;
+  };
+
   // UI states
-  const [activeSubTab, setActiveSubTab] = useState<'entry' | 'management'>('entry');
+  const [activeSubTab, setActiveSubTab] = useState<'entry' | 'management'>(() => loadSessionState<'entry' | 'management'>('visitation_activeSubTab', 'entry'));
   const [editingVisitation, setEditingVisitation] = useState<Visitation | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedGroup, setSelectedGroup] = useState('ALL');
-  const [selectedType, setSelectedType] = useState('ALL');
+  const [searchTerm, setSearchTerm] = useState(() => loadSessionState<string>('visitation_searchTerm', ''));
+  const [selectedGroup, setSelectedGroup] = useState(() => loadSessionState<string>('visitation_selectedGroup', 'ALL'));
+  const [selectedType, setSelectedType] = useState(() => loadSessionState<string>('visitation_selectedType', 'ALL'));
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Sorting & Priority States
+  const [sortBy, setSortBy] = useState<'latest' | 'oldest' | 'priority'>(() => loadSessionState<'latest' | 'oldest' | 'priority'>('visitation_sortBy', 'latest'));
+  const [priorityFilter, setPriorityFilter] = useState<'ALL' | 'attendance' | 'prayer' | 'longTime'>(() => loadSessionState<'ALL' | 'attendance' | 'prayer' | 'longTime'>('visitation_priorityFilter', 'ALL'));
+  const [showPriorityRecommend, setShowPriorityRecommend] = useState(() => loadSessionState<boolean>('visitation_showPriorityRecommend', true));
 
   // GPS states
   const [gpsLoading, setGpsLoading] = useState(false);
@@ -102,10 +121,51 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
   const [selectedFormGroup, setSelectedFormGroup] = useState<string>('');
 
   // Calendar Filter states
-  const [selectedFilterDate, setSelectedFilterDate] = useState<string>('');
+  const [selectedFilterDate, setSelectedFilterDate] = useState<string>(() => loadSessionState<string>('visitation_selectedFilterDate', ''));
   const [isCalendarFilterOpen, setIsCalendarFilterOpen] = useState(false);
-  const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
-  const [calendarMonth, setCalendarMonth] = useState(() => new Date().getMonth() + 1);
+  const [calendarYear, setCalendarYear] = useState(() => loadSessionState<number>('visitation_calendarYear', new Date().getFullYear()));
+  const [calendarMonth, setCalendarMonth] = useState(() => loadSessionState<number>('visitation_calendarMonth', new Date().getMonth() + 1));
+
+  // Save states to sessionStorage on change
+  useEffect(() => {
+    sessionStorage.setItem('visitation_activeSubTab', JSON.stringify(activeSubTab));
+  }, [activeSubTab]);
+
+  useEffect(() => {
+    sessionStorage.setItem('visitation_searchTerm', JSON.stringify(searchTerm));
+  }, [searchTerm]);
+
+  useEffect(() => {
+    sessionStorage.setItem('visitation_selectedGroup', JSON.stringify(selectedGroup));
+  }, [selectedGroup]);
+
+  useEffect(() => {
+    sessionStorage.setItem('visitation_selectedType', JSON.stringify(selectedType));
+  }, [selectedType]);
+
+  useEffect(() => {
+    sessionStorage.setItem('visitation_sortBy', JSON.stringify(sortBy));
+  }, [sortBy]);
+
+  useEffect(() => {
+    sessionStorage.setItem('visitation_priorityFilter', JSON.stringify(priorityFilter));
+  }, [priorityFilter]);
+
+  useEffect(() => {
+    sessionStorage.setItem('visitation_showPriorityRecommend', JSON.stringify(showPriorityRecommend));
+  }, [showPriorityRecommend]);
+
+  useEffect(() => {
+    sessionStorage.setItem('visitation_selectedFilterDate', JSON.stringify(selectedFilterDate));
+  }, [selectedFilterDate]);
+
+  useEffect(() => {
+    sessionStorage.setItem('visitation_calendarYear', JSON.stringify(calendarYear));
+  }, [calendarYear]);
+
+  useEffect(() => {
+    sessionStorage.setItem('visitation_calendarMonth', JSON.stringify(calendarMonth));
+  }, [calendarMonth]);
 
   // Handle incoming selection state from OrganizationChart
   useEffect(() => {
@@ -444,6 +504,201 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
     setActiveSubTab('management');
   };
 
+  // Cache attendance rate for all members based on last 4 Sundays
+  const attendanceRateMap = useMemo(() => {
+    const now = new Date();
+    const todayStr = now.toISOString().substring(0, 10);
+    const passedSundays = SUNDAYS_2026.filter(d => d <= todayStr).slice(-4);
+    
+    const map: Record<string, number> = {};
+    members.forEach(member => {
+      let attendanceCount = 0;
+      let totalExpected = 0;
+      passedSundays.forEach(sunday => {
+        const isWorshipCanceled = meetingStatus.some(s => s.date === sunday && s.type === AttendanceType.Worship && s.isCanceled);
+        if (isWorshipCanceled) return;
+
+        const record = records.find(r => r.memberId === member.id && r.date === sunday);
+        totalExpected++;
+        if (record && record.types && record.types.length > 0) {
+          attendanceCount++;
+        }
+      });
+      map[member.id] = totalExpected > 0 ? (attendanceCount / totalExpected) * 100 : 100;
+    });
+    return map;
+  }, [members, records, meetingStatus]);
+
+  // Cache detailed attendance rates (Worship, Gathering, Wool) for all members matching IndividualProfile's stats calculation
+  const detailedAttendanceRateMap = useMemo(() => {
+    const now = new Date();
+    const targetDate = now.getFullYear() >= 2026 ? now : new Date(2026, now.getMonth(), now.getDate()); 
+    const y = targetDate.getFullYear();
+    const m = String(targetDate.getMonth() + 1).padStart(2, '0');
+    const dVal = String(targetDate.getDate()).padStart(2, '0');
+    const comparisonDateStr = `${y}-${m}-${dVal}`;
+    
+    const map: Record<string, { worship: number; gathering: number; wool: number }> = {};
+    members.forEach(member => {
+      let memberSundays = SUNDAYS_2026.filter(d => d <= comparisonDateStr);
+
+      const regDate = member.MemberRegistration || (member as any).registrationDate;
+      if (regDate) {
+        let normReg = String(regDate).trim();
+        if (/^\d{4}$/.test(normReg)) {
+          normReg = `${normReg}-01-01`;
+        } else if (/^\d{4}-\d{2}$/.test(normReg)) {
+          normReg = `${normReg}-01`;
+        }
+        memberSundays = memberSundays.filter(d => d >= normReg);
+      }
+
+      let worshipCount = 0;
+      let worshipExpected = 0;
+      let gatheringCount = 0;
+      let gatheringExpected = 0;
+      let woolCount = 0;
+      let woolExpected = 0;
+
+      const myRecords = records.filter(r => r.memberId === member.id && memberSundays.includes(r.date));
+
+      memberSundays.forEach(sunday => {
+        // Worship
+        const isWorshipCanceled = meetingStatus.some(s => s.date === sunday && s.type === AttendanceType.Worship && s.isCanceled);
+        if (!isWorshipCanceled) {
+          worshipExpected++;
+        }
+
+        // Gathering
+        const isGatheringCanceled = meetingStatus.some(s => s.date === sunday && s.type === AttendanceType.Gathering && s.isCanceled);
+        if (!isGatheringCanceled) {
+          gatheringExpected++;
+        }
+
+        // Wool
+        const isWoolCanceled = meetingStatus.some(s => s.date === sunday && s.type === AttendanceType.Wool && s.isCanceled);
+        if (!isWoolCanceled) {
+          woolExpected++;
+        }
+      });
+
+      const wCount = myRecords.filter(r => r.types.includes(AttendanceType.Worship)).length;
+      const gCount = myRecords.filter(r => r.types.includes(AttendanceType.Gathering)).length;
+      const wmcCount = myRecords.filter(r => r.types.includes(AttendanceType.Wool)).length;
+
+      map[member.id] = {
+        worship: worshipExpected === 0 ? 0 : Math.round((wCount / worshipExpected) * 100),
+        gathering: gatheringExpected === 0 ? 0 : Math.round((gCount / gatheringExpected) * 100),
+        wool: woolExpected === 0 ? 0 : Math.round((wmcCount / woolExpected) * 100)
+      };
+    });
+    return map;
+  }, [members, records, meetingStatus]);
+
+  // Compute priority scores for all active members based on attendance rate, interval since last visit, and prayer request updates
+  const memberPriorityScores = useMemo(() => {
+    const now = new Date();
+    const todayStr = now.toISOString().substring(0, 10);
+    // Get recent 4 Sundays from SUNDAYS_2026
+    const passedSundays = SUNDAYS_2026.filter(d => d <= todayStr).slice(-4);
+
+    // Get last visitation for each member
+    const lastVisitationMap: Record<string, Visitation> = {};
+    visitations.forEach(v => {
+      const existing = lastVisitationMap[v.memberId];
+      if (!existing || new Date(v.date) > new Date(existing.date)) {
+        lastVisitationMap[v.memberId] = v;
+      }
+    });
+
+    return members
+      .filter(m => m.status !== 'INACTIVE')
+      .map(member => {
+        let score = 0;
+        const reasons: string[] = [];
+        
+        // 1) Attendance Rate (Last 4 Sundays)
+        let attendanceCount = 0;
+        let totalExpected = 0;
+        passedSundays.forEach(sunday => {
+          // Check if meeting was canceled on that day
+          const isWorshipCanceled = meetingStatus.some(s => s.date === sunday && s.type === AttendanceType.Worship && s.isCanceled);
+          if (isWorshipCanceled) return;
+
+          const record = records.find(r => r.memberId === member.id && r.date === sunday);
+          totalExpected++;
+          if (record && record.types && record.types.length > 0) {
+            attendanceCount++;
+          }
+        });
+
+        const attendanceRate = totalExpected > 0 ? (attendanceCount / totalExpected) * 100 : 100;
+        let hasAttendanceIssue = false;
+        if (totalExpected > 0) {
+          if (attendanceCount === 0) {
+            score += 50;
+            reasons.push('최근 4주 연속 결석 (출석률 0%)');
+            hasAttendanceIssue = true;
+          } else if (attendanceRate <= 25) {
+            score += 35;
+            reasons.push(`최근 출석률 극히 저조 (${attendanceRate.toFixed(0)}%)`);
+            hasAttendanceIssue = true;
+          } else if (attendanceRate <= 50) {
+            score += 20;
+            reasons.push(`최근 출석률 저조 (${attendanceRate.toFixed(0)}%)`);
+            hasAttendanceIssue = true;
+          }
+        }
+
+        // 2) Interval since last visitation
+        const lastVis = lastVisitationMap[member.id];
+        let hasIntervalIssue = false;
+        if (!lastVis) {
+          score += 40;
+          reasons.push('등록 후 심방 기록 없음');
+          hasIntervalIssue = true;
+        } else {
+          const daysSinceLastVis = Math.floor((now.getTime() - new Date(lastVis.date).getTime()) / (1000 * 60 * 60 * 24));
+          if (daysSinceLastVis >= 180) {
+            score += 30;
+            reasons.push(`마지막 심방 후 6개월 경과 (${daysSinceLastVis}일 전)`);
+            hasIntervalIssue = true;
+          } else if (daysSinceLastVis >= 90) {
+            score += 15;
+            reasons.push(`마지막 심방 후 3개월 경과 (${daysSinceLastVis}일 전)`);
+            hasIntervalIssue = true;
+          }
+        }
+
+        // 3) Recent prayer request update (last 14 days)
+        const myPrayers = prayerRecords.filter(p => p.memberId === member.id);
+        let hasRecentPrayerUpdate = false;
+        myPrayers.forEach(p => {
+          const pDate = new Date(p.date);
+          const diffDays = Math.floor((now.getTime() - pDate.getTime()) / (1000 * 60 * 60 * 24));
+          if (diffDays <= 14) {
+            hasRecentPrayerUpdate = true;
+          }
+        });
+        if (hasRecentPrayerUpdate) {
+          score += 25;
+          reasons.push('최근 2주 내 기도제목 업데이트됨');
+        }
+
+        return {
+          member,
+          score,
+          reasons,
+          attendanceRate,
+          lastVisitationDate: lastVis ? lastVis.date : null,
+          hasAttendanceIssue,
+          hasIntervalIssue,
+          hasRecentPrayerUpdate
+        };
+      })
+      .sort((a, b) => b.score - a.score);
+  }, [members, visitations, records, prayerRecords, meetingStatus]);
+
   // List filtered by other search parameters, excluding selectedType (for accurate stats counting)
   const baseFilteredVisitations = useMemo(() => {
     const results = runVisitationSearch(
@@ -457,9 +712,9 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
     return results.map(r => r.visitation);
   }, [visitations, memberMap, searchTerm, selectedGroup, selectedFilterDate]);
 
-  // Filter visitations for the list
+  // Filter and sort visitations for the list
   const filteredVisitations = useMemo(() => {
-    const results = runVisitationSearch(
+    const searchResults = runVisitationSearch(
       visitations,
       memberMap,
       searchTerm,
@@ -467,8 +722,49 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
       selectedType,
       selectedFilterDate
     );
-    return results.map(r => r.visitation);
-  }, [visitations, memberMap, searchTerm, selectedGroup, selectedType, selectedFilterDate]);
+
+    let resultsWithScore = [...searchResults];
+
+    // Apply priority filters if any
+    if (priorityFilter !== 'ALL') {
+      resultsWithScore = resultsWithScore.filter(item => {
+        const v = item.visitation;
+        const pScore = memberPriorityScores.find(p => p.member.id === v.memberId);
+        if (!pScore) return false;
+        if (priorityFilter === 'attendance') return pScore.hasAttendanceIssue;
+        if (priorityFilter === 'prayer') return pScore.hasRecentPrayerUpdate;
+        if (priorityFilter === 'longTime') return pScore.hasIntervalIssue;
+        return true;
+      });
+    }
+
+    // Apply sorting
+    resultsWithScore.sort((a, b) => {
+      // 1. If there is a search term, prioritize search relevance score first
+      if (searchTerm.trim()) {
+        if (Math.abs(b.score - a.score) > 0.001) {
+          return b.score - a.score;
+        }
+      }
+
+      // 2. Secondary sorting based on selected sortBy option
+      if (sortBy === 'latest') {
+        return new Date(b.visitation.date).getTime() - new Date(a.visitation.date).getTime();
+      } else if (sortBy === 'oldest') {
+        return new Date(a.visitation.date).getTime() - new Date(b.visitation.date).getTime();
+      } else if (sortBy === 'priority') {
+        const scoreA = memberPriorityScores.find(p => p.member.id === a.visitation.memberId)?.score || 0;
+        const scoreB = memberPriorityScores.find(p => p.member.id === b.visitation.memberId)?.score || 0;
+        if (scoreA !== scoreB) {
+          return scoreB - scoreA;
+        }
+        return new Date(b.visitation.date).getTime() - new Date(a.visitation.date).getTime();
+      }
+      return 0;
+    });
+
+    return resultsWithScore.map(r => r.visitation);
+  }, [visitations, memberMap, searchTerm, selectedGroup, selectedType, selectedFilterDate, sortBy, priorityFilter, memberPriorityScores]);
 
   // Statistics with 8 fully separated categories
   const stats = useMemo(() => {
@@ -941,7 +1237,6 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                   rows={3}
                   placeholder="이야기 나눈 삶의 고민, 신앙 상태 변화 및 양육 내용을 요약 기록해 주세요."
                   value={formDetails}
-                  required
                   onChange={(e) => setFormDetails(e.target.value)}
                   className="w-full p-2 border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all leading-relaxed"
                 />
@@ -1339,7 +1634,110 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
+
+              {/* Sorting Filter */}
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="flex-1 sm:flex-initial border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 text-[11px] sm:text-xs text-slate-700 dark:text-slate-300 outline-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 font-bold"
+              >
+                <option value="latest">최신 등록순</option>
+                <option value="oldest">과거 등록순</option>
+                <option value="priority">🔥 심방 시급성 높은순</option>
+              </select>
+
+              {/* Priority Status Filter */}
+              <select
+                value={priorityFilter}
+                onChange={(e) => setPriorityFilter(e.target.value as any)}
+                className="flex-1 sm:flex-initial border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 text-[11px] sm:text-xs text-slate-700 dark:text-slate-300 outline-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700"
+              >
+                <option value="ALL">모든 우선순위 상태</option>
+                <option value="attendance">🚨 최근 출석률 저조</option>
+                <option value="prayer">💬 기도제목 최근 등록/변경</option>
+                <option value="longTime">⏳ 미심방 오랜 기간 경과</option>
+              </select>
             </div>
+          </div>
+
+          {/* 심방 우선순위 추천 대시보드 */}
+          <div className="bg-indigo-50/25 dark:bg-slate-900/25 rounded-3xl border border-indigo-100/30 dark:border-slate-800/60 p-4 sm:p-5 mb-4 sm:mb-6">
+            <div className="flex items-center justify-between border-b border-indigo-100/40 dark:border-slate-800 pb-2.5 mb-3.5">
+              <div className="flex items-center gap-2">
+                <Sparkles className="text-indigo-500 fill-indigo-100 dark:fill-indigo-950/20" size={15} />
+                <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-slate-50">
+                  실시간 심방 우선순위 추천 리스트
+                </h3>
+                <span className="text-[9px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold px-2 py-0.5 rounded-full border border-indigo-500/20">
+                  우선순위 분석
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPriorityRecommend(!showPriorityRecommend)}
+                className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold cursor-pointer"
+              >
+                {showPriorityRecommend ? '접기' : '더보기'}
+              </button>
+            </div>
+
+            {showPriorityRecommend && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {memberPriorityScores.slice(0, 4).map(({ member, score, reasons, attendanceRate, lastVisitationDate }) => (
+                  <div
+                    key={member.id}
+                    className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 rounded-2xl p-3.5 flex flex-col justify-between hover:border-indigo-200 dark:hover:border-indigo-800/80 hover:shadow-sm transition-all duration-300"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-slate-900 dark:text-slate-100">{member.name}</span>
+                          <span className="text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.2 rounded font-medium">
+                            {member.group}
+                          </span>
+                        </div>
+                        <span className="text-[9px] font-extrabold text-rose-500 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-full border border-rose-100/50 dark:border-rose-900/25">
+                          우선 지수: {score}점
+                        </span>
+                      </div>
+
+                      {/* Reasons list */}
+                      <div className="space-y-1">
+                        {reasons.map((r, i) => (
+                          <div key={i} className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
+                            <span className="w-1 h-1 rounded-full bg-indigo-400 shrink-0" />
+                            <span className="truncate">{r}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 pt-2 border-t border-slate-50 dark:border-slate-850">
+                        <span>최근 출석률: <strong className={attendanceRate <= 50 ? "text-rose-500 font-bold" : "font-semibold text-slate-600 dark:text-slate-300"}>{attendanceRate.toFixed(0)}%</strong></span>
+                        <span>마지막 심방: <strong className="font-semibold text-slate-600 dark:text-slate-300">{lastVisitationDate ? lastVisitationDate : '없음'}</strong></span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveSubTab('entry');
+                        setFormMemberId(member.id);
+                        setMemberSearchQuery(member.name);
+                        const target = members.find(m => m.id === member.id);
+                        if (target) {
+                          setSelectedFormGroup(target.group || '');
+                        }
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className="mt-3.5 w-full py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-950/30 dark:hover:bg-indigo-950/60 dark:text-indigo-400 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer border border-indigo-100/30 dark:border-indigo-900/20"
+                    >
+                      <Heart size={10} className="fill-indigo-100 dark:fill-indigo-950/20 text-indigo-600 dark:text-indigo-400" />
+                      이 성도 심방하기
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Main List */}
@@ -1357,109 +1755,157 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
+              <div className="columns-1 md:columns-2 lg:columns-3 xl:columns-4 gap-4 sm:gap-6 space-y-4 md:space-y-0">
                 {filteredVisitations.map((v) => {
                   const member = memberMap[v.memberId];
                   return (
                     <div 
                       key={v.visitationId} 
-                      className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-sm border border-slate-200/60 dark:border-slate-800 hover:border-indigo-100 dark:hover:border-indigo-950 hover:shadow-md transition-all duration-300 overflow-hidden flex flex-col justify-between text-xs"
+                      className="inline-block w-full break-inside-avoid mb-4 sm:mb-6 bg-white dark:bg-slate-900 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.01)] border border-slate-200/65 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-800 hover:shadow-md transition-all duration-300 overflow-hidden text-xs"
                     >
-                      <div className="p-4 sm:p-6">
-                        <div className="flex items-start justify-between gap-3 sm:gap-4 mb-3.5">
-                          <div className="flex items-start gap-2.5 sm:gap-3.5 min-w-0 group">
+                      <div className="p-4 flex flex-col gap-3">
+                        {/* Header: Member Profile Info & Visitation Type Badge & Actions */}
+                        <div className="flex items-center justify-between gap-2.5 border-b border-slate-100 dark:border-slate-800/60 pb-2">
+                          {/* Left: Profile & Name & Attendance Rate */}
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
                             {member?.photoUrl ? (
                               <img
                                 src={member.photoUrl}
                                 alt={member.name}
                                 referrerPolicy="no-referrer"
-                                className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl object-cover border border-slate-200 dark:border-slate-800 flex-shrink-0 transition-transform duration-300 group-hover:scale-105"
+                                className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-800 flex-shrink-0"
                               />
                             ) : (
-                              <div className="w-10 h-10 sm:w-11 sm:h-11 bg-indigo-50/60 dark:bg-indigo-950/40 rounded-xl sm:rounded-2xl flex items-center justify-center text-indigo-700 dark:text-indigo-400 font-extrabold border border-indigo-100/50 dark:border-indigo-900/30 flex-shrink-0">
+                              <div className="w-8 h-8 bg-indigo-50/60 dark:bg-indigo-950/40 rounded-full flex items-center justify-center text-indigo-700 dark:text-indigo-400 font-extrabold border border-indigo-100/50 dark:border-indigo-900/30 flex-shrink-0 text-[10px]">
                                 {member?.name?.substring(0, 2)}
                               </div>
                             )}
                             <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <div className="flex items-center gap-1 flex-wrap">
                                 <span 
                                   onClick={() => navigate('/profile', { state: { memberId: member?.id } })}
-                                  className="font-extrabold text-slate-950 dark:text-slate-50 text-sm sm:text-base cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline tracking-tight"
+                                  className="font-extrabold text-slate-950 dark:text-slate-50 text-xs sm:text-sm cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline tracking-tight"
                                 >
                                   {renderHighlightedText(member?.name || '', searchTerm)}
                                 </span>
-                                <span className="text-[9px] sm:text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1.5 sm:px-2 py-0.5 rounded-md font-bold whitespace-nowrap">
-                                  {member?.group} • {member?.role}
+                                <span className="text-[9px] text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">
+                                  ({member?.group})
                                 </span>
                               </div>
-                              <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-3 gap-y-1 text-[10px] sm:text-[11px] text-slate-400 dark:text-slate-500 mt-1 sm:mt-1.5 min-w-0 font-medium">
-                                <span className="flex items-center gap-1 whitespace-nowrap">
-                                  <Calendar size={12} className="text-slate-300 dark:text-slate-700" /> 
-                                  {v.date}
-                                </span>
-                                <span className="hidden sm:inline text-slate-200 dark:text-slate-800">•</span>
-                                <span className="flex items-center gap-1 min-w-0" title={v.place}>
-                                  <MapPin size={12} className="text-slate-300 dark:text-slate-700 flex-shrink-0" /> 
-                                  <span className="truncate">{renderHighlightedText(v.place || '장소 없음', searchTerm)}</span>
-                                </span>
+                              <div className="text-[9px] text-slate-400 dark:text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-0.5 leading-none">
+                                {(() => {
+                                  const rates = detailedAttendanceRateMap[member?.id || ''] || { worship: 100, gathering: 100, wool: 100 };
+                                  return (
+                                    <div className="flex flex-wrap items-center gap-x-1 font-medium whitespace-nowrap">
+                                      <span className="flex items-center gap-0.5">
+                                        <span>예배</span>
+                                        <span className={rates.worship <= 50 ? "text-rose-500 font-extrabold" : "text-slate-600 dark:text-slate-300 font-semibold"}>
+                                          {rates.worship.toFixed(0)}%
+                                        </span>
+                                      </span>
+                                      <span className="text-slate-300 dark:text-slate-700 font-normal">·</span>
+                                      <span className="flex items-center gap-0.5">
+                                        <span>집회</span>
+                                        <span className={rates.gathering <= 50 ? "text-rose-500 font-extrabold" : "text-slate-600 dark:text-slate-300 font-semibold"}>
+                                          {rates.gathering.toFixed(0)}%
+                                        </span>
+                                      </span>
+                                      <span className="text-slate-300 dark:text-slate-700 font-normal">·</span>
+                                      <span className="flex items-center gap-0.5">
+                                        <span>울</span>
+                                        <span className={rates.wool <= 50 ? "text-rose-500 font-extrabold" : "text-slate-600 dark:text-slate-300 font-semibold"}>
+                                          {rates.wool.toFixed(0)}%
+                                        </span>
+                                      </span>
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             </div>
                           </div>
-                          
-                          <span className={`text-[9px] sm:text-[10px] font-bold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full whitespace-nowrap flex-shrink-0 shadow-sm border ${
-                            v.visitationType === '대면심방' || v.visitationType === '가정방문'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30'
-                              : v.visitationType === '전화심방'
-                              ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30'
-                              : v.visitationType === 'SNS심방'
-                              ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/20 dark:text-purple-400 dark:border-purple-900/30'
-                              : 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
-                          }`}>
-                            {v.visitationType}
-                          </span>
+
+                          {/* Middle: Visitation Date & Place */}
+                          <div className="flex flex-col items-center justify-center text-center shrink-0 border-l border-r border-slate-100 dark:border-slate-800/60 px-2.5 min-w-[85px]">
+                            <div className="text-[10px] font-bold text-slate-600 dark:text-slate-400 flex items-center gap-0.5 whitespace-nowrap">
+                              <Calendar size={10} className="text-slate-300 dark:text-slate-700 flex-shrink-0" />
+                              {v.date}
+                            </div>
+                            {v.place ? (
+                              <div className="text-[9px] text-slate-400 dark:text-slate-500 flex items-center gap-0.5 max-w-[80px] truncate mt-0.5" title={v.place}>
+                                <MapPin size={9} className="text-slate-300 dark:text-slate-700 flex-shrink-0" />
+                                <span className="truncate">{renderHighlightedText(v.place, searchTerm)}</span>
+                              </div>
+                            ) : (
+                              <div className="text-[9px] text-slate-300 dark:text-slate-600 italic mt-0.5">
+                                장소 미지정
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Right: Badge & Action Buttons */}
+                          <div className="flex flex-col items-end gap-1.5 shrink-0">
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full shadow-sm border whitespace-nowrap ${
+                              v.visitationType === '대면심방' || v.visitationType === '가정방문'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30'
+                                : v.visitationType === '전화심방'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30'
+                                : v.visitationType === 'SNS심방'
+                                ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/20 dark:text-purple-400 dark:border-purple-900/30'
+                                : 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                            }`}>
+                              {v.visitationType}
+                            </span>
+                            
+                            <div className="flex items-center gap-1 bg-slate-50/80 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 p-0.5 rounded-lg">
+                              <button
+                                onClick={() => {
+                                  setEditingVisitation(v);
+                                  setActiveSubTab('entry');
+                                }}
+                                className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-0.5 rounded hover:bg-white dark:hover:bg-slate-800 transition-all cursor-pointer"
+                                title="수정"
+                              >
+                                <Edit2 size={10} />
+                              </button>
+                              <button
+                                onClick={() => setDeleteConfirmId(v.visitationId)}
+                                className="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 p-0.5 rounded hover:bg-white dark:hover:bg-slate-800 transition-all cursor-pointer"
+                                title="삭제"
+                              >
+                                <Trash2 size={10} />
+                              </button>
+                            </div>
+                          </div>
                         </div>
 
-                        <div className="space-y-2.5 sm:space-y-3 pt-2.5 sm:pt-3 border-t border-slate-100 dark:border-slate-800/80">
-                          <div>
-                            <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 font-bold tracking-wider block mb-0.5 sm:mb-1">심방 상세 내용</span>
-                            <p className="text-slate-700 dark:text-slate-300 text-xs whitespace-pre-wrap leading-relaxed bg-slate-50/50 dark:bg-slate-950/20 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-slate-100 dark:border-slate-800/60">
-                              {renderHighlightedText(v.details || '(내용 없음)', searchTerm)}
-                            </p>
+                        {/* Body: Details & Prayer Requests */}
+                        <div className="space-y-2 flex-1">
+                          <div className="text-slate-700 dark:text-slate-300 text-xs whitespace-pre-wrap leading-relaxed bg-slate-50/40 dark:bg-slate-950/20 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/60">
+                            {renderHighlightedText(v.details || '(내용 없음)', searchTerm)}
                           </div>
-                          {v.prayerRequests && (
-                            <div>
-                              <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 font-bold tracking-wider block mb-0.5 sm:mb-1">나눈 기도제목</span>
-                              <div className="text-indigo-950 dark:text-indigo-200 bg-indigo-50/20 dark:bg-indigo-950/20 border border-indigo-100/30 dark:border-indigo-900/20 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl whitespace-pre-wrap leading-relaxed font-semibold flex items-start gap-1.5">
-                                <span className="text-sm leading-none">🙏</span>
-                                <p className="text-xs">{renderHighlightedText(v.prayerRequests, searchTerm)}</p>
+                          {hasActualPrayerContent(v.prayerRequests) && (
+                            <div className="text-indigo-950 dark:text-indigo-200 bg-indigo-50/15 dark:bg-indigo-950/20 border border-indigo-100/20 dark:border-indigo-900/20 p-2.5 rounded-xl flex items-start gap-1.5 font-medium">
+                              <span className="text-xs leading-none shrink-0 mt-0.5">🙏</span>
+                              <div className="flex-1 space-y-0.5 text-xs leading-snug">
+                                {parsePrayerRequests(v.prayerRequests).map((line, idx) => {
+                                  if (!line.text && !line.marker) return null;
+                                  if (line.marker) {
+                                    return (
+                                      <div key={idx} className="flex items-start gap-1 leading-snug">
+                                        <span className="font-bold text-indigo-600 dark:text-indigo-400 shrink-0 min-w-[14px]">{line.marker}</span>
+                                        <span className="flex-1 text-slate-700 dark:text-slate-300">{renderHighlightedText(line.text, searchTerm)}</span>
+                                      </div>
+                                    );
+                                  }
+                                  return (
+                                    <div key={idx} className="text-slate-700 dark:text-slate-300 leading-snug">
+                                      {renderHighlightedText(line.text, searchTerm)}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           )}
-                        </div>
-                      </div>
-
-                      <div className="bg-slate-50/80 dark:bg-slate-950/40 px-4 sm:px-6 py-2.5 sm:py-3 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between text-[10px]">
-                        <span className="text-slate-400 dark:text-slate-500 font-medium">
-                          등록일자: {new Date(v.submittedAt).toLocaleDateString('ko-KR')}
-                        </span>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              setEditingVisitation(v);
-                              setActiveSubTab('entry');
-                            }}
-                            className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition-all cursor-pointer"
-                            title="수정"
-                          >
-                            <Edit2 size={13} />
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirmId(v.visitationId)}
-                            className="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 p-1.5 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition-all cursor-pointer"
-                            title="삭제"
-                          >
-                            <Trash2 size={13} />
-                          </button>
                         </div>
                       </div>
                     </div>

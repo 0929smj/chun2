@@ -48,8 +48,27 @@ interface Edge {
 const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records, meetingStatus }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [focusedGroup, setFocusedGroup] = useState<string | null>(null);
+
+  // Helper to load state from sessionStorage
+  const loadSessionState = <T,>(key: string, defaultValue: T): T => {
+    try {
+      const stored = sessionStorage.getItem(key);
+      if (stored !== null) {
+        return JSON.parse(stored) as T;
+      }
+    } catch (e) {
+      console.warn("Failed to parse sessionStorage key:", key, e);
+    }
+    return defaultValue;
+  };
+
+  const [focusedGroup, setFocusedGroup] = useState<string | null>(() => loadSessionState<string | null>('org_focusedGroup', null));
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
+
+  // Sync state to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem('org_focusedGroup', JSON.stringify(focusedGroup));
+  }, [focusedGroup]);
   
   // Check if we are in visitation selection mode
   const selectingForVisitation = location.state?.selectingForVisitation || false;

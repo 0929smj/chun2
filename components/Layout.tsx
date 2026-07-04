@@ -27,18 +27,18 @@ const Layout: React.FC<LayoutProps> = ({ children, isVisitationMode = false }) =
   return (
     <div className="flex h-screen bg-[#fafbfc] dark:bg-slate-950 overflow-hidden font-sans antialiased text-slate-800 dark:text-slate-100">
       {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 w-full z-40 flex items-center justify-between bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-6 py-4 shadow-sm/50">
-        <div className="flex items-center space-x-2.5">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-md shadow-indigo-100 dark:shadow-none">
+      <div className="lg:hidden fixed top-0 w-full z-40 flex items-center justify-between bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800/85 px-4 py-2.5 shadow-xs">
+        <div className="flex items-center space-x-2">
+          <div className="w-7 h-7 rounded-md bg-indigo-600 flex items-center justify-center text-white font-extrabold text-xs shadow-sm">
             소
           </div>
-          <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">소그룹 출석부</h1>
+          <h1 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">소그룹 출석부</h1>
         </div>
         <button 
           onClick={toggleSidebar}
-          className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white active:scale-95 transition-all cursor-pointer border border-slate-100 dark:border-slate-800"
+          className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white active:scale-95 transition-all cursor-pointer border border-slate-100 dark:border-slate-800/60"
         >
-          {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+          {isSidebarOpen ? <X size={16} /> : <Menu size={16} />}
         </button>
       </div>
 
@@ -75,21 +75,21 @@ const Layout: React.FC<LayoutProps> = ({ children, isVisitationMode = false }) =
           </div>
 
           {/* Navigation Links */}
-          <nav className="p-4 space-y-1.5 overflow-y-auto">
+          <nav className="p-3.5 space-y-1 overflow-y-auto">
             {navItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 onClick={() => setIsSidebarOpen(false)}
                 className={({ isActive }) =>
-                  `flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 cursor-pointer text-sm font-medium ${
+                  `flex items-center space-x-2.5 px-3 py-2 rounded-lg transition-all duration-150 cursor-pointer text-xs font-medium ${
                     isActive
-                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/30 font-semibold'
-                      : 'text-slate-400 hover:bg-slate-800/60 hover:text-white'
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/20 font-semibold'
+                      : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
                   }`
                 }
               >
-                <item.icon size={18} className="flex-shrink-0" />
+                <item.icon size={16} className="flex-shrink-0" />
                 <span>{item.label}</span>
               </NavLink>
             ))}
@@ -97,14 +97,14 @@ const Layout: React.FC<LayoutProps> = ({ children, isVisitationMode = false }) =
         </div>
 
         {/* Sidebar Footer */}
-        <div className="p-5 border-t border-slate-800 text-center text-[11px] text-slate-500 font-medium">
+        <div className="p-4 border-t border-slate-850 text-center text-[10px] text-slate-500 font-medium">
           © 2026 소그룹 출석 관리 시스템
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className={`flex-1 pt-16 lg:pt-0 w-full relative flex flex-col ${isOrgPage ? 'h-screen lg:h-full overflow-hidden' : 'overflow-auto'}`}>
-        <div className={`mx-auto w-full flex-1 flex flex-col ${isOrgPage ? 'max-w-none p-4 lg:p-6 overflow-hidden' : 'p-4 sm:p-6 lg:p-8 xl:p-10 max-w-[1600px] gap-6'}`}>
+      <main className={`flex-1 pt-14 lg:pt-0 w-full relative flex flex-col ${isOrgPage ? 'h-screen lg:h-full overflow-hidden' : 'overflow-auto'}`}>
+        <div className={`mx-auto w-full flex-1 flex flex-col ${isOrgPage ? 'max-w-none p-3 lg:p-4 overflow-hidden' : 'p-3 sm:p-4 lg:p-5 max-w-[1600px] gap-4'}`}>
           {children}
         </div>
       </main>

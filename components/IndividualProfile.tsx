@@ -17,7 +17,8 @@ interface IndividualProfileProps {
   onUpdateVisitation?: (visitation: Visitation) => void;
 }
 
-import { runUniversalSearch } from '../services/searchAlgorithm';
+import { runUniversalSearch, isChoseong, getSingleChoseong } from '../services/searchAlgorithm';
+import { hasActualPrayerContent, parsePrayerRequests } from '../services/utils';
 
 interface IndividualProfileProps {
   members: Member[];
@@ -38,8 +39,36 @@ interface SearchResultItem {
   matchedSnippet: string;
 }
 
-const escapeRegExp = (string: string) => {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const getMatchedIndices = (text: string, query: string): Set<number> => {
+  const matched = new Set<number>();
+  const q = query.normalize('NFC').toLowerCase().replace(/\s+/g, '');
+  if (!q) return matched;
+
+  let qIdx = 0;
+  for (let tIdx = 0; tIdx < text.length; tIdx++) {
+    const tChar = text.charAt(tIdx).toLowerCase();
+    if (tChar === ' ') continue;
+    
+    const qChar = q.charAt(qIdx);
+    
+    let isMatch = false;
+    if (qChar === tChar) {
+      isMatch = true;
+    } else if (isChoseong(qChar)) {
+      if (getSingleChoseong(tChar) === getSingleChoseong(qChar)) {
+        isMatch = true;
+      }
+    }
+    
+    if (isMatch) {
+      matched.add(tIdx);
+      qIdx++;
+      if (qIdx === q.length) {
+        break;
+      }
+    }
+  }
+  return matched;
 };
 
 const renderHighlightedText = (text: string, query: string) => {
@@ -48,33 +77,51 @@ const renderHighlightedText = (text: string, query: string) => {
   if (!trimmed) {
     return <span>{text}</span>;
   }
-  
-  const tokens = trimmed.split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) {
+
+  const matchedIndices = getMatchedIndices(text, query);
+  if (matchedIndices.size === 0) {
     return <span>{text}</span>;
   }
 
-  const escapedTokens = tokens
-    .map(t => escapeRegExp(t))
-    .sort((a, b) => b.length - a.length);
-  
-  const pattern = `(${escapedTokens.join('|')})`;
-  const regex = new RegExp(pattern, 'gi');
-  const parts = text.split(regex);
-  
-  return (
-    <span>
-      {parts.map((part, i) => 
-        regex.test(part) ? (
+  const elements: React.ReactNode[] = [];
+  let currentGroup = '';
+  let isGroupHighlighted = matchedIndices.has(0);
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text.charAt(i);
+    const isCharHighlighted = matchedIndices.has(i);
+
+    if (isCharHighlighted === isGroupHighlighted) {
+      currentGroup += char;
+    } else {
+      if (isGroupHighlighted) {
+        elements.push(
           <mark key={i} className="bg-amber-100 text-amber-950 font-semibold px-0.5 rounded border-b border-amber-300">
-            {part}
+            {currentGroup}
           </mark>
-        ) : (
-          part
-        )
-      )}
-    </span>
-  );
+        );
+      } else {
+        elements.push(<span key={i}>{currentGroup}</span>);
+      }
+      currentGroup = char;
+      isGroupHighlighted = isCharHighlighted;
+    }
+  }
+
+  if (currentGroup) {
+    const key = text.length;
+    if (isGroupHighlighted) {
+      elements.push(
+        <mark key={key} className="bg-amber-100 text-amber-950 font-semibold px-0.5 rounded border-b border-amber-300">
+          {currentGroup}
+        </mark>
+      );
+    } else {
+      elements.push(<span key={key}>{currentGroup}</span>);
+    }
+  }
+
+  return <span>{elements}</span>;
 };
 
 const IndividualProfile: React.FC<IndividualProfileProps> = ({ 
@@ -89,10 +136,37 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
   onUpdateVisitation
 }) => {
   const location = useLocation();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedGroup, setSelectedGroup] = useState('');
-  const [selectedMemberId, setSelectedMemberId] = useState('');
+
+  // Helper to load state from sessionStorage
+  const loadSessionState = <T,>(key: string, defaultValue: T): T => {
+    try {
+      const stored = sessionStorage.getItem(key);
+      if (stored !== null) {
+        return JSON.parse(stored) as T;
+      }
+    } catch (e) {
+      console.warn("Failed to parse sessionStorage key:", key, e);
+    }
+    return defaultValue;
+  };
+
+  const [searchQuery, setSearchQuery] = useState(() => loadSessionState<string>('profile_searchQuery', ''));
+  const [selectedGroup, setSelectedGroup] = useState(() => loadSessionState<string>('profile_selectedGroup', ''));
+  const [selectedMemberId, setSelectedMemberId] = useState(() => loadSessionState<string>('profile_selectedMemberId', ''));
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+
+  // Sync state to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem('profile_searchQuery', JSON.stringify(searchQuery));
+  }, [searchQuery]);
+
+  useEffect(() => {
+    sessionStorage.setItem('profile_selectedGroup', JSON.stringify(selectedGroup));
+  }, [selectedGroup]);
+
+  useEffect(() => {
+    sessionStorage.setItem('profile_selectedMemberId', JSON.stringify(selectedMemberId));
+  }, [selectedMemberId]);
 
   // Filtered members and match details for universal autocomplete search
   const searchFilteredMembers = useMemo(() => {
@@ -810,9 +884,27 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                                    <MapPin size={12} className="text-slate-400" /> {v.place}
                                  </div>
                                  <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{v.details}</p>
-                                 {v.prayerRequests && (
-                                    <div className="mt-2 text-indigo-900 bg-indigo-50/50 border border-indigo-100/70 p-2.5 rounded text-xs leading-relaxed">
-                                      🙏 {v.prayerRequests}
+                                 {hasActualPrayerContent(v.prayerRequests) && (
+                                    <div className="mt-2 text-indigo-900 bg-indigo-50/50 border border-indigo-100/70 p-2.5 rounded-lg flex items-start gap-1.5 text-xs leading-snug">
+                                      <span className="shrink-0 mt-0.5">🙏</span>
+                                      <div className="flex-1 space-y-0.5">
+                                        {parsePrayerRequests(v.prayerRequests).map((line, idx) => {
+                                          if (!line.text && !line.marker) return null;
+                                          if (line.marker) {
+                                            return (
+                                              <div key={idx} className="flex items-start gap-1 leading-snug">
+                                                <span className="font-bold text-indigo-600 shrink-0 min-w-[14px]">{line.marker}</span>
+                                                <span className="flex-1 text-slate-700">{line.text}</span>
+                                              </div>
+                                            );
+                                          }
+                                          return (
+                                            <div key={idx} className="text-slate-700 leading-snug">
+                                              {line.text}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
                                     </div>
                                  )}
                               </div>
@@ -958,80 +1050,73 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
               </div>
             </div>
 
-            {/* Unified Profile & Stats Box */}
-            <div className="grid grid-cols-12 gap-3 mb-3 border border-slate-200 rounded-xl p-3 bg-slate-50/50">
-              {/* Foto or Avatar */}
-              <div className="col-span-3 flex flex-col items-center justify-center border-r border-slate-200/80 pr-2">
-                <div className="w-20 h-20 rounded-full bg-white border border-slate-200 p-0.5 flex items-center justify-center overflow-hidden shadow-sm">
+            {/* Unified Profile, Stats, Radar & Memo Row */}
+            <div className="grid grid-cols-12 gap-2 mb-3 border border-slate-200 rounded-xl p-2.5 bg-slate-50/50">
+              {/* Profile Image & Basic Info (col-span-2) */}
+              <div className="col-span-2 flex flex-col items-center justify-center border-r border-slate-200/80 pr-1.5 text-center">
+                <div className="w-14 h-14 rounded-full bg-white border border-slate-200 p-0.5 flex items-center justify-center overflow-hidden shadow-sm">
                   {targetMember.photoUrl ? (
                     <img src={targetMember.photoUrl} alt={targetMember.name} className="w-full h-full rounded-full object-cover" referrerPolicy="no-referrer" />
                   ) : (
-                    <div className="text-2xl font-black text-slate-300 uppercase">
+                    <div className="text-xl font-black text-slate-300 uppercase">
                       {memberDisplay.avatarText}
                     </div>
                   )}
                 </div>
-                <h2 className="text-base font-bold text-slate-900 mt-1 text-center tracking-tight">{memberDisplay.displayName}</h2>
-                <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.2 rounded-full mt-0.5 border border-indigo-100">{targetMember.group}</span>
+                <h2 className="text-sm font-bold text-slate-900 mt-1 tracking-tight">{memberDisplay.displayName}</h2>
+                <span className="text-[8px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.2 rounded-full mt-0.5 border border-indigo-100">{targetMember.group}</span>
               </div>
 
-              {/* Profile Details (col-span-4) */}
-              <div className="col-span-4 grid grid-cols-1 gap-y-1.5 pl-2 text-[11px] justify-center border-r border-slate-200/80 pr-2">
+              {/* Profile Details (col-span-3) */}
+              <div className="col-span-3 flex flex-col justify-center gap-y-1 pl-1.5 text-[10px] border-r border-slate-200/80 pr-1.5">
                 <div>
-                  <span className="text-[9px] font-bold text-slate-400 block leading-tight">역할 / 직분</span>
+                  <span className="text-[8px] font-bold text-slate-400 block leading-tight">역할 / 직분</span>
                   <span className="font-semibold text-slate-800">{targetMember.role || '성도'}</span>
                 </div>
                 <div>
-                  <span className="text-[9px] font-bold text-slate-400 block leading-tight">연락처</span>
+                  <span className="text-[8px] font-bold text-slate-400 block leading-tight">연락처</span>
                   <span className="font-semibold text-slate-800">{targetMember.phoneNumber || '연락처 없음'}</span>
                 </div>
                 <div>
-                  <span className="text-[9px] font-bold text-slate-400 block leading-tight">등록/등반일</span>
+                  <span className="text-[8px] font-bold text-slate-400 block leading-tight">등록/등반일</span>
                   <span className="font-semibold text-slate-800">{targetMember.MemberRegistration || (targetMember as any).registrationDate || '정보 없음'}</span>
                 </div>
                 <div>
-                  <span className="text-[9px] font-bold text-slate-400 block leading-tight">분석 기간</span>
-                  <span className="font-semibold text-slate-800">1월 1일 ~ 현재 ({stats.passedWeeksCount}주)</span>
+                  <span className="text-[8px] font-bold text-slate-400 block leading-tight">분석 기간</span>
+                  <span className="font-semibold text-slate-800">1/1 ~ 현재 ({stats.passedWeeksCount}주)</span>
                 </div>
               </div>
 
-              {/* Attendance percentages (col-span-5) */}
-              <div className="col-span-5 grid grid-cols-2 gap-2 pl-2 text-[11px] justify-center">
-                <div className="border border-blue-100/80 rounded-lg p-1.5 bg-blue-50/20 flex flex-col justify-center">
-                  <span className="text-[9px] font-bold text-blue-600 block leading-tight">예배 출석률</span>
-                  <span className="text-sm font-extrabold text-slate-800 mt-0.5">{stats.worshipRate}% <span className="text-[9px] font-normal text-slate-400">({stats.worshipCount}/{stats.possibleWorship})</span></span>
+              {/* Attendance percentages (col-span-2) */}
+              <div className="col-span-2 grid grid-cols-1 gap-1 pl-1.5 border-r border-slate-200/80 pr-1.5 justify-center">
+                <div className="border border-blue-100/60 rounded-lg p-1 bg-blue-50/20 flex flex-col justify-center">
+                  <span className="text-[8px] font-bold text-blue-600 block leading-tight">예배 출석</span>
+                  <span className="text-[11px] font-extrabold text-slate-800 mt-0.5">{stats.worshipRate}% <span className="text-[8px] font-normal text-slate-400">({stats.worshipCount}회)</span></span>
                 </div>
-                <div className="border border-indigo-100/80 rounded-lg p-1.5 bg-indigo-50/20 flex flex-col justify-center">
-                  <span className="text-[9px] font-bold text-indigo-600 block leading-tight">집회 출석률</span>
-                  <span className="text-sm font-extrabold text-slate-800 mt-0.5">{stats.gatheringRate}% <span className="text-[9px] font-normal text-slate-400">({stats.gatheringCount}/{stats.possibleGathering})</span></span>
+                <div className="border border-indigo-100/60 rounded-lg p-1 bg-indigo-50/20 flex flex-col justify-center">
+                  <span className="text-[8px] font-bold text-indigo-600 block leading-tight">집회 출석</span>
+                  <span className="text-[11px] font-extrabold text-slate-800 mt-0.5">{stats.gatheringRate}% <span className="text-[8px] font-normal text-slate-400">({stats.gatheringCount}회)</span></span>
                 </div>
-                <div className="border border-emerald-100/80 rounded-lg p-1.5 bg-emerald-50/20 flex flex-col justify-center">
-                  <span className="text-[9px] font-bold text-emerald-600 block leading-tight">울모임 출석률</span>
-                  <span className="text-sm font-extrabold text-slate-800 mt-0.5">{stats.woolRate}% <span className="text-[9px] font-normal text-slate-400">({stats.woolCount}/{stats.possibleWool})</span></span>
-                </div>
-                <div className="border border-amber-100/80 rounded-lg p-1.5 bg-amber-50/20 flex flex-col justify-center">
-                  <span className="text-[9px] font-bold text-amber-600 block leading-tight">기도 나눔 실적</span>
-                  <span className="text-sm font-extrabold text-slate-800 mt-0.5">{stats.prayerCount} <span className="text-[9px] font-normal text-slate-400">건</span></span>
+                <div className="border border-emerald-100/60 rounded-lg p-1 bg-emerald-50/20 flex flex-col justify-center">
+                  <span className="text-[8px] font-bold text-emerald-600 block leading-tight">울모임 출석</span>
+                  <span className="text-[11px] font-extrabold text-slate-800 mt-0.5">{stats.woolRate}% <span className="text-[8px] font-normal text-slate-400">({stats.woolCount}회)</span></span>
                 </div>
               </div>
-            </div>
 
-            {/* Radar & Special Memo Box */}
-            <div className="grid grid-cols-12 gap-3 mb-3">
-              {/* Custom SVG Radar Chart for Print (col-span-4) */}
-              <div className="col-span-4 border border-slate-200 rounded-xl p-2 flex flex-col items-center justify-center bg-white h-[115px]">
-                <span className="text-[9px] font-bold text-slate-400 block mb-0.5">종합 분석 레이더</span>
-                <div className="w-full h-[95px] flex items-center justify-center">
+              {/* Custom SVG Radar Chart for Print (col-span-2) */}
+              <div className="col-span-2 border-r border-slate-200/80 pr-1.5 flex flex-col items-center justify-center bg-white rounded-lg p-1">
+                <span className="text-[8px] font-bold text-slate-400 block mb-0.5 text-center">종합 분석 레이더</span>
+                <div className="w-full h-[65px] flex items-center justify-center">
                   {(() => {
-                    const cx = 70;
-                    const cy = 48;
-                    const r = 36;
+                    const cx = 55;
+                    const cy = 34;
+                    const r = 24;
                     const subjects = [
                       { name: '예배', value: stats.worshipRate },
                       { name: '집회', value: stats.gatheringRate },
                       { name: '울모임', value: stats.woolRate },
                       { name: '기도', value: Math.min((stats.prayerCount / 20) * 100, 100) },
-                      { name: '성실도', value: Math.round((stats.worshipRate + stats.woolRate + stats.gatheringRate) / 3) },
+                      { name: '성실', value: Math.round((stats.worshipRate + stats.woolRate + stats.gatheringRate) / 3) },
                     ];
 
                     const getCoords = (index: number, val: number) => {
@@ -1063,31 +1148,31 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                       elements.push(
                         <line key={`line-${i}`} x1={cx} y1={cy} x2={outer.x} y2={outer.y} stroke="#cbd5e1" strokeWidth="0.5" strokeDasharray="1,1" />
                       );
-                      const labelDistance = r + 10;
+                      const labelDistance = r + 8;
                       const angle = (i * 2 * Math.PI) / 5 - Math.PI / 2;
                       const lx = cx + labelDistance * Math.cos(angle);
-                      const ly = cy + labelDistance * Math.sin(angle) + 2.5;
+                      const ly = cy + labelDistance * Math.sin(angle) + 2;
                       let anchor = "middle";
                       if (Math.cos(angle) > 0.1) anchor = "start";
                       if (Math.cos(angle) < -0.1) anchor = "end";
 
                       elements.push(
-                        <text key={`text-${i}`} x={lx} y={ly} textAnchor={anchor} fontSize="6" fontWeight="bold" fill="#64748b">
+                        <text key={`text-${i}`} x={lx} y={ly} textAnchor={anchor} fontSize="5" fontWeight="bold" fill="#64748b">
                           {subjects[i].name}({subjects[i].value}%)
                         </text>
                       );
                     }
 
                     return (
-                      <svg width="100%" height="100%" viewBox="0 0 140 100" className="overflow-visible">
+                      <svg width="100%" height="100%" viewBox="0 0 110 75" className="overflow-visible">
                         {gridPolygons.map((pts, idx) => (
                           <polygon key={`grid-${idx}`} points={pts} fill="none" stroke="#e2e8f0" strokeWidth="0.5" />
                         ))}
                         {elements}
-                        <polygon points={valuePoints} fill="#6366f1" fillOpacity="0.2" stroke="#6366f1" strokeWidth="1.2" />
+                        <polygon points={valuePoints} fill="#6366f1" fillOpacity="0.2" stroke="#6366f1" strokeWidth="1" />
                         {subjects.map((sub, i) => {
                           const { x, y } = getCoords(i, sub.value);
-                          return <circle key={`dot-${i}`} cx={x} cy={y} r="1.5" fill="#4f46e5" />;
+                          return <circle key={`dot-${i}`} cx={x} cy={y} r="1" fill="#4f46e5" />;
                         })}
                       </svg>
                     );
@@ -1095,12 +1180,12 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                 </div>
               </div>
 
-              {/* Special Memo Box (col-span-8) - Dynamic shrink height */}
-              <div className="col-span-8 border border-slate-200 rounded-xl p-2 flex flex-col justify-start bg-slate-50/30">
-                <span className="text-[9px] font-bold text-indigo-500 block uppercase tracking-wider mb-1">비고 (Special Memo)</span>
-                <div className="bg-white border border-indigo-100/50 rounded-lg p-2 flex-1 text-[10px] text-slate-700 leading-normal overflow-hidden min-h-[40px] h-auto">
+              {/* Special Memo Box (col-span-3) - Compact dynamic sizing */}
+              <div className="col-span-3 pl-1.5 flex flex-col justify-start">
+                <span className="text-[8px] font-bold text-indigo-500 block uppercase tracking-wider mb-0.5">비고 (Special Memo)</span>
+                <div className="bg-white border border-indigo-100/50 rounded-lg p-1.5 flex-1 text-[9px] text-slate-700 leading-snug min-h-[55px] h-auto">
                   {targetMember.specialNotes ? (
-                    <p className="break-all whitespace-pre-wrap">{targetMember.specialNotes}</p>
+                    <p className="break-all whitespace-pre-wrap font-medium">{targetMember.specialNotes}</p>
                   ) : (
                     <span className="text-slate-300 italic block py-2 text-center">특별한 비고 사항이 없습니다.</span>
                   )}
@@ -1164,18 +1249,18 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
               </div>
             </div>
 
-            {/* Side-by-Side: Prayer Requests & Visitation History */}
-            <div className="grid grid-cols-12 gap-3 mb-3">
+            {/* Unlocked Height: Prayer Requests & Visitation History */}
+            <div className="grid grid-cols-12 gap-3 mb-3 items-start">
               {/* Prayer Request List (col-span-6) */}
-              <div className="col-span-6 border border-slate-200 rounded-xl p-3 bg-white flex flex-col h-[185px]">
+              <div className="col-span-6 border border-slate-200 rounded-xl p-3 bg-white flex flex-col h-auto">
                 <h3 className="text-[10px] font-bold text-slate-800 mb-1.5 border-b border-slate-100 pb-1 flex justify-between">
-                  <span>✍️ 최근 기도제목 리스트</span>
-                  <span className="text-[8px] font-normal text-slate-400">최근 3건</span>
+                  <span>✍️ 최근 기도제목 리스트 (최대 6건)</span>
+                  <span className="text-[8px] font-normal text-slate-400">전체 나눔 정보</span>
                 </h3>
 
-                <div className="space-y-1.5 overflow-hidden flex-1">
-                  {myPrayerHistory.slice(0, 3).length > 0 ? (
-                    myPrayerHistory.slice(0, 3).map(record => (
+                <div className="space-y-1.5 flex-1">
+                  {myPrayerHistory.slice(0, 6).length > 0 ? (
+                    myPrayerHistory.slice(0, 6).map(record => (
                       <div key={record.id} className="border-b border-slate-100/70 pb-1.5 last:border-none last:pb-0">
                         <div className="flex justify-between items-center mb-0.5">
                           <span className="text-[8px] font-bold text-slate-400 bg-slate-100 px-1 py-0.2 rounded">{record.date}</span>
@@ -1195,15 +1280,15 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
               </div>
 
               {/* Visitation History List (col-span-6) */}
-              <div className="col-span-6 border border-slate-200 rounded-xl p-3 bg-white flex flex-col h-[185px]">
+              <div className="col-span-6 border border-slate-200 rounded-xl p-3 bg-white flex flex-col h-auto">
                 <h3 className="text-[10px] font-bold text-slate-800 mb-1.5 border-b border-slate-100 pb-1 flex justify-between">
-                  <span>❤️ 최근 심방 히스토리</span>
-                  <span className="text-[8px] font-normal text-slate-400">최근 3건</span>
+                  <span>❤️ 최근 심방 히스토리 (최대 6건)</span>
+                  <span className="text-[8px] font-normal text-slate-400">전체 기록 정보</span>
                 </h3>
 
-                <div className="space-y-1.5 overflow-hidden flex-1">
-                  {myVisitationHistory.slice(0, 3).length > 0 ? (
-                    myVisitationHistory.slice(0, 3).map(v => (
+                <div className="space-y-1.5 flex-1">
+                  {myVisitationHistory.slice(0, 6).length > 0 ? (
+                    myVisitationHistory.slice(0, 6).map(v => (
                       <div key={v.visitationId} className="border-b border-slate-100/70 pb-1.5 last:border-none last:pb-0">
                         <div className="flex justify-between items-center mb-0.5">
                           <div className="flex gap-1.5 items-center">
@@ -1212,15 +1297,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                           </div>
                           {v.place && <span className="text-[8px] text-slate-400 truncate max-w-[120px]">📍 {v.place}</span>}
                         </div>
-                        <p 
-                          className="text-slate-700 text-[10px] leading-relaxed"
-                          style={{
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden'
-                          }}
-                        >
+                        <p className="text-slate-700 text-[10px] leading-relaxed break-all">
                           {v.details}
                         </p>
                       </div>
@@ -1341,7 +1418,6 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                 <label className="block text-xs font-bold text-slate-500 mb-1.5">상세 내용 및 나눔</label>
                 <textarea
                   rows={4}
-                  required
                   placeholder="심방을 진행하며 나눈 대화, 신앙적 고민, 조언 등을 자세히 기재해 주세요."
                   className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-rose-500 focus:border-rose-500 resize-none leading-relaxed"
                   value={formDetails}

@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Member, AttendanceRecord, AttendanceType, MeetingStatus } from '../types';
 import { SUNDAYS_2026 } from '../services/mockData';
 import { Check, Search, MessageSquare } from 'lucide-react';
+import { sortAndFilterMembersByName, matchKoreanFuzzy } from '../services/searchAlgorithm';
 
 interface AttendanceMatrixProps {
   members: Member[];
@@ -22,12 +23,47 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
   isVisitationMode = false
 }) => {
   const navigate = useNavigate();
+
+  // Helper to load state from sessionStorage
+  const loadSessionState = <T,>(key: string, defaultValue: T): T => {
+    try {
+      const stored = sessionStorage.getItem(key);
+      if (stored !== null) {
+        return JSON.parse(stored) as T;
+      }
+    } catch (e) {
+      console.warn("Failed to parse sessionStorage key:", key, e);
+    }
+    return defaultValue;
+  };
+
   // Store selectedMonth as string to handle 'all'
-  const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth())); 
-  const [filterGroup, setFilterGroup] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [excludeZeroAttendance, setExcludeZeroAttendance] = useState<boolean>(false);
-  const [sortBy, setSortBy] = useState<'group' | 'attendance' | 'age'>('group');
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => loadSessionState<string>('attendance_selectedMonth', String(new Date().getMonth()))); 
+  const [filterGroup, setFilterGroup] = useState<string>(() => loadSessionState<string>('attendance_filterGroup', 'all'));
+  const [searchQuery, setSearchQuery] = useState<string>(() => loadSessionState<string>('attendance_searchQuery', ''));
+  const [excludeZeroAttendance, setExcludeZeroAttendance] = useState<boolean>(() => loadSessionState<boolean>('attendance_excludeZeroAttendance', false));
+  const [sortBy, setSortBy] = useState<'group' | 'attendance' | 'age'>(() => loadSessionState<'group' | 'attendance' | 'age'>('attendance_sortBy', 'group'));
+
+  // Sync to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem('attendance_selectedMonth', JSON.stringify(selectedMonth));
+  }, [selectedMonth]);
+
+  useEffect(() => {
+    sessionStorage.setItem('attendance_filterGroup', JSON.stringify(filterGroup));
+  }, [filterGroup]);
+
+  useEffect(() => {
+    sessionStorage.setItem('attendance_searchQuery', JSON.stringify(searchQuery));
+  }, [searchQuery]);
+
+  useEffect(() => {
+    sessionStorage.setItem('attendance_excludeZeroAttendance', JSON.stringify(excludeZeroAttendance));
+  }, [excludeZeroAttendance]);
+
+  useEffect(() => {
+    sessionStorage.setItem('attendance_sortBy', JSON.stringify(sortBy));
+  }, [sortBy]);
 
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
@@ -41,6 +77,7 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
   }, [selectedMonth]);
 
   // Filter Members
+  // Filter Members
   const filteredMembers = useMemo(() => {
     let result = members;
 
@@ -49,10 +86,9 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
       result = result.filter(m => m.group === filterGroup);
     }
 
-    // Filter by Search Query
+    // Filter by Search Query (utilizing Korean initial & 2-digit birth year match/sort)
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      result = result.filter(m => String(m.name || '').toLowerCase().includes(query));
+      result = result.filter(m => matchKoreanFuzzy(searchQuery, String(m.name || '')));
     }
 
     // Filter by Zero Attendance if active and inside visitation mode (Admin)
@@ -90,7 +126,17 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
 
   // Sorting based on selected sortBy state
   const sortedMembers = useMemo(() => {
+    const twoDigitNums = searchQuery ? searchQuery.match(/\d{2}/g) || [] : [];
+
     return [...filteredMembers].sort((a, b) => {
+      // Prioritize members whose name contains the searched 2-digit number
+      if (twoDigitNums.length > 0) {
+        const aHas = twoDigitNums.some(num => String(a.name || '').includes(num));
+        const bHas = twoDigitNums.some(num => String(b.name || '').includes(num));
+        if (aHas && !bHas) return -1;
+        if (!aHas && bHas) return 1;
+      }
+
       if (sortBy === 'attendance') {
         const totalA = memberAttendanceMap[a.id] || 0;
         const totalB = memberAttendanceMap[b.id] || 0;
@@ -116,7 +162,7 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
       if (groupA !== groupB) return groupA.localeCompare(groupB);
       return String(a.name || '').localeCompare(String(b.name || ''));
     });
-  }, [filteredMembers, sortBy, memberAttendanceMap]);
+  }, [filteredMembers, sortBy, memberAttendanceMap, searchQuery]);
 
   const getStatus = (memberId: string, date: string, type: AttendanceType) => {
     const record = records.find(r => r.memberId === memberId && r.date === date && r.types.includes(type));
@@ -226,14 +272,14 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
   };
 
   return (
-    <div className="space-y-3">
-      <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between px-1">
+    <div className="space-y-2.5">
+      <header className="border-b border-slate-100 dark:border-slate-850 pb-2.5 flex flex-col md:flex-row md:items-center md:justify-between gap-2 px-0.5">
         <div>
-          <h2 className="text-sm md:text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-            <span className="w-1 h-3 bg-indigo-600 rounded-full inline-block"></span>
+          <h2 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
+            <span className="w-1.5 h-3.5 bg-indigo-600 rounded-full inline-block"></span>
             출석 상세 현황
           </h2>
-          <p className="hidden md:block text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">클릭하여 출석 상태를 바로 수정할 수 있습니다.</p>
+          <p className="hidden md:block text-[10px] text-slate-400 dark:text-slate-500 font-medium mt-0.5">클릭하여 각 모임별 출석 여부를 바로 등록하거나 수정할 수 있습니다.</p>
         </div>
         
         {/* Modern & Compact Filters Layout */}
@@ -245,7 +291,7 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
             </div>
             <input 
               type="text" 
-              className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-[11px] rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-2 h-8 transition-all outline-none" 
+              className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 border border-slate-200/60 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-[11px] rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-2 h-8 transition-all outline-none" 
               placeholder="이름 검색" 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -255,7 +301,7 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
           {/* Compact Month Select */}
           <div className="w-[80px] sm:w-20">
             <select
-              className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-[11px] rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full px-1.5 h-8 transition-all cursor-pointer outline-none"
+              className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-[11px] rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full px-1.5 h-8 transition-all cursor-pointer outline-none"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
             >
@@ -269,7 +315,7 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
           {/* Compact Group Select */}
           <div className="flex-1 min-w-[110px] sm:flex-initial sm:w-32">
             <select
-              className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-[11px] rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full px-1.5 h-8 truncate transition-all cursor-pointer outline-none"
+              className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-[11px] rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full px-1.5 h-8 truncate transition-all cursor-pointer outline-none"
               value={filterGroup}
               onChange={(e) => setFilterGroup(e.target.value)}
             >
@@ -284,7 +330,7 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
           {isVisitationMode && (
             <div className="w-[100px] sm:w-28">
               <select
-                className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-[11px] rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full px-1.5 h-8 transition-all cursor-pointer outline-none"
+                className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-[11px] rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full px-1.5 h-8 transition-all cursor-pointer outline-none"
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as 'group' | 'attendance' | 'age')}
               >
@@ -299,7 +345,7 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
           {isVisitationMode && (
             <div 
               onClick={() => setExcludeZeroAttendance(!excludeZeroAttendance)}
-              className="flex items-center gap-1.5 px-2.5 h-8 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-lg cursor-pointer transition-all select-none"
+              className="flex items-center gap-1.5 px-2.5 h-8 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-850 border border-slate-200/60 dark:border-slate-800 rounded-lg cursor-pointer transition-all select-none"
             >
               <span className="text-slate-600 dark:text-slate-400 font-semibold text-[10px] whitespace-nowrap">출석 0회 제외</span>
               <button 
@@ -313,7 +359,7 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
         </div>
       </header>
 
-      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.015)] border border-slate-200/50 dark:border-slate-800/85 overflow-hidden">
         <div className="max-h-[calc(100vh-270px)] sm:max-h-[calc(100vh-240px)] overflow-auto custom-scrollbar">
           <table className="w-full text-sm text-left text-slate-500 dark:text-slate-400 border-collapse">
             <thead className="text-xs text-slate-700 dark:text-slate-300 uppercase bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-35">

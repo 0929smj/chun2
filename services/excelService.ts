@@ -42,6 +42,106 @@ export const exportDataToExcel = (
     return d;
   });
 
+  // --- Create Master Sheet for All Members (First Tab) ---
+  const activeMembers = members.filter(m => m.status !== 'INACTIVE').sort((a, b) => {
+    const groupA = String(a.group || '');
+    const groupB = String(b.group || '');
+    if (groupA !== groupB) return groupA.localeCompare(groupB);
+    return String(a.name || '').localeCompare(String(b.name || ''));
+  });
+
+  if (activeMembers.length > 0) {
+    const sheetData: any[][] = [];
+    const merges: XLSX.Range[] = [];
+
+    // Row 1: Sheet Title
+    sheetData.push(["전체 출석부"]);
+
+    // Row 2: Ministry Events (aligned with dates)
+    const eventRow = ["", "", ""]; // Spacer for Name, Group, Type columns
+    sortedDates.forEach(date => {
+       const event = meetingStatus.find(s => s.date === date)?.event || '';
+       eventRow.push(event);
+    });
+    sheetData.push(eventRow);
+
+    // Row 3: Headers
+    sheetData.push(["이름", "소그룹", "구분", ...dateHeaders]);
+
+    let currentRow = 3;
+
+    activeMembers.forEach(member => {
+      const rowW = [member.name, member.group, "예배"];
+      const rowG = [member.name, member.group, "집회"];
+      const rowL = [member.name, member.group, "울모임"];
+
+      sortedDates.forEach(date => {
+        // Worship
+        const wCanceled = meetingStatus.some(s => s.date === date && s.type === AttendanceType.Worship && s.isCanceled);
+        const wAttended = filteredAttendance.some(r => r.memberId === member.id && r.date === date && r.types.includes(AttendanceType.Worship));
+        rowW.push(getStatusSymbol(wAttended, wCanceled));
+
+        // Gathering
+        const gCanceled = meetingStatus.some(s => s.date === date && s.type === AttendanceType.Gathering && s.isCanceled);
+        const gAttended = filteredAttendance.some(r => r.memberId === member.id && r.date === date && r.types.includes(AttendanceType.Gathering));
+        rowG.push(getStatusSymbol(gAttended, gCanceled));
+
+        // Wool
+        const lCanceled = meetingStatus.some(s => s.date === date && s.type === AttendanceType.Wool && s.isCanceled);
+        const lAttended = filteredAttendance.some(r => r.memberId === member.id && r.date === date && r.types.includes(AttendanceType.Wool));
+        rowL.push(getStatusSymbol(lAttended, lCanceled));
+      });
+
+      sheetData.push(rowW);
+      sheetData.push(rowG);
+      sheetData.push(rowL);
+
+      // Merge Name & Group Cells (3 rows each)
+      merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow + 2, c: 0 } });
+      merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow + 2, c: 1 } });
+
+      currentRow += 3;
+    });
+
+    // === Master Section 2: PRAYER REQUESTS ===
+    sheetData.push([]);
+    sheetData.push([]);
+
+    sheetData.push(["[전체 기도제목 및 특이사항]"]);
+    sheetData.push(["이름", "소그룹", "비고", ...dateHeaders]);
+
+    activeMembers.forEach(member => {
+      const row = [member.name, member.group, member.specialNotes || ''];
+
+      sortedDates.forEach(date => {
+        const records = filteredPrayers.filter(p => p.memberId === member.id && p.date === date);
+        const content = records.map(p => {
+            const c = p.content || '';
+            const n = p.note ? `(특이사항: ${p.note})` : '';
+            return c + (c && n ? '\n' : '') + n;
+        }).filter(Boolean).join('\n');
+        row.push(content);
+      });
+
+      sheetData.push(row);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(sheetData);
+    if (merges.length > 0) {
+      ws['!merges'] = merges;
+    }
+
+    const cols = [
+      { wch: 12 }, // Col A: Name
+      { wch: 12 }, // Col B: Group
+      { wch: 8 },  // Col C: Type / Memo
+    ];
+    dateHeaders.forEach(() => cols.push({ wch: 15 }));
+    ws['!cols'] = cols;
+
+    XLSX.utils.book_append_sheet(wb, ws, "전체 출석부");
+  }
+
   // --- Create Sheet per Group ---
   groups.forEach(group => {
     const groupMembers = members.filter(m => m.group === group).sort((a, b) => a.name.localeCompare(b.name));

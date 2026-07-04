@@ -17,12 +17,123 @@ export interface VisitationSearchResult {
  * Calculates string similarity using a Bigram Jaccard/Dice coefficient.
  * This is extremely effective for Korean character-based search (syllables) and spelling variations.
  */
+const CHOSEONG = [
+  'ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'
+];
+
+export function isChoseong(char: string): boolean {
+  if (!char) return false;
+  const normChar = char.normalize('NFC');
+  const code = normChar.charCodeAt(0);
+  
+  if (CHOSEONG.includes(normChar)) {
+    return true;
+  }
+  if (code >= 0x1100 && code <= 0x1112) {
+    return true;
+  }
+  return false;
+}
+
+export function getSingleChoseong(char: string): string {
+  if (!char) return '';
+  const normChar = char.normalize('NFC');
+  const code = normChar.charCodeAt(0);
+  
+  if (code >= 0xAC00 && code <= 0xD7A3) {
+    const index = Math.floor((code - 0xAC00) / 588);
+    return CHOSEONG[index];
+  }
+  if (code >= 0x1100 && code <= 0x1112) {
+    return CHOSEONG[code - 0x1100];
+  }
+  return normChar;
+}
+
+export function matchKoreanFuzzy(query: string, target: string): boolean {
+  const q = query.normalize('NFC').toLowerCase().replace(/\s+/g, '');
+  const t = target.normalize('NFC').toLowerCase().replace(/\s+/g, '');
+  if (!q || !t) return false;
+
+  // 1. Easy substring match
+  if (t.includes(q)) return true;
+
+  // 2. Sequential character matching (allowing skipping)
+  let qIdx = 0;
+  for (let tIdx = 0; tIdx < t.length; tIdx++) {
+    const qChar = q.charAt(qIdx);
+    const tChar = t.charAt(tIdx);
+
+    // Check if qChar matches tChar (either exactly or as initial consonant)
+    let isMatch = false;
+    if (qChar === tChar) {
+      isMatch = true;
+    } else if (isChoseong(qChar)) {
+      if (getSingleChoseong(tChar) === getSingleChoseong(qChar)) {
+        isMatch = true;
+      }
+    }
+
+    if (isMatch) {
+      qIdx++;
+      if (qIdx === q.length) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+export function extractTwoDigitNumbers(str: string): string[] {
+  const matches = str.match(/\d{2}/g);
+  return matches || [];
+}
+
+export function sortAndFilterMembersByName(members: Member[], query: string): Member[] {
+  const trimmed = query.trim();
+  if (!trimmed) return members;
+
+  // 1. Filter using our fuzzy/choseong match
+  const matched = members.filter(m => matchKoreanFuzzy(trimmed, String(m.name || '')));
+
+  // 2. Sort: prioritize name matches with the 2-digit number if query contains a 2-digit number
+  const twoDigitNums = extractTwoDigitNumbers(trimmed);
+  if (twoDigitNums.length > 0) {
+    return matched.sort((a, b) => {
+      const aName = String(a.name || '');
+      const bName = String(b.name || '');
+      const aHas = twoDigitNums.some(num => aName.includes(num));
+      const bHas = twoDigitNums.some(num => bName.includes(num));
+
+      if (aHas && !bHas) return -1;
+      if (!aHas && bHas) return 1;
+      return aName.localeCompare(bName);
+    });
+  }
+
+  // If no 2-digit number, sort alphabetically by name
+  return matched.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+}
+
 export function getStringSimilarity(str1: string, str2: string): number {
   const s1 = str1.toLowerCase().trim();
   const s2 = str2.toLowerCase().trim();
   
   if (s1 === s2) return 1.0;
   if (!s1 || !s2) return 0.0;
+
+  // Korean fuzzy / initial matching
+  if (matchKoreanFuzzy(s1, s2)) {
+    // If it is a prefix/start match, give it a higher score
+    const s2Choseong = s2.split('').map(getSingleChoseong).join('');
+    const s1Choseong = s1.split('').map(getSingleChoseong).join('');
+    
+    if (s2Choseong.startsWith(s1Choseong) || s2.startsWith(s1)) {
+      return 0.85;
+    }
+    return 0.70;
+  }
 
   // Exact substring matches get a high base score
   if (s2.includes(s1) || s1.includes(s2)) {
@@ -243,7 +354,16 @@ export function runUniversalSearch(
       // E.g. matching 2 out of 2 terms is much better than matching 1 out of 2.
       // We apply a multiplier: (matchedTokens / totalTokens)^1.5 to heavily penalize missing terms
       const coordinateFactor = Math.pow(matchedTokensCount / tokens.length, 1.5);
-      const finalScore = totalScore * coordinateFactor;
+      let finalScore = totalScore * coordinateFactor;
+
+      // Apply 2-digit number boost for name matches
+      const queryTwoDigitNums = extractTwoDigitNumbers(trimmedQuery);
+      if (queryTwoDigitNums.length > 0) {
+        const nameContainsTwoDigits = queryTwoDigitNums.some(num => nameStr.includes(num));
+        if (nameContainsTwoDigits) {
+          finalScore += 10000;
+        }
+      }
 
       results.push({
         member,
@@ -352,7 +472,16 @@ export function runVisitationSearch(
 
     if (matchedTokensCount > 0) {
       const coordinateFactor = Math.pow(matchedTokensCount / tokens.length, 1.5);
-      const finalScore = totalScore * coordinateFactor;
+      let finalScore = totalScore * coordinateFactor;
+
+      // Apply 2-digit number boost for name matches
+      const queryTwoDigitNums = extractTwoDigitNumbers(trimmed);
+      if (queryTwoDigitNums.length > 0) {
+        const nameContainsTwoDigits = queryTwoDigitNums.some(num => nameStr.includes(num));
+        if (nameContainsTwoDigits) {
+          finalScore += 10000;
+        }
+      }
 
       results.push({
         visitation: v,

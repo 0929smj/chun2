@@ -5,6 +5,7 @@ import { SUNDAYS_2026 } from '../services/mockData';
 import { getScriptUrl, setScriptUrl, fetchSheetData, sendAction, DEFAULT_SCRIPT_URL } from '../services/sheetService';
 import { getClosestSunday } from '../services/utils';
 import { exportDataToExcel } from '../services/excelService';
+import { matchKoreanFuzzy, sortAndFilterMembersByName } from '../services/searchAlgorithm';
 
 const GAS_CODE_SNIPPET = `/* 
  [구글 스프레드시트 연결 스크립트 v4.8]
@@ -574,7 +575,20 @@ const DataManagement: React.FC<DataManagementProps> = ({
   refreshData, 
   prayerRecords = [] 
 }) => {
-  const [activeTab, setActiveTab] = useState<'members' | 'attendance' | 'settings' | 'export'>('members');
+  // Helper to load state from sessionStorage
+  const loadSessionState = <T,>(key: string, defaultValue: T): T => {
+    try {
+      const stored = sessionStorage.getItem(key);
+      if (stored !== null) {
+        return JSON.parse(stored) as T;
+      }
+    } catch (e) {
+      console.warn("Failed to parse sessionStorage key:", key, e);
+    }
+    return defaultValue;
+  };
+
+  const [activeTab, setActiveTab] = useState<'members' | 'attendance' | 'settings' | 'export'>(() => loadSessionState<'members' | 'attendance' | 'settings' | 'export'>('datamanage_activeTab', 'members'));
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [deletingMember, setDeletingMember] = useState<Member | null>(null); // For delete confirmation
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -599,11 +613,11 @@ const DataManagement: React.FC<DataManagementProps> = ({
   
   // Sorting & Filtering State
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
-  const [memberFilterGroup, setMemberFilterGroup] = useState<string>('all');
-  const [memberSearchQuery, setMemberSearchQuery] = useState<string>('');
+  const [memberFilterGroup, setMemberFilterGroup] = useState<string>(() => loadSessionState<string>('datamanage_memberFilterGroup', 'all'));
+  const [memberSearchQuery, setMemberSearchQuery] = useState<string>(() => loadSessionState<string>('datamanage_memberSearchQuery', ''));
   
-  const [attendanceFilterGroup, setAttendanceFilterGroup] = useState<string>('all');
-  const [selectedDate, setSelectedDate] = useState<string>(getClosestSunday());
+  const [attendanceFilterGroup, setAttendanceFilterGroup] = useState<string>(() => loadSessionState<string>('datamanage_attendanceFilterGroup', 'all'));
+  const [selectedDate, setSelectedDate] = useState<string>(() => loadSessionState<string>('datamanage_selectedDate', getClosestSunday()));
 
   // Export State
   const [exportStartDate, setExportStartDate] = useState<string>('2026-01-01');
@@ -613,9 +627,30 @@ const DataManagement: React.FC<DataManagementProps> = ({
   const [manualCount, setManualCount] = useState<string>('');
   const [isUpdatingManualCount, setIsUpdatingManualCount] = useState(false);
 
+  // Sync state to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem('datamanage_activeTab', JSON.stringify(activeTab));
+  }, [activeTab]);
+
+  useEffect(() => {
+    sessionStorage.setItem('datamanage_memberFilterGroup', JSON.stringify(memberFilterGroup));
+  }, [memberFilterGroup]);
+
+  useEffect(() => {
+    sessionStorage.setItem('datamanage_memberSearchQuery', JSON.stringify(memberSearchQuery));
+  }, [memberSearchQuery]);
+
+  useEffect(() => {
+    sessionStorage.setItem('datamanage_attendanceFilterGroup', JSON.stringify(attendanceFilterGroup));
+  }, [attendanceFilterGroup]);
+
+  useEffect(() => {
+    sessionStorage.setItem('datamanage_selectedDate', JSON.stringify(selectedDate));
+  }, [selectedDate]);
+
   // Update selected date if tab changes to attendance or on mount
   useEffect(() => {
-    if (activeTab === 'attendance') {
+    if (activeTab === 'attendance' && !sessionStorage.getItem('datamanage_selectedDate')) {
       setSelectedDate(getClosestSunday());
     }
   }, [activeTab]);
@@ -760,14 +795,24 @@ const DataManagement: React.FC<DataManagementProps> = ({
       items = items.filter(m => m.group === memberFilterGroup);
     }
 
-    // Filter by Name Search
+    // Filter by Name Search (utilizing Korean initial & 2-digit birth year match)
     if (memberSearchQuery.trim()) {
-      items = items.filter(m => String(m.name || '').toLowerCase().includes(memberSearchQuery.toLowerCase()));
+      items = items.filter(m => matchKoreanFuzzy(memberSearchQuery, String(m.name || '')));
     }
     
     // Sort
+    const twoDigitNums = memberSearchQuery ? memberSearchQuery.match(/\d{2}/g) || [] : [];
+
     if (sortConfig && activeTab === 'members') {
       items.sort((a, b) => {
+        // Prioritize members whose name contains the searched 2-digit number
+        if (twoDigitNums.length > 0) {
+          const aHas = twoDigitNums.some(num => String(a.name || '').includes(num));
+          const bHas = twoDigitNums.some(num => String(b.name || '').includes(num));
+          if (aHas && !bHas) return -1;
+          if (!aHas && bHas) return 1;
+        }
+
         // @ts-ignore
         const aValue = (a[sortConfig.key] || '').toString().toLowerCase();
         // @ts-ignore
@@ -778,9 +823,17 @@ const DataManagement: React.FC<DataManagementProps> = ({
         return 0;
       });
     } else if (activeTab === 'members') {
-       // Default sort by name, but keep active members first maybe? 
-       // For now just sort by Name
-       items.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+       items.sort((a, b) => {
+         // Prioritize members whose name contains the searched 2-digit number
+         if (twoDigitNums.length > 0) {
+           const aHas = twoDigitNums.some(num => String(a.name || '').includes(num));
+           const bHas = twoDigitNums.some(num => String(b.name || '').includes(num));
+           if (aHas && !bHas) return -1;
+           if (!aHas && bHas) return 1;
+         }
+
+         return String(a.name || '').localeCompare(String(b.name || ''));
+       });
     }
 
     return items;

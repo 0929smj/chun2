@@ -2,7 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Member, PrayerRecord } from '../types';
 import { Quote, AlertCircle, Calendar, User, Search, FileText, X } from 'lucide-react';
 import { SUNDAYS_2026 } from '../services/mockData';
-import { getClosestSunday } from '../services/utils';
+import { getClosestSunday, hasActualPrayerContent, parsePrayerRequests } from '../services/utils';
+import { matchKoreanFuzzy } from '../services/searchAlgorithm';
 
 interface PrayerRequestsProps {
   members: Member[];
@@ -11,18 +12,47 @@ interface PrayerRequestsProps {
 }
 
 const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords, availableGroups }) => {
-  const [viewMode, setViewMode] = useState<'member' | 'date'>('date');
-  const [selectedDate, setSelectedDate] = useState<string>(getClosestSunday());
+  // Helper to load state from sessionStorage
+  const loadSessionState = <T,>(key: string, defaultValue: T): T => {
+    try {
+      const stored = sessionStorage.getItem(key);
+      if (stored !== null) {
+        return JSON.parse(stored) as T;
+      }
+    } catch (e) {
+      console.warn("Failed to parse sessionStorage key:", key, e);
+    }
+    return defaultValue;
+  };
+
+  const [viewMode, setViewMode] = useState<'member' | 'date'>(() => loadSessionState<'member' | 'date'>('prayer_viewMode', 'date'));
+  const [selectedDate, setSelectedDate] = useState<string>(() => loadSessionState<string>('prayer_selectedDate', getClosestSunday()));
   
   // Member View State
-  const [selectedGroup, setSelectedGroup] = useState<string>('');
-  const [selectedMemberId, setSelectedMemberId] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedGroup, setSelectedGroup] = useState<string>(() => loadSessionState<string>('prayer_selectedGroup', ''));
+  const [selectedMemberId, setSelectedMemberId] = useState<string>(() => loadSessionState<string>('prayer_selectedMemberId', ''));
+  const [searchQuery, setSearchQuery] = useState<string>(() => loadSessionState<string>('prayer_searchQuery', ''));
 
-  // Initial load effect
+  // Sync state to sessionStorage
   useEffect(() => {
-    setSelectedDate(getClosestSunday());
-  }, []);
+    sessionStorage.setItem('prayer_viewMode', JSON.stringify(viewMode));
+  }, [viewMode]);
+
+  useEffect(() => {
+    sessionStorage.setItem('prayer_selectedDate', JSON.stringify(selectedDate));
+  }, [selectedDate]);
+
+  useEffect(() => {
+    sessionStorage.setItem('prayer_selectedGroup', JSON.stringify(selectedGroup));
+  }, [selectedGroup]);
+
+  useEffect(() => {
+    sessionStorage.setItem('prayer_selectedMemberId', JSON.stringify(selectedMemberId));
+  }, [selectedMemberId]);
+
+  useEffect(() => {
+    sessionStorage.setItem('prayer_searchQuery', JSON.stringify(searchQuery));
+  }, [searchQuery]);
 
   // Sort function to be reused
   const sortMembers = (a: Member, b: Member) => {
@@ -80,10 +110,21 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
   const memberHistoryData = useMemo<{ member: Member; records: PrayerRecord[] }[] | null>(() => {
     let targetMembers: Member[] = [];
 
-    // Priority 1: Search Query
+    // Priority 1: Search Query (utilizing Korean initial & 2-digit birth year match/sort)
     if (searchQuery.trim()) {
-       const query = searchQuery.toLowerCase().trim();
-       targetMembers = members.filter(m => String(m.name || '').toLowerCase().includes(query));
+       const matched = members.filter(m => matchKoreanFuzzy(searchQuery, String(m.name || '')));
+       const twoDigitNums = searchQuery.match(/\d{2}/g) || [];
+       if (twoDigitNums.length > 0) {
+         targetMembers = matched.sort((a, b) => {
+           const aHas = twoDigitNums.some(num => String(a.name || '').includes(num));
+           const bHas = twoDigitNums.some(num => String(b.name || '').includes(num));
+           if (aHas && !bHas) return -1;
+           if (!aHas && bHas) return 1;
+           return String(a.name || '').localeCompare(String(b.name || ''));
+         });
+       } else {
+         targetMembers = matched.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+       }
     }
     // Priority 2: Specific Member Selected via Dropdown
     else if (selectedMemberId) {
@@ -131,42 +172,45 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
   };
 
   return (
-    <div className="space-y-6">
-       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="space-y-3">
+      <header className="border-b border-slate-100 dark:border-slate-850 pb-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-0.5">
         <div>
-          <h2 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-slate-100">기도 제목 및 특이사항</h2>
-          <p className="text-sm md:text-base text-slate-500 dark:text-slate-400">
+          <h2 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
+            <span className="w-1.5 h-3.5 bg-indigo-600 rounded-full inline-block"></span>
+            기도 제목 및 특이사항
+          </h2>
+          <p className="hidden md:block text-[10px] text-slate-400 dark:text-slate-500 font-medium mt-0.5">
             {viewMode === 'date' 
               ? '매주 입력되는 기도제목과 특이사항을 소그룹/울별로 확인합니다.' 
               : '각 성도님의 기도제목 및 특이사항 히스토리를 확인합니다.'}
           </p>
         </div>
         
-        <div className="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-lg w-full md:w-auto">
+        <div className="flex bg-slate-100 dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 p-0.5 rounded-lg w-full sm:w-auto shrink-0">
            <button
              onClick={() => setViewMode('date')}
-             className={`flex-1 md:flex-none flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium transition-all ${
-               viewMode === 'date' ? 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+             className={`flex-1 sm:flex-none flex items-center justify-center px-3 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+               viewMode === 'date' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
              }`}
            >
-             <Calendar size={16} className="mr-2" /> 날짜별
+             <Calendar size={12} className="mr-1.5" /> 날짜별
            </button>
            <button
              onClick={() => setViewMode('member')}
-             className={`flex-1 md:flex-none flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium transition-all ${
-               viewMode === 'member' ? 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+             className={`flex-1 sm:flex-none flex items-center justify-center px-3 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+               viewMode === 'member' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
              }`}
            >
-             <User size={16} className="mr-2" /> 멤버별
+             <User size={12} className="mr-1.5" /> 멤버별
            </button>
         </div>
       </header>
 
       {viewMode === 'date' && (
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
-          <label className="font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">날짜 선택:</label>
+        <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200/50 dark:border-slate-800/80 shadow-[0_1px_3px_rgba(0,0,0,0.01)] flex items-center gap-3">
+          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">날짜 선택:</label>
           <select
-            className="w-full sm:w-auto border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 text-sm bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full sm:w-44 border border-slate-200 dark:border-slate-800 rounded-lg px-2 h-8 text-xs bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all cursor-pointer"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
           >
@@ -178,41 +222,40 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
       )}
 
       {viewMode === 'member' && (
-        <div className="bg-white dark:bg-slate-900 p-4 md:p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row gap-4 md:gap-6 items-start md:items-end">
+        <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200/50 dark:border-slate-800/80 shadow-[0_1px_3px_rgba(0,0,0,0.01)] flex flex-col md:flex-row gap-3 items-start md:items-end">
           <div className="w-full md:flex-1">
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center text-indigo-700 dark:text-indigo-400">
-              <Search size={14} className="mr-1" /> 이름 직접 검색 (추천)
+            <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1.5 flex items-center">
+              <Search size={10} className="mr-1" /> 이름 직접 검색 (추천)
             </label>
             <div className="relative">
               <input 
                 type="text" 
-                className="w-full border border-indigo-200 dark:border-indigo-900 rounded-lg pl-10 pr-4 py-2.5 text-sm focus:ring-indigo-500 focus:border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 text-slate-800 dark:text-slate-200"
-                placeholder="이름을 입력하세요 (예: 김철수)"
+                className="w-full border border-indigo-200 dark:border-indigo-900/60 rounded-lg pl-8 pr-8 h-8 text-xs focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/20 text-slate-800 dark:text-slate-200 outline-none transition-all"
+                placeholder="이름을 입력하세요 (예: 91홍길동)"
                 value={searchQuery}
                 onChange={handleSearchChange}
               />
-              <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-indigo-400">
-                <Search size={18} />
+              <div className="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none text-indigo-400">
+                <Search size={12} />
               </div>
               {searchQuery && (
                 <button 
                   onClick={() => setSearchQuery('')}
-                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600"
+                  className="absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400 hover:text-slate-600"
                 >
-                  <X size={16} />
+                  <X size={12} />
                 </button>
               )}
             </div>
           </div>
 
-          <div className="hidden md:flex items-center justify-center pb-3 px-2 text-slate-300 dark:text-slate-600 font-bold text-sm">OR</div>
-          <div className="md:hidden w-full text-center text-xs text-slate-400 dark:text-slate-500 my-0">- 또는 소그룹으로 찾기 -</div>
+          <div className="hidden md:flex items-center justify-center pb-2.5 px-1 text-slate-300 dark:text-slate-700 font-bold text-xs">OR</div>
 
-          <div className="w-full md:flex-1 flex gap-3">
+          <div className="w-full md:flex-1 flex gap-2">
             <div className="flex-1">
-               <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">소그룹 선택</label>
+               <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">소그룹 선택</label>
                <select
-                 className="w-full border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 text-sm bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 focus:ring-indigo-500 focus:border-indigo-500"
+                 className="w-full border border-slate-200 dark:border-slate-800 rounded-lg px-2 h-8 text-xs bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all cursor-pointer"
                  value={selectedGroup}
                  onChange={handleGroupChange}
                >
@@ -223,9 +266,9 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                </select>
             </div>
             <div className="flex-1">
-               <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">멤버 선택</label>
+               <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">멤버 선택</label>
                <select
-                 className="w-full border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 text-sm bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-slate-100 dark:disabled:bg-slate-950/60 disabled:text-slate-400"
+                 className="w-full border border-slate-200 dark:border-slate-800 rounded-lg px-2 h-8 text-xs bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all cursor-pointer disabled:bg-slate-100 dark:disabled:bg-slate-950/60 disabled:text-slate-400"
                  value={selectedMemberId}
                  onChange={handleMemberChange}
                  disabled={!selectedGroup}
@@ -241,34 +284,34 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
       )}
 
       {viewMode === 'date' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
           {Object.entries(recordsByDate).map(([groupName, items]) => {
             const groupItems = items as { member: Member; record: PrayerRecord }[];
             if (groupItems.length === 0) return null;
             return (
-               <div key={groupName} className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-5">
-                  <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center">
-                    <span className="w-2 h-2 bg-indigo-500 rounded-full mr-2"></span>
+               <div key={groupName} className="bg-white dark:bg-slate-900 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.01)] border border-slate-200/50 dark:border-slate-800/80 p-3.5">
+                  <h3 className="text-xs font-bold text-slate-800 dark:text-slate-100 mb-3 flex items-center">
+                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full mr-2"></span>
                     {groupName}
                   </h3>
                   
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {groupItems.map(({ member, record }) => (
-                      <div key={member.id} className="relative pl-4 border-l-2 border-slate-100 dark:border-slate-800 hover:border-indigo-300 transition-colors">
+                      <div key={member.id} className="relative pl-3 border-l-2 border-slate-100 dark:border-slate-800/60 hover:border-indigo-300 transition-colors">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
                              {member.photoUrl ? (
-                               <img src={member.photoUrl} alt={member.name} className="w-6 h-6 rounded-full object-cover border border-slate-200 dark:border-slate-800" referrerPolicy="no-referrer" />
+                               <img src={member.photoUrl} alt={member.name} className="w-5 h-5 rounded-full object-cover border border-slate-200 dark:border-slate-800" referrerPolicy="no-referrer" />
                              ) : (
-                               <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-[10px] text-slate-500 dark:text-slate-400 font-bold border border-slate-300 dark:border-slate-700 shrink-0">
+                               <div className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-[9px] text-slate-500 dark:text-slate-400 font-bold border border-slate-300 dark:border-slate-700 shrink-0">
                                  {member.name.substring(0, 1)}
                                </div>
                              )}
-                            <h4 className="font-semibold text-slate-800 dark:text-slate-200">{member.name}</h4>
+                            <h4 className="font-semibold text-xs text-slate-800 dark:text-slate-200">{member.name}</h4>
                           </div>
                           {member.specialNotes && (
-                            <span className="flex items-center text-xs text-rose-500 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/20 px-2 py-0.5 rounded-full border border-rose-100 dark:border-rose-900/30 max-w-[50%] truncate">
-                              <AlertCircle size={10} className="mr-1" />
+                            <span className="flex items-center text-[9px] text-rose-500 dark:text-rose-400 bg-rose-50/60 dark:bg-rose-950/25 px-1.5 py-0.5 rounded-full border border-rose-100/40 dark:border-rose-900/30 max-w-[50%] truncate">
+                              <AlertCircle size={8} className="mr-0.5" />
                               {member.specialNotes}
                             </span>
                           )}
@@ -276,15 +319,32 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                         
                         {/* Always show content since we filtered by record existence */}
                          <>
-                           {record.content && (
-                             <div className="mt-2 text-sm text-slate-600 dark:text-slate-400 flex items-start">
-                               <Quote size={14} className="text-slate-300 dark:text-slate-700 mr-2 mt-1 flex-shrink-0" />
-                               <p>{record.content}</p>
+                           {hasActualPrayerContent(record.content) && (
+                             <div className="mt-1.5 text-xs text-slate-600 dark:text-slate-400 flex items-start gap-1.5">
+                               <Quote size={10} className="text-slate-300 dark:text-slate-700 mt-0.5 flex-shrink-0" />
+                               <div className="flex-1 space-y-0.5 text-xs leading-snug">
+                                 {parsePrayerRequests(record.content).map((line, idx) => {
+                                   if (!line.text && !line.marker) return null;
+                                   if (line.marker) {
+                                     return (
+                                       <div key={idx} className="flex items-start gap-1 leading-snug">
+                                         <span className="font-bold text-indigo-600 dark:text-indigo-400 shrink-0 min-w-[14px]">{line.marker}</span>
+                                         <span className="flex-1">{line.text}</span>
+                                       </div>
+                                     );
+                                   }
+                                   return (
+                                     <div key={idx} className="leading-snug">
+                                       {line.text}
+                                     </div>
+                                   );
+                                 })}
+                               </div>
                              </div>
                            )}
                            {record.note && (
-                             <div className="mt-2 text-sm text-slate-700 dark:text-slate-300 flex items-start bg-yellow-50 dark:bg-yellow-950/20 p-2 rounded border border-yellow-100 dark:border-yellow-900/30">
-                               <FileText size={14} className="text-yellow-600 dark:text-yellow-400 mr-2 mt-0.5 flex-shrink-0" />
+                             <div className="mt-1.5 text-xs text-slate-700 dark:text-slate-350 flex items-start bg-yellow-50/50 dark:bg-yellow-950/15 p-1.5 rounded border border-yellow-100/50 dark:border-yellow-900/20">
+                               <FileText size={10} className="text-yellow-600 dark:text-yellow-400 mr-1.5 mt-0.5 flex-shrink-0" />
                                <p>{record.note}</p>
                              </div>
                            )}
@@ -292,11 +352,11 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                       </div>
                     ))}
                   </div>
-              </div>
+               </div>
             );
           })}
           {!hasAnyRecords && (
-             <div className="col-span-full text-center py-12 text-slate-400 dark:text-slate-600">
+             <div className="col-span-full text-center py-8 text-slate-400 dark:text-slate-600 text-xs">
                해당 날짜에 등록된 내용이 없습니다.
              </div>
           )}
@@ -305,76 +365,93 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
       
       {/* Member View */}
       {viewMode === 'member' && (
-         <div className="space-y-6">
+         <div className="space-y-3">
             {!memberHistoryData ? (
-               <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 min-h-[400px] flex flex-col items-center justify-center p-12 text-slate-400 dark:text-slate-600">
-                  <Search size={48} className="mb-4 opacity-10" />
+               <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/50 dark:border-slate-800/80 min-h-[250px] flex flex-col items-center justify-center p-8 text-slate-400 dark:text-slate-500 text-xs">
+                  <Search size={32} className="mb-2 opacity-20 text-indigo-400" />
                   <p>위에서 이름을 검색하거나, 소그룹을 선택하여 기록을 확인하세요.</p>
                </div>
             ) : memberHistoryData.length === 0 ? (
-               <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 min-h-[300px] flex flex-col items-center justify-center p-12 text-slate-400 dark:text-slate-600">
-                  <AlertCircle size={48} className="mb-4 opacity-10" />
+               <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/50 dark:border-slate-800/80 min-h-[200px] flex flex-col items-center justify-center p-8 text-slate-400 dark:text-slate-500 text-xs">
+                  <AlertCircle size={32} className="mb-2 opacity-20 text-indigo-400" />
                   <p>검색 결과가 없습니다.</p>
                </div>
             ) : (
                memberHistoryData.map(({ member, records }) => (
-                 <div key={member.id} className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-                    <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20">
-                       <div className="flex justify-between items-start">
-                          <div className="flex items-center gap-4">
+                 <div key={member.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/50 dark:border-slate-800/80 shadow-[0_1px_3px_rgba(0,0,0,0.01)] overflow-hidden">
+                    <div className="p-3 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-950/20">
+                       <div className="flex justify-between items-center gap-4">
+                          <div className="flex items-center gap-3">
                              {member.photoUrl ? (
-                               <img src={member.photoUrl} alt={member.name} className="w-12 h-12 rounded-full object-cover border-2 border-white dark:border-slate-800 shadow-sm" referrerPolicy="no-referrer" />
+                               <img src={member.photoUrl} alt={member.name} className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-800 shadow-xs" referrerPolicy="no-referrer" />
                              ) : (
-                               <div className="w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-lg text-slate-500 dark:text-slate-400 font-bold border-2 border-white dark:border-slate-800 shadow-sm shrink-0">
+                               <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-xs text-slate-500 dark:text-slate-400 font-bold border border-slate-200 dark:border-slate-800 shadow-xs shrink-0">
                                  {member.name.substring(0, 1)}
                                </div>
                              )}
                              <div>
-                                 <h3 className="font-bold text-2xl text-slate-800 dark:text-slate-100">{member.name}</h3>
-                                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{member.group}</p>
+                                 <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100">{member.name}</h3>
+                                 <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{member.group}</p>
                              </div>
                           </div>
                           {member.specialNotes && (
-                             <div className="bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 text-rose-600 dark:text-rose-400 px-4 py-2 rounded-lg max-w-md">
-                                <p className="text-xs font-bold flex items-center mb-1">
-                                   <AlertCircle size={12} className="mr-1" /> 기본 비고
+                             <div className="bg-rose-50/40 dark:bg-rose-950/15 border border-rose-100/50 dark:border-rose-900/20 text-rose-600 dark:text-rose-400 px-2.5 py-1.5 rounded-lg max-w-xs text-xs">
+                                <p className="text-[9px] font-bold flex items-center mb-0.5">
+                                   <AlertCircle size={10} className="mr-1" /> 기본 비고
                                 </p>
-                                <p className="text-sm">{member.specialNotes}</p>
+                                <p className="text-[11px] leading-normal">{member.specialNotes}</p>
                              </div>
                           )}
                        </div>
                     </div>
                     
-                    <div className="p-6">
-                       <h4 className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-4 uppercase tracking-wider">히스토리</h4>
-                       <div className="space-y-6">
+                    <div className="p-3">
+                       <h4 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-2 uppercase tracking-wider">히스토리</h4>
+                       <div className="space-y-3.5">
                           {records.length > 0 ? (
                              records.map(record => (
-                                <div key={record.id} className="relative pl-6 border-l-2 border-indigo-100 dark:border-indigo-900/40">
-                                   <div className="absolute -left-[5px] top-1.5 w-2 h-2 rounded-full bg-indigo-500 ring-4 ring-white dark:ring-slate-900"></div>
-                                   <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400 block mb-1">{record.date}</span>
-                                   <div className="space-y-2">
-                                       {record.content && (
-                                         <div className="bg-slate-50 dark:bg-slate-950/40 p-4 rounded-lg text-slate-700 dark:text-slate-300 text-sm leading-relaxed border border-slate-100 dark:border-slate-800">
-                                            <div className="flex items-center text-xs text-slate-400 dark:text-slate-500 mb-1">
-                                              <Quote size={12} className="mr-1"/> 기도제목
-                                            </div>
-                                            {record.content}
-                                         </div>
-                                       )}
-                                       {record.note && (
-                                         <div className="bg-yellow-50 dark:bg-yellow-950/20 p-3 rounded-lg text-slate-700 dark:text-slate-300 text-sm leading-relaxed border border-yellow-100 dark:border-yellow-900/30">
-                                            <div className="flex items-center text-xs text-yellow-600 dark:text-yellow-400 mb-1 font-bold">
-                                              <FileText size={12} className="mr-1"/> 특이사항
-                                            </div>
-                                            {record.note}
-                                         </div>
-                                       )}
+                                <div key={record.id} className="relative pl-4 border-l-2 border-indigo-100 dark:border-indigo-900/30">
+                                   <div className="absolute -left-[4.5px] top-1.5 w-1.5 h-1.5 rounded-full bg-indigo-500 ring-2 ring-white dark:ring-slate-900"></div>
+                                   <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 block mb-1">{record.date}</span>
+                                   <div className="space-y-1.5">
+                                      {hasActualPrayerContent(record.content) && (
+                                        <div className="bg-slate-50/50 dark:bg-slate-950/20 p-2.5 rounded-lg text-slate-700 dark:text-slate-300 text-xs leading-snug border border-slate-100 dark:border-slate-800/60">
+                                           <div className="flex items-center text-[10px] text-slate-400 dark:text-slate-500 mb-1 font-bold">
+                                             <Quote size={10} className="mr-1"/> 기도제목
+                                           </div>
+                                           <div className="space-y-0.5">
+                                             {parsePrayerRequests(record.content).map((line, idx) => {
+                                               if (!line.text && !line.marker) return null;
+                                               if (line.marker) {
+                                                 return (
+                                                   <div key={idx} className="flex items-start gap-1 leading-snug">
+                                                     <span className="font-bold text-indigo-600 dark:text-indigo-400 shrink-0 min-w-[14px]">{line.marker}</span>
+                                                     <span className="flex-1">{line.text}</span>
+                                                   </div>
+                                                 );
+                                               }
+                                               return (
+                                                 <div key={idx} className="leading-snug">
+                                                   {line.text}
+                                                 </div>
+                                               );
+                                             })}
+                                           </div>
+                                        </div>
+                                      )}
+                                      {record.note && (
+                                        <div className="bg-yellow-50/50 dark:bg-yellow-950/15 p-2 rounded-lg text-slate-700 dark:text-slate-300 text-xs leading-relaxed border border-yellow-100/40 dark:border-yellow-900/20">
+                                           <div className="flex items-center text-[10px] text-yellow-600 dark:text-yellow-400 mb-0.5 font-bold">
+                                             <FileText size={10} className="mr-1"/> 특이사항
+                                           </div>
+                                           {record.note}
+                                        </div>
+                                      )}
                                    </div>
                                 </div>
                              ))
                           ) : (
-                             <div className="text-center py-4 text-slate-400 dark:text-slate-600 text-sm">
+                             <div className="text-center py-2 text-slate-400 dark:text-slate-600 text-[11px]">
                                 <p>등록된 이력이 없습니다.</p>
                              </div>
                           )}

@@ -33,3 +33,36 @@ export const getClosestSunday = (): string => {
 
   return closestDate;
 };
+
+export function hasActualPrayerContent(text: string | null | undefined): boolean {
+  if (!text) return false;
+  // Remove numbers, whitespace, dots, brackets, newlines and common formatting chars
+  const cleaned = text.replace(/[\s\d.,;:\-\[\]\(\)\/\\*~!@#$%^&_+=]+/g, '');
+  return cleaned.length > 0;
+}
+
+export interface ParsedPrayerLine {
+  marker?: string;
+  text: string;
+}
+
+export function parsePrayerRequests(text: string | null | undefined): ParsedPrayerLine[] {
+  if (!text) return [];
+  return text.split('\n').map(line => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      return { text: '' };
+    }
+    const match = line.match(/^(\s*)([0-9]+[\.\)]|[\*\-\•])\s*(.*)$/);
+    if (match) {
+      return {
+        marker: match[2],
+        text: match[3]
+      };
+    }
+    return {
+      text: line
+    };
+  });
+}
+
