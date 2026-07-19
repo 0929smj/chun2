@@ -405,7 +405,16 @@ export function runVisitationSearch(
     // Group match
     const matchesGroup = selectedGroup === 'ALL' || member.group === selectedGroup;
     // Type match
-    const matchesType = selectedType === 'ALL' || v.visitationType === selectedType;
+    let matchesType = false;
+    if (selectedType === 'ALL') {
+      matchesType = true;
+    } else if (selectedType === '기타심방') {
+      matchesType = v.visitationType === '기타심방' || v.visitationType === '기타' || v.visitationType === '연계심방';
+    } else if (selectedType === 'SNS심방') {
+      matchesType = v.visitationType === 'SNS심방' || v.visitationType === '온라인심방' || v.visitationType === 'SNS/메시지';
+    } else {
+      matchesType = v.visitationType === selectedType;
+    }
     // Date match
     const matchesDate = !selectedFilterDate || v.date === selectedFilterDate;
 

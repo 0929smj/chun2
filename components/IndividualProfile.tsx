@@ -197,7 +197,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
 
-  const VISITATION_TYPES = ['대면심방', '전화심방', 'SNS심방', '가정방문', '병원심방', '기타심방'];
+  const VISITATION_TYPES = ['대면심방', '전화심방', '연계심방', 'SNS심방', '가정방문', '병원심방', '기타심방'];
 
   const fetchCurrentLocationAddress = () => {
     if (!navigator.geolocation) {
@@ -533,7 +533,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
           ...editingVisitation,
           date: formDate,
           visitationType: formType,
-          place: formPlace,
+          place: formType === '연계심방' ? '' : formPlace,
           details: formDetails,
           prayerRequests: formPrayerRequests
         });
@@ -544,7 +544,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
           date: formDate,
           memberId: targetMember.id,
           visitationType: formType,
-          place: formPlace,
+          place: formType === '연계심방' ? '' : formPlace,
           details: formDetails,
           prayerRequests: formPrayerRequests
         });
@@ -1382,36 +1382,38 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
               </div>
 
               {/* Place */}
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <label className="block text-xs font-bold text-slate-500">심방 장소</label>
-                  <button
-                    type="button"
-                    onClick={fetchCurrentLocationAddress}
-                    disabled={gpsLoading}
-                    className="text-[10px] text-rose-600 hover:text-rose-800 flex items-center gap-1 font-semibold"
-                  >
-                    {gpsLoading ? (
-                      <>
-                        <span className="animate-spin h-2.5 w-2.5 border-2 border-rose-600 border-t-transparent rounded-full" />
-                        위치 파악 중...
-                      </>
-                    ) : gpsError ? (
-                      <span className="text-rose-500 underline">위치 실패 (재시도)</span>
-                    ) : (
-                      <span>📍 현재 위치 자동 입력</span>
-                    )}
-                  </button>
+              {formType !== '연계심방' && (
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-xs font-bold text-slate-500">심방 장소</label>
+                    <button
+                      type="button"
+                      onClick={fetchCurrentLocationAddress}
+                      disabled={gpsLoading}
+                      className="text-[10px] text-rose-600 hover:text-rose-800 flex items-center gap-1 font-semibold"
+                    >
+                      {gpsLoading ? (
+                        <>
+                          <span className="animate-spin h-2.5 w-2.5 border-2 border-rose-600 border-t-transparent rounded-full" />
+                          위치 파악 중...
+                        </>
+                      ) : gpsError ? (
+                        <span className="text-rose-500 underline">위치 실패 (재시도)</span>
+                      ) : (
+                        <span>📍 현재 위치 자동 입력</span>
+                      )}
+                    </button>
+                  </div>
+                  <input 
+                    type="text"
+                    required
+                    placeholder="예: 교회 로비, 만남의 카페, 성도 가정, 전화통화 등"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-rose-500 focus:border-rose-500"
+                    value={formPlace}
+                    onChange={(e) => setFormPlace(e.target.value)}
+                  />
                 </div>
-                <input 
-                  type="text"
-                  required
-                  placeholder="예: 교회 로비, 만남의 카페, 성도 가정, 전화통화 등"
-                  className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-rose-500 focus:border-rose-500"
-                  value={formPlace}
-                  onChange={(e) => setFormPlace(e.target.value)}
-                />
-              </div>
+              )}
 
               {/* Details */}
               <div>

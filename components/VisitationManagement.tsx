@@ -221,7 +221,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
   }, [visitations]);
 
   // Visitation types options
-  const VISITATION_TYPES = ['대면심방', '전화심방', '새가족심방', 'SNS심방', '가정방문', '병원심방', '기타심방'];
+  const VISITATION_TYPES = ['대면심방', '전화심방', '새가족심방', '연계심방', 'SNS심방', '가정방문', '병원심방', '기타심방'];
 
   // Map memberId to Member object for quick lookup
   const memberMap = useMemo(() => {
@@ -472,7 +472,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
         date: formDate,
         memberId: formMemberId,
         visitationType: formType,
-        place: formPlace,
+        place: formType === '연계심방' ? '' : formPlace,
         details: formDetails,
         prayerRequests: formPrayerRequests
       });
@@ -482,7 +482,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
         date: formDate,
         memberId: formMemberId,
         visitationType: formType,
-        place: formPlace,
+        place: formType === '연계심방' ? '' : formPlace,
         details: formDetails,
         prayerRequests: formPrayerRequests
       });
@@ -1194,41 +1194,43 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
               </div>
 
               {/* Place Selection with GPS integration */}
-              <div className="space-y-0.5">
-                <div className="flex justify-between items-center">
-                  <label className="block text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">심방 장소</label>
-                  <button
-                    type="button"
-                    onClick={fetchCurrentLocationAddress}
-                    disabled={gpsLoading}
-                    className="text-[9px] sm:text-[10px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 flex items-center gap-1 font-bold bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100/50 dark:border-indigo-900/30 px-2 py-0.5 rounded-full transition-all cursor-pointer shadow-sm active:scale-95"
-                  >
-                    {gpsLoading ? (
-                      <>
-                        <span className="animate-spin h-2 w-2 border-2 border-indigo-600 border-t-transparent rounded-full" />
-                        위치 파악 중...
-                      </>
-                    ) : gpsError ? (
-                      <span className="text-rose-500 underline">위치 실패</span>
-                    ) : (
-                      <span>📍 현재 위치 자동 입력</span>
-                    )}
-                  </button>
+              {formType !== '연계심방' && (
+                <div className="space-y-0.5">
+                  <div className="flex justify-between items-center">
+                    <label className="block text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">심방 장소</label>
+                    <button
+                      type="button"
+                      onClick={fetchCurrentLocationAddress}
+                      disabled={gpsLoading}
+                      className="text-[9px] sm:text-[10px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 flex items-center gap-1 font-bold bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100/50 dark:border-indigo-900/30 px-2 py-0.5 rounded-full transition-all cursor-pointer shadow-sm active:scale-95"
+                    >
+                      {gpsLoading ? (
+                        <>
+                          <span className="animate-spin h-2 w-2 border-2 border-indigo-600 border-t-transparent rounded-full" />
+                          위치 파악 중...
+                        </>
+                      ) : gpsError ? (
+                        <span className="text-rose-500 underline">위치 실패</span>
+                      ) : (
+                        <span>📍 현재 위치 자동 입력</span>
+                      )}
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="예: 강남구 역삼동, 교회 소예배실, 성도 가정 등"
+                    value={formPlace}
+                    onChange={(e) => setFormPlace(e.target.value)}
+                    className="w-full h-10 px-3 py-2 border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-slate-800 dark:text-slate-200"
+                  />
+                  {gpsError && (
+                    <p className="text-[9px] text-rose-500 flex items-center gap-1 font-medium mt-0.5 animate-fadeIn">
+                      <AlertCircle size={10} className="shrink-0" />
+                      <span>{gpsError}가 감지되었습니다. 직접 입력해주셔도 괜찮습니다.</span>
+                    </p>
+                  )}
                 </div>
-                <input
-                  type="text"
-                  placeholder="예: 강남구 역삼동, 교회 소예배실, 성도 가정 등"
-                  value={formPlace}
-                  onChange={(e) => setFormPlace(e.target.value)}
-                  className="w-full h-10 px-3 py-2 border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-slate-800 dark:text-slate-200"
-                />
-                {gpsError && (
-                  <p className="text-[9px] text-rose-500 flex items-center gap-1 font-medium mt-0.5 animate-fadeIn">
-                    <AlertCircle size={10} className="shrink-0" />
-                    <span>{gpsError}가 감지되었습니다. 직접 입력해주셔도 괜찮습니다.</span>
-                  </p>
-                )}
-              </div>
+              )}
 
               {/* Details Field */}
               <div className="space-y-0.5">
