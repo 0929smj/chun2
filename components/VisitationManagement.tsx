@@ -2,12 +2,19 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Member, Visitation, AttendanceRecord, PrayerRecord, AttendanceType, MeetingStatus } from '../types';
 import { SUNDAYS_2026 } from '../services/mockData';
-import { Plus, Search, Calendar, MapPin, Heart, Clipboard, Trash2, Edit2, Edit3, List, X, Filter, Sparkles, Phone, MessageSquare, AlertCircle, ChevronLeft, ChevronRight, Home, Activity, UserPlus, Network } from 'lucide-react';
+import { Plus, Search, Calendar, MapPin, Heart, Clipboard, Trash2, Edit2, Edit3, List, X, Filter, Sparkles, Phone, MessageSquare, AlertCircle, ChevronLeft, ChevronRight, Home, Activity, UserPlus, Network, Settings } from 'lucide-react';
 import { runUniversalSearch, runVisitationSearch } from '../services/searchAlgorithm';
 import { hasActualPrayerContent, parsePrayerRequests } from '../services/utils';
 
 const escapeRegExp = (string: string) => {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+const isNewFamily = (member?: Member | null) => {
+  if (!member) return false;
+  const regDate = member.MemberRegistration || (member as any).registrationDate;
+  if (!regDate) return false;
+  return String(regDate).trim().startsWith('2026');
 };
 
 const renderHighlightedText = (text: string, query: string) => {
@@ -54,6 +61,7 @@ interface VisitationManagementProps {
   onAddVisitation: (visitation: Omit<Visitation, 'visitationId' | 'submittedAt'>) => void;
   onUpdateVisitation: (visitation: Visitation) => void;
   onDeleteVisitation: (visitationId: string) => void;
+  onUpdateMember?: (updatedMember: Member) => Promise<void>;
   records?: AttendanceRecord[];
   meetingStatus?: MeetingStatus[];
   prayerRecords?: PrayerRecord[];
@@ -68,6 +76,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
   onAddVisitation,
   onUpdateVisitation,
   onDeleteVisitation,
+  onUpdateMember,
   records = [],
   meetingStatus = [],
   prayerRecords = []
@@ -125,6 +134,79 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
   const [isCalendarFilterOpen, setIsCalendarFilterOpen] = useState(false);
   const [calendarYear, setCalendarYear] = useState(() => loadSessionState<number>('visitation_calendarYear', new Date().getFullYear()));
   const [calendarMonth, setCalendarMonth] = useState(() => loadSessionState<number>('visitation_calendarMonth', new Date().getMonth() + 1));
+
+  // Card-specific Member Status & Deferral Edit States
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
+  const [cardStatusType, setCardStatusType] = useState<'ACTIVE' | 'TRANSFER' | 'STUDY_ABROAD' | 'MILITARY' | 'DEFERRED' | 'INACTIVE'>('ACTIVE');
+  const [cardDeferUntil, setCardDeferUntil] = useState('');
+  const [cardDeferReason, setCardDeferReason] = useState('');
+  const [isUpdatingCardStatus, setIsUpdatingCardStatus] = useState(false);
+
+  const startEditingStatus = (member: Member) => {
+    setEditingMemberId(member.id);
+    const status = member.status || 'ACTIVE';
+    const parts = status.split(':');
+    const core = parts[0];
+    if (core === 'DEFERRED') {
+      setCardStatusType('DEFERRED');
+      setCardDeferUntil(parts[1] || '');
+      setCardDeferReason(parts.slice(2).join(':') || '');
+    } else {
+      setCardStatusType(core as any);
+      setCardDeferUntil('');
+      setCardDeferReason(parts.slice(2).join(':') || parts[1] || '');
+    }
+  };
+
+  const handleSaveCardStatus = async (member: Member) => {
+    if (!onUpdateMember) return;
+    setIsUpdatingCardStatus(true);
+    try {
+      let finalStatus = cardStatusType as string;
+      if (cardStatusType === 'DEFERRED') {
+        if (!cardDeferUntil) {
+          alert('추천 재개일(보류 기한)을 입력해주세요.');
+          setIsUpdatingCardStatus(false);
+          return;
+        }
+        finalStatus = `DEFERRED:${cardDeferUntil}`;
+      }
+
+      // Add/append the cardDeferReason to specialNotes
+      let updatedNotes = member.specialNotes || '';
+      if (cardDeferReason.trim()) {
+        const prefix = cardStatusType === 'DEFERRED' ? '[심방 보류]' : 
+                       cardStatusType === 'TRANSFER' ? '[이동]' :
+                       cardStatusType === 'STUDY_ABROAD' ? '[유학]' :
+                       cardStatusType === 'MILITARY' ? '[군복무]' :
+                       cardStatusType === 'INACTIVE' ? '[비활동]' : '';
+        const noteToAdd = prefix ? `${prefix} ${cardDeferReason.trim()}` : cardDeferReason.trim();
+        
+        if (updatedNotes) {
+          if (!updatedNotes.includes(cardDeferReason.trim())) {
+            updatedNotes = `${updatedNotes}\n${noteToAdd}`;
+          }
+        } else {
+          updatedNotes = noteToAdd;
+        }
+      }
+
+      const updatedMember: Member = {
+        ...member,
+        status: finalStatus,
+        specialNotes: updatedNotes
+      };
+
+      await onUpdateMember(updatedMember);
+      setEditingMemberId(null);
+      alert(`${member.name} 성도의 상태 및 설정이 저장되었습니다.`);
+    } catch (e) {
+      console.error(e);
+      alert('설정 저장 중 오류가 발생했습니다.');
+    } finally {
+      setIsUpdatingCardStatus(false);
+    }
+  };
 
   // Save states to sessionStorage on change
   useEffect(() => {
@@ -427,7 +509,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
   // Filter members list in the dropdown based on search name
   const filteredFormMembersSearch = useMemo(() => {
     if (!memberSearchQuery.trim()) return [];
-    const activeMembers = members.filter(m => m.status !== 'INACTIVE');
+    const activeMembers = members.filter(m => (m.status?.split(':')[0] || 'ACTIVE') !== 'INACTIVE');
     return runUniversalSearch(activeMembers, memberSearchQuery);
   }, [members, memberSearchQuery]);
 
@@ -435,7 +517,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
   const filteredFormMembersByGroup = useMemo(() => {
     if (!selectedFormGroup) return [];
     return members
-      .filter(m => m.status !== 'INACTIVE')
+      .filter(m => (m.status?.split(':')[0] || 'ACTIVE') !== 'INACTIVE')
       .filter(m => m.group === selectedFormGroup);
   }, [members, selectedFormGroup]);
 
@@ -612,7 +694,21 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
     });
 
     return members
-      .filter(m => m.status !== 'INACTIVE')
+      .filter(m => {
+        const status = m.status || 'ACTIVE';
+        const coreStatus = status.split(':')[0];
+        if (coreStatus === 'INACTIVE' || coreStatus === 'TRANSFER' || coreStatus === 'STUDY_ABROAD' || coreStatus === 'MILITARY') {
+          return false;
+        }
+        if (coreStatus === 'DEFERRED') {
+          const parts = status.split(':');
+          const dateStr = parts[1];
+          if (dateStr && dateStr > todayStr) {
+            return false;
+          }
+        }
+        return true;
+      })
       .map(member => {
         let score = 0;
         const reasons: string[] = [];
@@ -846,7 +942,11 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
             {/* LEFT SIDE: DYNAMIC PROFILE SYNC CARD (성도 선택시에만 렌더링) */}
             {formMemberId && (
               <div className="lg:col-span-5 space-y-3 animate-fadeIn">
-                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/60 dark:border-slate-800 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02)] p-4 space-y-4 transition-all duration-300 relative">
+                <div className={`rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02)] p-4 space-y-4 transition-all duration-300 relative border ${
+                  isNewFamily(memberMap[formMemberId]) 
+                    ? 'border-lime-400 bg-lime-50/10 dark:bg-lime-950/10' 
+                    : 'bg-white dark:bg-slate-900 border-slate-200/60 dark:border-slate-800'
+                }`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-3 min-w-0">
                       {memberMap[formMemberId]?.photoUrl ? (
@@ -854,10 +954,10 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                           src={memberMap[formMemberId]?.photoUrl}
                           alt={memberMap[formMemberId]?.name}
                           referrerPolicy="no-referrer"
-                          className="w-12 h-12 rounded-xl object-cover border border-indigo-100 dark:border-indigo-950 ring-2 ring-indigo-50/50 dark:ring-indigo-950/20 shrink-0"
+                          className="w-12 h-12 rounded-full object-cover border-2 border-lime-400 dark:border-lime-500 shrink-0"
                         />
                       ) : (
-                        <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl flex items-center justify-center text-indigo-600 dark:text-indigo-400 text-sm font-bold border border-indigo-100/50 dark:border-indigo-900/30 shrink-0">
+                        <div className="w-12 h-12 bg-lime-50 dark:bg-lime-950/40 rounded-full flex items-center justify-center text-lime-600 dark:text-lime-400 text-sm font-bold border-2 border-lime-400 shrink-0">
                           {memberMap[formMemberId]?.name?.substring(0, 2)}
                         </div>
                       )}
@@ -869,6 +969,9 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                           >
                             {memberMap[formMemberId]?.name}
                           </h4>
+                          {isNewFamily(memberMap[formMemberId]) && (
+                            <span className="text-[10px] font-bold bg-lime-500 text-white px-1.5 py-0.2 rounded shrink-0 animate-pulse">새가족</span>
+                          )}
                           <span className="text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.2 rounded shrink-0">
                             {memberMap[formMemberId]?.group}
                           </span>
@@ -1083,12 +1186,17 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                                   className={`w-full text-left px-3 py-2 text-[11px] rounded-lg transition-all duration-150 flex flex-col gap-0.5 outline-none cursor-pointer ${
                                     idx === activeSuggestionIndex 
                                       ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-900 dark:text-indigo-200 font-bold border-l-4 border-indigo-600' 
-                                      : 'hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 text-slate-700 dark:text-slate-300'
+                                      : isNewFamily(item.member)
+                                        ? 'bg-lime-50/40 dark:bg-lime-950/15 hover:bg-lime-100/50 dark:hover:bg-lime-900/30 text-lime-900 dark:text-lime-300 border border-lime-100 dark:border-lime-900/30'
+                                        : 'hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 text-slate-700 dark:text-slate-300'
                                   }`}
                                 >
                                   <div className="flex items-center justify-between w-full">
                                     <div className="flex items-center gap-1.5">
                                       <span className="font-bold">{item.member.name}</span>
+                                      {isNewFamily(item.member) && (
+                                        <span className="px-1 py-0.2 text-[8px] bg-lime-500 text-white font-extrabold rounded">새가족</span>
+                                      )}
                                       <span className="text-[9px] text-slate-400 dark:text-slate-500">({item.member.group})</span>
                                       <span className="text-[8px] text-indigo-600 bg-indigo-50 dark:text-indigo-400 dark:bg-indigo-950/40 border border-indigo-100/50 dark:border-indigo-900/30 px-1 py-0.2 rounded font-bold">
                                         {Math.min(100, Math.max(30, Math.round(item.score)))}% 일치
@@ -1145,9 +1253,18 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                                       setFormMemberId(m.id);
                                       setMemberSearchQuery(m.name);
                                     }}
-                                    className="w-full text-left px-3 py-2 text-[11px] rounded-lg transition-all duration-150 flex items-center justify-between hover:bg-indigo-50 dark:hover:bg-indigo-950/30 text-slate-700 dark:text-slate-300 cursor-pointer"
+                                    className={`w-full text-left px-3 py-2 text-[11px] rounded-lg transition-all duration-150 flex items-center justify-between cursor-pointer ${
+                                      isNewFamily(m) 
+                                        ? 'bg-lime-50/50 dark:bg-lime-950/15 text-lime-800 dark:text-lime-300 border border-lime-100 dark:border-lime-900/35 hover:bg-lime-100/60 dark:hover:bg-lime-900/30' 
+                                        : 'hover:bg-indigo-50 dark:hover:bg-indigo-950/30 text-slate-700 dark:text-slate-300'
+                                    }`}
                                   >
-                                    <span className="font-semibold">{m.name}</span>
+                                    <span className="font-semibold flex items-center gap-1.5">
+                                      {m.name}
+                                      {isNewFamily(m) && (
+                                        <span className="px-1 py-0.2 text-[8px] bg-lime-500 text-white font-extrabold rounded">새가족</span>
+                                      )}
+                                    </span>
                                     <span className="text-slate-400 dark:text-slate-500 text-[10px]">{m.role}</span>
                                   </button>
                                 ))
@@ -1218,7 +1335,8 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                   </div>
                   <input
                     type="text"
-                    placeholder="예: 강남구 역삼동, 교회 소예배실, 성도 가정 등"
+                    required={formType !== '기타심방'}
+                    placeholder="예: 강남구 역삼동, 교회 소예배실, 성도 가정 등 (기타심방은 입력 생략 가능)"
                     value={formPlace}
                     onChange={(e) => setFormPlace(e.target.value)}
                     className="w-full h-10 px-3 py-2 border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-slate-800 dark:text-slate-200"
@@ -1693,14 +1811,30 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-bold text-slate-900 dark:text-slate-100">{member.name}</span>
+                          <span 
+                            onClick={() => navigate('/profile', { state: { memberId: member.id, from: '/visitation' } })}
+                            className="text-xs font-bold text-slate-900 dark:text-slate-100 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline transition-all duration-150"
+                            title="개인별 종합 현황 보기"
+                          >
+                            {member.name}
+                          </span>
                           <span className="text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.2 rounded font-medium">
                             {member.group}
                           </span>
                         </div>
-                        <span className="text-[9px] font-extrabold text-rose-500 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-full border border-rose-100/50 dark:border-rose-900/25">
-                          우선 지수: {score}점
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] font-extrabold text-rose-500 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-full border border-rose-100/50 dark:border-rose-900/25">
+                            우선 지수: {score}점
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => startEditingStatus(member)}
+                            className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                            title="상태 및 추천 보류 설정"
+                          >
+                            <Settings size={12} className={editingMemberId === member.id ? "text-indigo-600 dark:text-indigo-400 animate-spin" : ""} />
+                          </button>
+                        </div>
                       </div>
 
                       {/* Reasons list */}
@@ -1719,23 +1853,103 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveSubTab('entry');
-                        setFormMemberId(member.id);
-                        setMemberSearchQuery(member.name);
-                        const target = members.find(m => m.id === member.id);
-                        if (target) {
-                          setSelectedFormGroup(target.group || '');
-                        }
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                      }}
-                      className="mt-3.5 w-full py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-950/30 dark:hover:bg-indigo-950/60 dark:text-indigo-400 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer border border-indigo-100/30 dark:border-indigo-900/20"
-                    >
-                      <Heart size={10} className="fill-indigo-100 dark:fill-indigo-950/20 text-indigo-600 dark:text-indigo-400" />
-                      이 성도 심방하기
-                    </button>
+                    {editingMemberId === member.id ? (
+                      <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2.5 bg-slate-50/50 dark:bg-slate-950/25 p-2.5 rounded-xl border border-indigo-100/20 dark:border-indigo-900/20 animate-fade-in">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">성도 상태 설정</label>
+                          <select
+                            value={cardStatusType}
+                            onChange={(e) => setCardStatusType(e.target.value as any)}
+                            className="w-full border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-[11px] bg-white dark:bg-slate-900 focus:ring-indigo-500 focus:border-indigo-500 font-semibold text-slate-800 dark:text-slate-200"
+                          >
+                            <option value="ACTIVE">활동 성도 (정상 추천)</option>
+                            <option value="DEFERRED">⏳ 심방 추천 보류</option>
+                            <option value="TRANSFER">🚪 교회 이동 (추천 제외)</option>
+                            <option value="STUDY_ABROAD">✈️ 유학 중 (추천 제외)</option>
+                            <option value="MILITARY">🪖 군 복무 중 (추천 제외)</option>
+                            <option value="INACTIVE">💤 비활동 (추천 제외)</option>
+                          </select>
+                        </div>
+
+                        {cardStatusType === 'DEFERRED' ? (
+                          <div className="space-y-2 p-2 bg-amber-50/60 dark:bg-amber-950/20 rounded-lg border border-amber-200/30">
+                            <div>
+                              <label className="block text-[9px] font-bold text-amber-800 dark:text-amber-400 mb-0.5">추천 재개일 (보류 기한) <span className="text-rose-500">*</span></label>
+                              <input 
+                                type="date"
+                                value={cardDeferUntil}
+                                onChange={(e) => setCardDeferUntil(e.target.value)}
+                                className="w-full border border-amber-200 dark:border-amber-900 rounded p-1 text-[10px] bg-white dark:bg-slate-900 focus:ring-amber-500 font-medium text-slate-800 dark:text-slate-200"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold text-amber-800 dark:text-amber-400 mb-0.5">보류 구체적 사유 (메모)</label>
+                              <input 
+                                type="text"
+                                value={cardDeferReason}
+                                onChange={(e) => setCardDeferReason(e.target.value)}
+                                placeholder="예: 개인 사정"
+                                className="w-full border border-amber-200 dark:border-amber-900 rounded p-1 text-[10px] bg-white dark:bg-slate-900 focus:ring-amber-500 font-medium text-slate-800 dark:text-slate-200"
+                              />
+                            </div>
+                          </div>
+                        ) : cardStatusType !== 'ACTIVE' && (
+                          <div className="space-y-2 p-2 bg-slate-50 dark:bg-slate-900/40 rounded-lg border border-slate-200/50 dark:border-slate-800/50">
+                            <div>
+                              <label className="block text-[9px] font-bold text-slate-700 dark:text-slate-400 mb-0.5">
+                                {cardStatusType === 'TRANSFER' ? '교회 이동 사유 (메모 / 선택 사항)' :
+                                 cardStatusType === 'STUDY_ABROAD' ? '유학 관련 메모 (선택 사항)' :
+                                 cardStatusType === 'MILITARY' ? '군 복무 관련 메모 (선택 사항)' :
+                                 '비활동 관련 메모 (선택 사항)'}
+                              </label>
+                              <input 
+                                type="text"
+                                value={cardDeferReason}
+                                onChange={(e) => setCardDeferReason(e.target.value)}
+                                placeholder="예: 사유, 이사지역 등 메모 입력"
+                                className="w-full border border-slate-200 dark:border-slate-800 rounded p-1 text-[10px] bg-white dark:bg-slate-900 focus:ring-indigo-500 font-medium text-slate-800 dark:text-slate-200"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex gap-1.5 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveCardStatus(member)}
+                            disabled={isUpdatingCardStatus}
+                            className="flex-1 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-bold transition-all disabled:bg-slate-300 disabled:cursor-not-allowed cursor-pointer"
+                          >
+                            {isUpdatingCardStatus ? '저장중...' : '저장'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingMemberId(null)}
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-lg text-[10px] cursor-pointer"
+                          >
+                            취소
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveSubTab('entry');
+                          setFormMemberId(member.id);
+                          setMemberSearchQuery(member.name);
+                          const target = members.find(m => m.id === member.id);
+                          if (target) {
+                            setSelectedFormGroup(target.group || '');
+                          }
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className="mt-3.5 w-full py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-950/30 dark:hover:bg-indigo-950/60 dark:text-indigo-400 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer border border-indigo-100/30 dark:border-indigo-900/20"
+                      >
+                        <Heart size={10} className="fill-indigo-100 dark:fill-indigo-950/20 text-indigo-600 dark:text-indigo-400" />
+                        이 성도 심방하기
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1763,7 +1977,11 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                   return (
                     <div 
                       key={v.visitationId} 
-                      className="inline-block w-full break-inside-avoid mb-4 sm:mb-6 bg-white dark:bg-slate-900 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.01)] border border-slate-200/65 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-800 hover:shadow-md transition-all duration-300 overflow-hidden text-xs"
+                      className={`inline-block w-full break-inside-avoid mb-4 sm:mb-6 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.01)] border hover:shadow-md transition-all duration-300 overflow-hidden text-xs ${
+                        isNewFamily(member) 
+                          ? 'border-lime-400 bg-lime-50/5 dark:bg-lime-950/5' 
+                          : 'bg-white dark:bg-slate-900 border-slate-200/65 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-800'
+                      }`}
                     >
                       <div className="p-4 flex flex-col gap-3">
                         {/* Header: Member Profile Info & Visitation Type Badge & Actions */}
@@ -1775,10 +1993,10 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                                 src={member.photoUrl}
                                 alt={member.name}
                                 referrerPolicy="no-referrer"
-                                className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-800 flex-shrink-0"
+                                className="w-8 h-8 rounded-full object-cover border-2 border-lime-400 dark:border-lime-500 flex-shrink-0"
                               />
                             ) : (
-                              <div className="w-8 h-8 bg-indigo-50/60 dark:bg-indigo-950/40 rounded-full flex items-center justify-center text-indigo-700 dark:text-indigo-400 font-extrabold border border-indigo-100/50 dark:border-indigo-900/30 flex-shrink-0 text-[10px]">
+                              <div className="w-8 h-8 bg-lime-50 dark:bg-lime-950/40 rounded-full flex items-center justify-center text-lime-700 dark:text-lime-400 font-extrabold border-2 border-lime-400 flex-shrink-0 text-[10px]">
                                 {member?.name?.substring(0, 2)}
                               </div>
                             )}
@@ -1790,6 +2008,9 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                                 >
                                   {renderHighlightedText(member?.name || '', searchTerm)}
                                 </span>
+                                {isNewFamily(member) && (
+                                  <span className="text-[9px] font-bold bg-lime-500 text-white px-1 py-0.2 rounded shrink-0">새가족</span>
+                                )}
                                 <span className="text-[9px] text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">
                                   ({member?.group})
                                 </span>

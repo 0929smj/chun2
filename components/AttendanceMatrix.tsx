@@ -5,6 +5,13 @@ import { SUNDAYS_2026 } from '../services/mockData';
 import { Check, Search, MessageSquare } from 'lucide-react';
 import { sortAndFilterMembersByName, matchKoreanFuzzy } from '../services/searchAlgorithm';
 
+const isNewFamily = (member?: Member | null) => {
+  if (!member) return false;
+  const regDate = member.MemberRegistration || (member as any).registrationDate;
+  if (!regDate) return false;
+  return String(regDate).trim().startsWith('2026');
+};
+
 interface AttendanceMatrixProps {
   members: Member[];
   records: AttendanceRecord[];
@@ -429,20 +436,20 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
                 <React.Fragment key={member.id}>
                   {/* Row 1: Worship */}
                   <tr className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/40 dark:hover:bg-slate-800/30 transition-colors">
-                    <td rowSpan={3} className={`px-1 py-2 font-medium text-slate-900 dark:text-slate-100 sticky left-0 z-30 border border-slate-200 dark:border-slate-700 ${mIdx % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-[#fafafa] dark:bg-slate-900/60'} group relative w-[98px] min-w-[98px] max-w-[98px]`}>
+                    <td rowSpan={3} className={`px-1 py-2 font-medium sticky left-0 z-30 border border-slate-200 dark:border-slate-700 group relative w-[98px] min-w-[98px] max-w-[98px] ${isNewFamily(member) ? 'bg-lime-50/40 dark:bg-lime-950/20 border-l-4 border-l-lime-500 text-lime-950 dark:text-lime-200' : mIdx % 2 === 0 ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100' : 'bg-[#fafafa] dark:bg-slate-900/60 text-slate-900 dark:text-slate-100'}`}>
                       <div className="flex flex-col items-start gap-0.5 min-w-0">
                         <div 
                           onClick={() => navigate('/profile', { state: { memberId: member.id } })}
                           className="flex items-center gap-1 min-w-0 w-full cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 group/name"
                         >
                            {member.photoUrl ? (
-                             <img src={member.photoUrl} alt={member.name} className="w-4 h-4 md:w-5 md:h-5 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0 group-hover/name:border-indigo-400" referrerPolicy="no-referrer" />
+                             <img src={member.photoUrl} alt={member.name} className="w-4 h-4 md:w-5 md:h-5 rounded-full object-cover border-2 border-lime-400 dark:border-lime-500 shrink-0" referrerPolicy="no-referrer" />
                            ) : (
-                             <div className="w-4 h-4 md:w-5 md:h-5 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-[8px] text-slate-500 dark:text-slate-400 font-bold border border-slate-300 dark:border-slate-700 shrink-0 group-hover/name:border-indigo-400">
+                             <div className="w-4 h-4 md:w-5 md:h-5 rounded-full bg-lime-50 dark:bg-lime-950/40 flex items-center justify-center text-[8px] text-lime-700 dark:text-lime-400 font-extrabold border-2 border-lime-400 shrink-0">
                                {member.name.substring(0, 1)}
                              </div>
                            )}
-                           <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap group-hover/name:underline" title={member.name}>{member.name}</span>
+                           <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap group-hover/name:underline flex items-center gap-0.5" title={member.name}>{member.name}{isNewFamily(member) && <span className="text-[8px] bg-lime-500 text-white font-black px-0.5 rounded leading-none">NEW</span>}</span>
                         </div>
                         {/* Mobile-only group display under the name */}
                         <span className="block sm:hidden text-[9px] text-slate-400 dark:text-slate-500 font-medium truncate max-w-full pl-5" title={member.group}>

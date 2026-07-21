@@ -22,6 +22,38 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus = [] }) => {
+  const theadRef = React.useRef<HTMLTableSectionElement>(null);
+  const [headerHeight, setHeaderHeight] = React.useState(180);
+
+  React.useEffect(() => {
+    const updateHeight = () => {
+      if (theadRef.current) {
+        setHeaderHeight(theadRef.current.offsetHeight);
+      }
+    };
+    
+    updateHeight();
+    
+    const timer = setTimeout(updateHeight, 150);
+    
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && theadRef.current) {
+      resizeObserver = new ResizeObserver(updateHeight);
+      resizeObserver.observe(theadRef.current);
+    } else {
+      window.addEventListener('resize', updateHeight);
+    }
+    
+    return () => {
+      clearTimeout(timer);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      } else {
+        window.removeEventListener('resize', updateHeight);
+      }
+    };
+  }, []);
+
   // Calculate weekly, monthly, and group stats
   const weeklyStats = useMemo(() => {
     const baseStats = getWeeklyStats(records, SUNDAYS_2026);
@@ -35,12 +67,17 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
       const gatheringCanceled = statusGathering?.isCanceled;
       const woolCanceled = statusWool?.isCanceled;
 
+      // Check if there is actual data entered for this date
+      const hasWorshipData = records.some(r => r.date === stat.date && r.types.includes(AttendanceType.Worship)) || mCount > 0;
+      const hasGatheringData = records.some(r => r.date === stat.date && r.types.includes(AttendanceType.Gathering)) || (statusGathering?.manualAssemblyCount || 0) > 0;
+      const hasWoolData = records.some(r => r.date === stat.date && r.types.includes(AttendanceType.Wool));
+
       return {
         ...stat,
-        worshipCount: worshipCanceled ? null : stat.worshipCount,
-        gatheringCount: gatheringCanceled ? null : Math.max(stat.gatheringCount, mCount),
-        woolCount: woolCanceled ? null : stat.woolCount,
-        isManualCount: mCount > stat.gatheringCount && !gatheringCanceled
+        worshipCount: worshipCanceled || !hasWorshipData ? null : stat.worshipCount,
+        gatheringCount: gatheringCanceled || !hasGatheringData ? null : Math.max(stat.gatheringCount, mCount),
+        woolCount: woolCanceled || !hasWoolData ? null : stat.woolCount,
+        isManualCount: mCount > stat.gatheringCount && !gatheringCanceled && hasWorshipData
       };
     });
   }, [records, meetingStatus]);
@@ -156,14 +193,14 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
         {/* Weekly Stats Table */}
         <div className="border-t border-slate-100 dark:border-slate-800/60 pt-4">
           <h4 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2">주별 상세 데이터</h4>
-          <div className="max-h-[220px] overflow-auto custom-scrollbar border border-slate-200/60 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 shadow-xs">
+          <div className="max-h-[500px] overflow-auto custom-scrollbar border border-slate-200/60 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 shadow-xs snap-both snap-mandatory scroll-pl-[120px] md:scroll-pl-[160px]">
             <table className="w-full text-xs md:text-sm text-center text-slate-600 dark:text-slate-400 border-collapse">
-              <thead className="text-xs text-slate-700 dark:text-slate-300 uppercase bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30">
+              <thead ref={theadRef} className="text-xs text-slate-700 dark:text-slate-300 uppercase bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30">
                 <tr>
                   <th scope="col" className="px-2 py-3 border border-slate-200 dark:border-slate-700 sticky top-0 left-0 bg-slate-50 dark:bg-slate-800 z-40 w-[65px] min-w-[65px] max-w-[65px] md:w-[90px] md:min-w-[90px] md:max-w-[90px] font-semibold text-slate-700 dark:text-slate-300">울</th>
                   <th scope="col" className="px-2 py-3 border border-slate-200 dark:border-slate-700 sticky top-0 left-[65px] md:left-[90px] bg-slate-50 dark:bg-slate-800 z-40 w-[55px] min-w-[55px] max-w-[55px] md:w-[70px] md:min-w-[70px] md:max-w-[70px] font-semibold text-slate-700 dark:text-slate-300">구분</th>
                   {weeklyStats.map(stat => (
-                    <th key={stat.date} scope="col" className="px-2 py-3 border border-slate-200 dark:border-slate-700 min-w-[55px] md:min-w-[75px] font-semibold text-slate-600 dark:text-slate-400 sticky top-0 bg-slate-50 dark:bg-slate-800 z-30">
+                    <th key={stat.date} scope="col" className="px-2 py-3 border border-slate-200 dark:border-slate-700 min-w-[55px] md:min-w-[75px] font-semibold text-slate-600 dark:text-slate-400 sticky top-0 bg-slate-50 dark:bg-slate-800 z-30 [scroll-snap-align:none_start]">
                       <span>{stat.date.substring(5)}</span>
                     </th>
                   ))}
@@ -174,7 +211,7 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
                   <td className="px-2 py-2.5 font-bold text-indigo-700 dark:text-indigo-400 border border-slate-200 dark:border-slate-700 sticky left-0 bg-[#f0f4ff] dark:bg-indigo-950/40 z-40 w-[65px] min-w-[65px] max-w-[65px] md:w-[90px] md:min-w-[90px] md:max-w-[90px] text-center">사역</td>
                   <td className="px-2 py-2.5 font-bold text-indigo-700 dark:text-indigo-400 border border-slate-200 dark:border-slate-700 sticky left-[65px] md:left-[90px] bg-[#f0f4ff] dark:bg-indigo-950/40 z-40 w-[55px] min-w-[55px] max-w-[55px] md:w-[70px] md:min-w-[70px] md:max-w-[70px] text-center">이벤트</td>
                   {weeklyStats.map(stat => (
-                    <td key={stat.date} className="px-2 py-2.5 border border-slate-200 dark:border-slate-700 text-[10px] md:text-xs text-indigo-600 dark:text-indigo-400 font-bold bg-[#f5f8ff] dark:bg-indigo-950/20 whitespace-normal break-keep align-middle">
+                    <td key={stat.date} className="px-2 py-2.5 border border-slate-200 dark:border-slate-700 text-[10px] md:text-xs text-indigo-600 dark:text-indigo-400 font-bold bg-[#f5f8ff] dark:bg-indigo-950/20 whitespace-normal break-keep align-middle [scroll-snap-align:none_start]">
                       {getEventName(stat.date)}
                     </td>
                   ))}
@@ -186,9 +223,10 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
                   <td className="px-2 py-2 font-bold text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 sticky left-[65px] md:left-[90px] bg-[#eff6ff] dark:bg-blue-950/30 z-40 w-[55px] min-w-[55px] max-w-[55px] md:w-[70px] md:min-w-[70px] md:max-w-[70px]">예배</td>
                   {weeklyStats.map(stat => {
                     const canceled = isMeetingCanceled(stat.date, AttendanceType.Worship);
+                    const isNull = stat.worshipCount === null;
                     return (
-                      <td key={stat.date} className={`px-2 py-2 border border-slate-200 dark:border-slate-700 font-medium ${canceled ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600' : 'text-slate-700 dark:text-slate-300 bg-[#f8fafc] dark:bg-slate-900/40'}`}>
-                        {canceled ? '-' : stat.worshipCount}
+                      <td key={stat.date} className={`px-2 py-2 border border-slate-200 dark:border-slate-700 font-medium [scroll-snap-align:none_start] ${canceled || isNull ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600' : 'text-slate-700 dark:text-slate-300 bg-[#f8fafc] dark:bg-slate-900/40'}`}>
+                        {canceled || isNull ? '-' : stat.worshipCount}
                       </td>
                     );
                   })}
@@ -197,9 +235,10 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
                   <td className="px-2 py-2 font-bold text-indigo-600 dark:text-indigo-400 border border-slate-200 dark:border-slate-700 sticky left-[65px] md:left-[90px] bg-[#f5f3ff] dark:bg-indigo-950/30 z-40 w-[55px] min-w-[55px] max-w-[55px] md:w-[70px] md:min-w-[70px] md:max-w-[70px]">집회</td>
                   {weeklyStats.map(stat => {
                     const canceled = isMeetingCanceled(stat.date, AttendanceType.Gathering);
+                    const isNull = stat.gatheringCount === null;
                     return (
-                      <td key={stat.date} className={`px-2 py-2 border border-slate-200 dark:border-slate-700 font-medium ${canceled ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600' : 'text-slate-700 dark:text-slate-300 bg-[#f8fafc] dark:bg-slate-900/40'}`}>
-                        {canceled ? '-' : (
+                      <td key={stat.date} className={`px-2 py-2 border border-slate-200 dark:border-slate-700 font-medium [scroll-snap-align:none_start] ${canceled || isNull ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600' : 'text-slate-700 dark:text-slate-300 bg-[#f8fafc] dark:bg-slate-900/40'}`}>
+                        {canceled || isNull ? '-' : (
                           <>
                             {stat.gatheringCount}
                             {(stat as any).isManualCount && (
@@ -215,9 +254,10 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
                   <td className="px-2 py-2 font-bold text-emerald-600 dark:text-emerald-400 border border-slate-200 dark:border-slate-700 sticky left-[65px] md:left-[90px] bg-[#f0fdf4] dark:bg-emerald-950/30 z-40 w-[55px] min-w-[55px] max-w-[55px] md:w-[70px] md:min-w-[70px] md:max-w-[70px]">울모임</td>
                   {weeklyStats.map(stat => {
                     const canceled = isMeetingCanceled(stat.date, AttendanceType.Wool);
+                    const isNull = stat.woolCount === null;
                     return (
-                      <td key={stat.date} className={`px-2 py-2 border border-slate-200 dark:border-slate-700 font-medium ${canceled ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600' : 'text-slate-700 dark:text-slate-300 bg-[#f8fafc] dark:bg-slate-900/40'}`}>
-                        {canceled ? '-' : stat.woolCount}
+                      <td key={stat.date} className={`px-2 py-2 border border-slate-200 dark:border-slate-700 font-medium [scroll-snap-align:none_start] ${canceled || isNull ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600' : 'text-slate-700 dark:text-slate-300 bg-[#f8fafc] dark:bg-slate-900/40'}`}>
+                        {canceled || isNull ? '-' : stat.woolCount}
                       </td>
                     );
                   })}
@@ -228,16 +268,24 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
               {/* Individual Group Stats Rows */}
               {weeklyGroupStats.map((group, groupIdx) => (
                 <React.Fragment key={group.groupName}>
-                  <tr className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 hover:bg-slate-50/40 dark:hover:bg-slate-800/30 transition-colors">
+                  <tr 
+                    className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 hover:bg-slate-50/40 dark:hover:bg-slate-800/30 transition-colors"
+                    style={{ 
+                      scrollSnapAlign: 'start none',
+                      scrollMarginTop: `${headerHeight}px`
+                    }}
+                  >
                     <td rowSpan={3} className={`px-2 py-2 font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 sticky left-0 z-10 whitespace-normal break-all align-middle text-[10px] md:text-sm ${groupIdx % 2 === 0 ? 'bg-[#fafafa] dark:bg-slate-900' : 'bg-[#f4f4f4] dark:bg-slate-900/60'} w-[65px] min-w-[65px] max-w-[65px] md:w-[90px] md:min-w-[90px] md:max-w-[90px]`}>
                       {group.groupName}
                     </td>
                     <td className={`px-2 py-1.5 text-blue-600 dark:text-blue-400 font-bold border border-slate-200 dark:border-slate-700 sticky left-[65px] md:left-[90px] z-10 text-[10px] md:text-xs ${groupIdx % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-[#fafafa] dark:bg-slate-900/60'} w-[55px] min-w-[55px] max-w-[55px] md:w-[70px] md:min-w-[70px] md:max-w-[70px]`}>예배</td>
                     {group.weeklyData.map(stat => {
                       const canceled = isMeetingCanceled(stat.date, AttendanceType.Worship);
+                      const overall = weeklyStats.find(ws => ws.date === stat.date);
+                      const isNull = !overall || overall.worshipCount === null;
                       return (
-                        <td key={stat.date} className={`px-2 py-1.5 border border-slate-200 dark:border-slate-700 text-[10px] md:text-xs ${canceled ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600' : 'text-slate-600 dark:text-slate-300'}`}>
-                          {canceled ? '-' : stat.worshipCount}
+                        <td key={stat.date} className={`px-2 py-1.5 border border-slate-200 dark:border-slate-700 text-[10px] md:text-xs [scroll-snap-align:none_start] ${canceled || isNull ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600' : 'text-slate-600 dark:text-slate-300'}`}>
+                          {canceled || isNull ? '-' : stat.worshipCount}
                         </td>
                       );
                     })}
@@ -246,9 +294,11 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
                     <td className={`px-2 py-1.5 text-indigo-600 dark:text-indigo-400 font-bold border border-slate-200 dark:border-slate-700 sticky left-[65px] md:left-[90px] z-10 text-[10px] md:text-xs ${groupIdx % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-[#fafafa] dark:bg-slate-900/60'} w-[55px] min-w-[55px] max-w-[55px] md:w-[70px] md:min-w-[70px] md:max-w-[70px]`}>집회</td>
                     {group.weeklyData.map(stat => {
                       const canceled = isMeetingCanceled(stat.date, AttendanceType.Gathering);
+                      const overall = weeklyStats.find(ws => ws.date === stat.date);
+                      const isNull = !overall || overall.gatheringCount === null;
                       return (
-                        <td key={stat.date} className={`px-2 py-1.5 border border-slate-200 dark:border-slate-700 text-[10px] md:text-xs ${canceled ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600' : 'text-slate-600 dark:text-slate-300'}`}>
-                          {canceled ? '-' : stat.gatheringCount}
+                        <td key={stat.date} className={`px-2 py-1.5 border border-slate-200 dark:border-slate-700 text-[10px] md:text-xs [scroll-snap-align:none_start] ${canceled || isNull ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600' : 'text-slate-600 dark:text-slate-300'}`}>
+                          {canceled || isNull ? '-' : stat.gatheringCount}
                         </td>
                       );
                     })}
@@ -257,9 +307,11 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
                     <td className={`px-2 py-1.5 text-emerald-600 dark:text-emerald-400 font-bold border border-slate-200 dark:border-slate-700 sticky left-[65px] md:left-[90px] z-10 text-[10px] md:text-xs ${groupIdx % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-[#fafafa] dark:bg-slate-900/60'} w-[55px] min-w-[55px] max-w-[55px] md:w-[70px] md:min-w-[70px] md:max-w-[70px]`}>울모임</td>
                     {group.weeklyData.map(stat => {
                       const canceled = isMeetingCanceled(stat.date, AttendanceType.Wool);
+                      const overall = weeklyStats.find(ws => ws.date === stat.date);
+                      const isNull = !overall || overall.woolCount === null;
                       return (
-                        <td key={stat.date} className={`px-2 py-1.5 border border-slate-200 dark:border-slate-700 text-[10px] md:text-xs ${canceled ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600' : 'text-slate-600 dark:text-slate-300'}`}>
-                          {canceled ? '-' : stat.woolCount}
+                        <td key={stat.date} className={`px-2 py-1.5 border border-slate-200 dark:border-slate-700 text-[10px] md:text-xs [scroll-snap-align:none_start] ${canceled || isNull ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600' : 'text-slate-600 dark:text-slate-300'}`}>
+                          {canceled || isNull ? '-' : stat.woolCount}
                         </td>
                       );
                     })}

@@ -33,7 +33,11 @@ const App: React.FC = () => {
 
   // Filter only Active members for the app views (except DataManagement)
   const activeMembers = useMemo(() => {
-    return members.filter(m => m.status !== 'INACTIVE');
+    return members.filter(m => {
+      const status = m.status || 'ACTIVE';
+      const coreStatus = status.split(':')[0];
+      return coreStatus !== 'INACTIVE' && coreStatus !== 'TRANSFER' && coreStatus !== 'STUDY_ABROAD' && coreStatus !== 'MILITARY';
+    });
   }, [members]);
 
   // Function to clean attendance records based on meeting status
@@ -380,6 +384,51 @@ const App: React.FC = () => {
     await sendAction('UPDATE_VISITATION', updatedV);
   };
 
+  // Helper to safely write members to local storage cache
+  const saveMembersToCache = (updatedMembers: Member[]) => {
+    const cacheKey = 'church_admin_cached_data';
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      let baseData: any = {
+        members: updatedMembers,
+        meetingStatus,
+        prayers: prayerRecords,
+        accessCodes: validAccessCodes,
+        records,
+        groups,
+        visitations,
+        usingMock
+      };
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          baseData = {
+            ...parsed,
+            members: updatedMembers
+          };
+        } catch (e) {
+          // ignore parsing error
+        }
+      }
+      localStorage.setItem(cacheKey, JSON.stringify(baseData));
+    } catch (e) {
+      console.warn("Failed to write updated members to local storage cache:", e);
+    }
+  };
+
+  // Handler to update a member's properties (e.g. status)
+  const handleUpdateMember = async (updatedM: Member) => {
+    // Optimistic UI update
+    setMembers(prev => {
+      const nextList = prev.map(m => m.id === updatedM.id ? updatedM : m);
+      saveMembersToCache(nextList);
+      return nextList;
+    });
+
+    // Send action to DB
+    await sendAction('UPDATE_MEMBER', updatedM);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-slate-50">
@@ -465,7 +514,7 @@ const App: React.FC = () => {
             path="/profile" 
             element={
               <IndividualProfile 
-                members={activeMembers} 
+                members={members} 
                 records={records} 
                 prayerRecords={prayerRecords}
                 meetingStatus={meetingStatus}
@@ -474,6 +523,7 @@ const App: React.FC = () => {
                 visitations={visitations}
                 onAddVisitation={handleAddVisitation}
                 onUpdateVisitation={handleUpdateVisitation}
+                onUpdateMember={handleUpdateMember}
               />
             } 
           />
@@ -482,7 +532,7 @@ const App: React.FC = () => {
             element={
               isVisitationMode ? (
                 <VisitationManagement 
-                  members={activeMembers} 
+                  members={members} 
                   visitations={visitations} 
                   setVisitations={setVisitations}
                   availableGroups={groups}
@@ -490,6 +540,7 @@ const App: React.FC = () => {
                   onAddVisitation={handleAddVisitation}
                   onUpdateVisitation={handleUpdateVisitation}
                   onDeleteVisitation={handleDeleteVisitation}
+                  onUpdateMember={handleUpdateMember}
                   records={records}
                   meetingStatus={meetingStatus}
                   prayerRecords={prayerRecords}

@@ -14,6 +14,13 @@ import {
 } from 'd3-force';
 import { motion, AnimatePresence } from 'motion/react';
 
+const isNewFamily = (member?: Member | null) => {
+  if (!member) return false;
+  const regDate = member.MemberRegistration || (member as any).registrationDate;
+  if (!regDate) return false;
+  return String(regDate).trim().startsWith('2026');
+};
+
 interface OrganizationChartProps {
   members: Member[];
   records: AttendanceRecord[];
@@ -384,13 +391,13 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
       }
 
       const M = membersData.length;
-      const baseR = 120; // Minimum distance for the highest score members
-      const spreadR = 40; // Keep the spread compact
+      const minR = 110;  // High attendance -> close (110px)
+      const maxR = 310;  // Low attendance -> far (310px)
 
       membersData.forEach((item, i) => {
         const theta = i * 2.39996;
-        const ratio = M > 1 ? i / (M - 1) : 0; 
-        const r = baseR + spreadR * ratio;
+        const score = item.score; // 0 to 100
+        const r = minR + (maxR - minR) * (1 - score / 100);
         
         item.targetX = cx + r * Math.cos(theta);
         item.targetY = cy + r * Math.sin(theta);
@@ -446,14 +453,14 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
     }
 
     const simulation = forceSimulation(nodes)
-      .force('charge', forceManyBody().strength(d => d.id === 'CENTER' ? 0 : -10))
-      .force('radial', forceRadial<RankedNode>(d => Math.hypot(d.targetX - cx, d.targetY - cy), cx, cy).strength(2.0))
-      .force('x', forceX<RankedNode>(d => d.targetX).strength(1.2))
-      .force('y', forceY<RankedNode>(d => d.targetY).strength(1.2))
+      .force('charge', forceManyBody().strength(d => d.id === 'CENTER' ? 0 : -35))
+      .force('radial', forceRadial<RankedNode>(d => Math.hypot(d.targetX - cx, d.targetY - cy), cx, cy).strength(3.0))
+      .force('x', forceX<RankedNode>(d => d.targetX).strength(1.5))
+      .force('y', forceY<RankedNode>(d => d.targetY).strength(1.5))
       .force('collide', forceCollide<RankedNode>().radius(d => {
         if (d.id === 'CENTER') return 0;
-        if (d.type === 'leader') return 84; 
-        return 72; 
+        if (d.type === 'leader') return 80; 
+        return 70; 
       }).iterations(4))
       .stop();
 
@@ -647,24 +654,29 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
                        damping: node.springDamping,
                        mass: node.springMass
                      }}
-                     className={`absolute flex flex-col items-center pointer-events-auto origin-center w-[200px] h-[200px] justify-center ${isTooltipActive ? 'z-50' : 'z-20'}`}
-                     onMouseEnter={() => setActiveTooltip(node.id)}
-                     onMouseLeave={() => setActiveTooltip(null)}
-                     onTouchStart={(e) => handleTouchStart(node.id, e)}
-                     onTouchEnd={handleTouchEnd}
-                     onTouchCancel={handleTouchEnd}
+                     className={`absolute flex flex-col items-center pointer-events-none origin-center w-[200px] h-[200px] justify-center ${isTooltipActive ? 'z-50' : 'z-20'}`}
+                     
+                     
+                     
+                     
+                     
                      onContextMenu={(e) => e.preventDefault()}
                    >
                       <motion.div 
-                         className="relative cursor-pointer flex flex-col items-center group"
+                         className="relative cursor-pointer flex flex-col items-center group pointer-events-auto"
+                          
+                          
+                          
+                          
+                          
                          onClick={(e) => handleClick(e as any, type, groupName, m.id)}
                          animate={{ y: [0, -6, 0] }}
                          transition={{ repeat: Infinity, duration: node.animDuration, delay: node.animDelay, ease: "easeInOut" }}
                       >
                           {/* Tooltip Float (Rich Stats) - highest z-index via parent state */}
                           <div 
-                            className={`absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 w-max max-w-[180px] bg-slate-800/95 backdrop-blur-xl px-2 py-1.5 rounded bg-clip-padding shadow-[0_10px_20px_-5px_rgba(0,0,0,0.5)] border border-slate-700/50 flex flex-col items-center gap-1 transition-all duration-300 origin-bottom 
-                            ${isTooltipActive ? 'opacity-100 scale-100 visible' : 'opacity-0 scale-90 invisible pointer-events-none'}`}
+                            className={`absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 w-max max-w-[180px] bg-slate-800/95 backdrop-blur-xl px-2 py-1.5 rounded bg-clip-padding shadow-[0_10px_20px_-5px_rgba(0,0,0,0.5)] border border-slate-700/50 flex flex-col items-center gap-1 transition-all pointer-events-none origin-bottom 
+                            ${isTooltipActive ? 'opacity-100 scale-100 visible duration-300' : 'opacity-0 scale-90 invisible duration-0'}`}
                           >
                             <div className="flex items-center justify-center gap-1.5 text-[9px] text-slate-300 font-medium tracking-tight whitespace-nowrap leading-none">
                                {m.phoneNumber && <span className="flex items-center"><Phone size={9} className="mr-0.5 text-slate-400" />{m.phoneNumber}</span>}
@@ -689,9 +701,13 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
 
                           {/* Node Avatar Component */}
                           <div 
-                            className={`relative rounded-full bg-slate-800 shadow-xl border-[3px] 
-                                        ${type === 'leader' ? 'border-amber-400 ring-4 ring-amber-500/20' : 'border-slate-600'}
-                                        group-hover:border-indigo-400 group-hover:ring-8 group-hover:ring-indigo-500/30 transition-all z-10 duration-300`}
+                            onMouseEnter={() => setActiveTooltip(node.id)} onMouseLeave={() => setActiveTooltip(null)} onTouchStart={(e) => handleTouchStart(node.id, e)} onTouchEnd={handleTouchEnd} onTouchCancel={handleTouchEnd} className={`relative rounded-full bg-slate-800 shadow-xl border-[3px] ${
+                              type === 'leader' 
+                                ? isTooltipActive ? 'border-indigo-400 ring-8 ring-indigo-500/30' : 'border-amber-400 ring-4 ring-amber-500/20' 
+                                : isNewFamily(m) 
+                                  ? isTooltipActive ? 'border-lime-400 ring-8 ring-lime-400/40' : 'border-lime-400 ring-0' 
+                                  : isTooltipActive ? 'border-indigo-400 ring-8 ring-indigo-500/30' : 'border-slate-600 ring-4 ring-slate-600/10'
+                            } transition-all z-10 duration-300`}
                             style={{ width: SIZE, height: SIZE }}
                           >
                              {m.photoUrl ? (
@@ -715,8 +731,9 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
                       <motion.div 
                          animate={{ y: [0, -6, 0] }}
                          transition={{ repeat: Infinity, duration: node.animDuration, delay: node.animDelay, ease: "easeInOut" }}
-                         className={`mt-3 font-bold tracking-tight whitespace-nowrap bg-slate-800/80 backdrop-blur-md px-2.5 py-0.5 rounded-full shadow-lg border border-slate-700/50 
-                         ${type === 'leader' ? 'text-slate-100 text-sm' : 'text-slate-300 text-[11px]'}`}
+                         className={`mt-3 font-bold tracking-tight whitespace-nowrap bg-slate-800/80 backdrop-blur-md px-2.5 py-0.5 rounded-full shadow-lg border pointer-events-auto cursor-pointer 
+                         ${isNewFamily(m) ? 'border-lime-400 text-lime-400' : 'border-slate-700/50'} 
+                         ${type === 'leader' ? 'text-slate-100 text-sm' : 'text-slate-300 text-[11px]'}`} onClick={(e) => handleClick(e as any, type, groupName, m.id)}
                       >
                          {num && <span className="text-slate-500 font-medium mr-1.5">{num}</span>}{name}
                       </motion.div>

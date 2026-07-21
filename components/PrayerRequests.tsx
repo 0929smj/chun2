@@ -5,6 +5,13 @@ import { SUNDAYS_2026 } from '../services/mockData';
 import { getClosestSunday, hasActualPrayerContent, parsePrayerRequests } from '../services/utils';
 import { matchKoreanFuzzy } from '../services/searchAlgorithm';
 
+const isNewFamily = (member?: Member | null) => {
+  if (!member) return false;
+  const regDate = member.MemberRegistration || (member as any).registrationDate;
+  if (!regDate) return false;
+  return String(regDate).trim().startsWith('2026');
+};
+
 interface PrayerRequestsProps {
   members: Member[];
   prayerRecords: PrayerRecord[];
@@ -297,17 +304,17 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                   
                   <div className="space-y-3">
                     {groupItems.map(({ member, record }) => (
-                      <div key={member.id} className="relative pl-3 border-l-2 border-slate-100 dark:border-slate-800/60 hover:border-indigo-300 transition-colors">
+                      <div key={member.id} className={`relative pl-3 border-l-2 transition-colors ${isNewFamily(member) ? 'border-lime-400 bg-lime-50/10 dark:bg-lime-950/5' : 'border-slate-100 dark:border-slate-800/60 hover:border-indigo-300'}`}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5">
                              {member.photoUrl ? (
-                               <img src={member.photoUrl} alt={member.name} className="w-5 h-5 rounded-full object-cover border border-slate-200 dark:border-slate-800" referrerPolicy="no-referrer" />
+                               <img src={member.photoUrl} alt={member.name} className="w-5 h-5 rounded-full object-cover border-2 border-lime-400 dark:border-lime-500" referrerPolicy="no-referrer" />
                              ) : (
-                               <div className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-[9px] text-slate-500 dark:text-slate-400 font-bold border border-slate-300 dark:border-slate-700 shrink-0">
+                               <div className="w-5 h-5 rounded-full bg-lime-50 dark:bg-lime-950/40 flex items-center justify-center text-[9px] text-lime-700 dark:text-lime-400 font-bold border-2 border-lime-400 shrink-0">
                                  {member.name.substring(0, 1)}
                                </div>
                              )}
-                            <h4 className="font-semibold text-xs text-slate-800 dark:text-slate-200">{member.name}</h4>
+                            <h4 className="font-semibold text-xs text-slate-800 dark:text-slate-200 flex items-center gap-1">{member.name}{isNewFamily(member) && <span className="text-[8px] bg-lime-500 text-white font-black px-1 rounded leading-none">새가족</span>}</h4>
                           </div>
                           {member.specialNotes && (
                             <span className="flex items-center text-[9px] text-rose-500 dark:text-rose-400 bg-rose-50/60 dark:bg-rose-950/25 px-1.5 py-0.5 rounded-full border border-rose-100/40 dark:border-rose-900/30 max-w-[50%] truncate">
@@ -378,19 +385,19 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                </div>
             ) : (
                memberHistoryData.map(({ member, records }) => (
-                 <div key={member.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/50 dark:border-slate-800/80 shadow-[0_1px_3px_rgba(0,0,0,0.01)] overflow-hidden">
+                 <div key={member.id} className={`rounded-xl border shadow-[0_1px_3px_rgba(0,0,0,0.01)] overflow-hidden ${isNewFamily(member) ? 'border-lime-400 bg-lime-50/5 dark:bg-lime-950/5' : 'bg-white dark:bg-slate-900 border-slate-200/50 dark:border-slate-800/80'}`}>
                     <div className="p-3 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-950/20">
                        <div className="flex justify-between items-center gap-4">
                           <div className="flex items-center gap-3">
                              {member.photoUrl ? (
-                               <img src={member.photoUrl} alt={member.name} className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-800 shadow-xs" referrerPolicy="no-referrer" />
+                               <img src={member.photoUrl} alt={member.name} className="w-8 h-8 rounded-full object-cover border-2 border-lime-400 dark:border-lime-500 shadow-xs" referrerPolicy="no-referrer" />
                              ) : (
-                               <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-xs text-slate-500 dark:text-slate-400 font-bold border border-slate-200 dark:border-slate-800 shadow-xs shrink-0">
+                               <div className="w-8 h-8 rounded-full bg-lime-50 dark:bg-lime-950/40 flex items-center justify-center text-xs text-lime-700 dark:text-lime-400 font-bold border-2 border-lime-400 shadow-xs shrink-0">
                                  {member.name.substring(0, 1)}
                                </div>
                              )}
                              <div>
-                                 <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100">{member.name}</h3>
+                                 <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-1.5">{member.name}{isNewFamily(member) && <span className="text-[9px] bg-lime-500 text-white font-black px-1.5 py-0.2 rounded leading-none animate-pulse">새가족</span>}</h3>
                                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{member.group}</p>
                              </div>
                           </div>

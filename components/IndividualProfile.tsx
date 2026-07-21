@@ -1,9 +1,80 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Member, AttendanceRecord, PrayerRecord, AttendanceType, MeetingStatus, Visitation } from '../types';
-import { Search, User, Phone, StickyNote, Calendar, Quote, TrendingUp, AlertCircle, FileText, Printer, Heart, MapPin, Plus, X, Edit2 } from 'lucide-react';
+import { Search, User, Phone, StickyNote, Calendar, Quote, TrendingUp, AlertCircle, FileText, Printer, Heart, MapPin, Plus, X, Edit2, ChevronLeft, Save } from 'lucide-react';
 import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Tooltip as RechartsTooltip } from 'recharts';
 import { SUNDAYS_2026 } from '../services/mockData';
+
+const isNewFamily = (member?: Member | null) => {
+  if (!member) return false;
+  const regDate = member.MemberRegistration || (member as any).registrationDate;
+  if (!regDate) return false;
+  return String(regDate).trim().startsWith('2026');
+};
+
+const renderStatusBadge = (member: Member) => {
+  const status = member.status || 'ACTIVE';
+  if (status === 'ACTIVE') return null;
+
+  const parts = status.split(':');
+  const core = parts[0];
+  const dateStr = parts[1] || '';
+  const memo = parts.slice(2).join(':') || '';
+
+  if (core === 'TRANSFER') {
+    return (
+      <span 
+        title={memo ? `메모: ${memo}` : undefined}
+        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-600 border border-rose-200"
+      >
+        교회 이동{memo ? ` (${memo})` : ''}
+      </span>
+    );
+  }
+  if (core === 'STUDY_ABROAD') {
+    return (
+      <span 
+        title={memo ? `메모: ${memo}` : undefined}
+        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-50 text-purple-600 border border-purple-200"
+      >
+        유학 중{memo ? ` (${memo})` : ''}
+      </span>
+    );
+  }
+  if (core === 'MILITARY') {
+    return (
+      <span 
+        title={memo ? `메모: ${memo}` : undefined}
+        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-600 border border-blue-200"
+      >
+        군 복무 중{memo ? ` (${memo})` : ''}
+      </span>
+    );
+  }
+  if (core === 'INACTIVE') {
+    return (
+      <span 
+        title={memo ? `메모: ${memo}` : undefined}
+        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-600 border border-slate-300"
+      >
+        비활동{memo ? ` (${memo})` : ''}
+      </span>
+    );
+  }
+  if (core === 'DEFERRED') {
+    return (
+      <span 
+        title={memo ? `보류 사유: ${memo}` : '임시 보류 중'}
+        className="inline-flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl text-[10px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200 text-center leading-normal"
+      >
+        <span>심방 추천 보류 중</span>
+        <span className="text-[9px] font-medium text-amber-600">재개일: {dateStr}</span>
+        {memo && <span className="text-[9px] font-medium text-amber-500 max-w-[120px] truncate">사유: {memo}</span>}
+      </span>
+    );
+  }
+  return null;
+};
 
 interface IndividualProfileProps {
   members: Member[];
@@ -15,22 +86,11 @@ interface IndividualProfileProps {
   visitations?: Visitation[];
   onAddVisitation?: (visitation: Omit<Visitation, 'visitationId' | 'submittedAt'>) => void;
   onUpdateVisitation?: (visitation: Visitation) => void;
+  onUpdateMember?: (updatedMember: Member) => Promise<void>;
 }
 
 import { runUniversalSearch, isChoseong, getSingleChoseong } from '../services/searchAlgorithm';
 import { hasActualPrayerContent, parsePrayerRequests } from '../services/utils';
-
-interface IndividualProfileProps {
-  members: Member[];
-  records: AttendanceRecord[];
-  prayerRecords: PrayerRecord[];
-  meetingStatus: MeetingStatus[];
-  availableGroups: string[];
-  isVisitationMode?: boolean;
-  visitations?: Visitation[];
-  onAddVisitation?: (visitation: Omit<Visitation, 'visitationId' | 'submittedAt'>) => void;
-  onUpdateVisitation?: (visitation: Visitation) => void;
-}
 
 interface SearchResultItem {
   member: Member;
@@ -133,9 +193,11 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
   isVisitationMode = false,
   visitations = [],
   onAddVisitation,
-  onUpdateVisitation
+  onUpdateVisitation,
+  onUpdateMember
 }) => {
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Helper to load state from sessionStorage
   const loadSessionState = <T,>(key: string, defaultValue: T): T => {
@@ -196,6 +258,16 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
 
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
+
+  // Status & Deferral Edit States
+  const [statusType, setStatusType] = useState<'ACTIVE' | 'TRANSFER' | 'STUDY_ABROAD' | 'MILITARY' | 'DEFERRED' | 'INACTIVE'>('ACTIVE');
+  const [deferUntil, setDeferUntil] = useState('');
+  const [deferReason, setDeferReason] = useState('');
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+
+  // Memo (SpecialNotes) Edit states
+  const [isEditingMemo, setIsEditingMemo] = useState(false);
+  const [memoText, setMemoText] = useState('');
 
   const VISITATION_TYPES = ['대면심방', '전화심방', '연계심방', 'SNS심방', '가정방문', '병원심방', '기타심방'];
 
@@ -321,6 +393,72 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
     }
     return null;
   }, [selectedMemberId, members]);
+
+  // Sync edit states when targetMember changes
+  useEffect(() => {
+    if (targetMember) {
+      const status = targetMember.status || 'ACTIVE';
+      if (status.startsWith('DEFERRED:')) {
+        setStatusType('DEFERRED');
+        const parts = status.split(':');
+        setDeferUntil(parts[1] || '');
+        setDeferReason(parts.slice(2).join(':') || '');
+      } else {
+        setStatusType(status as any);
+        setDeferUntil('');
+        setDeferReason('');
+      }
+      setIsEditingMemo(false);
+      setMemoText(targetMember.specialNotes || '');
+    }
+  }, [targetMember]);
+
+  const handleSaveStatus = async () => {
+    if (!targetMember || !onUpdateMember) return;
+    setIsUpdatingStatus(true);
+    try {
+      let finalStatus = statusType as string;
+      if (statusType === 'DEFERRED') {
+        if (!deferUntil) {
+          alert('추천 재개일(보류 기한)을 입력해주세요.');
+          setIsUpdatingStatus(false);
+          return;
+        }
+        finalStatus = `DEFERRED:${deferUntil}`;
+      }
+
+      let updatedNotes = targetMember.specialNotes || '';
+      if (deferReason.trim()) {
+        const prefix = statusType === 'DEFERRED' ? '[심방 보류]' : 
+                       statusType === 'TRANSFER' ? '[이동]' :
+                       statusType === 'STUDY_ABROAD' ? '[유학]' :
+                       statusType === 'MILITARY' ? '[군복무]' :
+                       statusType === 'INACTIVE' ? '[비활동]' : '';
+        const noteToAdd = prefix ? `${prefix} ${deferReason.trim()}` : deferReason.trim();
+        if (updatedNotes) {
+          if (!updatedNotes.includes(deferReason.trim())) {
+            updatedNotes = `${updatedNotes}\n${noteToAdd}`;
+          }
+        } else {
+          updatedNotes = noteToAdd;
+        }
+      }
+
+      const updatedMember: Member = {
+        ...targetMember,
+        status: finalStatus,
+        specialNotes: updatedNotes
+      };
+
+      await onUpdateMember(updatedMember);
+      alert('성도 상태 및 심방 보류 설정이 저장되었습니다.');
+    } catch (e) {
+      console.error(e);
+      alert('설정 저장 중 오류가 발생했습니다.');
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
 
   // Helper to parse Name (Separate Number Prefix and Name for specific display requirement)
   const memberDisplay = useMemo(() => {
@@ -563,8 +701,8 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
     <div className="space-y-4 md:space-y-6">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-2xl md:text-3xl font-bold text-slate-800">개인별 종합 현황</h2>
-          <p className="text-sm md:text-base text-slate-500">개인의 출석 현황, 통계, 기도제목을 한눈에 확인합니다.</p>
+          <h2 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-slate-100">개인별 종합 현황</h2>
+          <p className="text-sm md:text-base text-slate-500 dark:text-slate-400">개인의 출석 현황, 통계, 기도제목을 한눈에 확인합니다.</p>
         </div>
         {targetMember && (
           <button 
@@ -621,6 +759,14 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                             <span className={`font-bold ${idx === activeSuggestionIndex ? 'text-indigo-900' : 'text-slate-800'}`}>
                               {item.member.name}
                             </span>
+                            {item.member.status && item.member.status !== 'ACTIVE' && (
+                              <span className="text-[9px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded ml-2 font-bold">
+                                {item.member.status.split(':')[0] === 'TRANSFER' ? '교회 이동' :
+                                 item.member.status.split(':')[0] === 'STUDY_ABROAD' ? '유학' :
+                                 item.member.status.split(':')[0] === 'MILITARY' ? '군복무' :
+                                 item.member.status.split(':')[0] === 'INACTIVE' ? '비활동' : '추천보류'}
+                              </span>
+                            )}
                             <span className="text-[9px] text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded ml-2 font-semibold">
                               정확도 {Math.min(100, Math.max(30, Math.round(item.score)))}%
                             </span>
@@ -676,9 +822,20 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                    disabled={!selectedGroup}
                  >
                    <option value="">선택</option>
-                   {filteredMembers.map(m => (
-                     <option key={m.id} value={m.id}>{m.name}</option>
-                   ))}
+                   {filteredMembers.map(m => {
+                     let statusText = '';
+                     const coreS = m.status?.split(':')[0] || 'ACTIVE';
+                     if (coreS === 'TRANSFER') statusText = ' (교회 이동)';
+                     else if (coreS === 'STUDY_ABROAD') statusText = ' (유학)';
+                     else if (coreS === 'MILITARY') statusText = ' (군입대)';
+                     else if (coreS === 'INACTIVE') statusText = ' (비활동)';
+                     else if (coreS === 'DEFERRED') statusText = ' (심방 보류)';
+                     return (
+                       <option key={m.id} value={m.id}>
+                         {m.name}{isNewFamily(m) ? " (새가족)" : ""}{statusText}
+                       </option>
+                     );
+                   })}
                  </select>
               </div>
            </div>
@@ -690,61 +847,137 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
           {/* Top Section: Profile & Analytics */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
              {/* Profile Card */}
-             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col items-center pt-8 md:pt-10 pb-6 px-6 relative w-full">
-                <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-t-xl z-0" />
-                <div className="relative w-36 h-36 md:w-44 md:h-44 rounded-full bg-white p-2 shadow-lg mb-6 z-10 border border-slate-50">
-                   {targetMember.photoUrl ? (
-                     <div className="w-full h-full rounded-full overflow-hidden bg-slate-100 ring-2 ring-indigo-50">
-                       <img src={targetMember.photoUrl} alt={targetMember.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                     </div>
+             <div className={`bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col items-center pt-8 md:pt-10 pb-6 px-6 relative w-full ${isNewFamily(targetMember) ? 'border-lime-400 bg-lime-50/10' : 'border-slate-200'}`}>
+                   {isNewFamily(targetMember) ? (
+                     <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-r from-lime-500 to-emerald-500 rounded-t-xl z-0" />
                    ) : (
-                     <div className="w-full h-full rounded-full bg-slate-100 flex items-center justify-center text-slate-400 text-3xl md:text-5xl font-bold ring-2 ring-indigo-50 shadow-inner">
-                       {memberDisplay.avatarText}
-                     </div>
+                     <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-t-xl z-0" />
                    )}
-                </div>
-                
-                <h3 className="text-2xl md:text-3xl font-bold text-slate-800 text-center tracking-tight z-10 relative break-keep">{memberDisplay.displayName}</h3>
-                <p className="text-indigo-600 font-semibold text-sm md:text-base mt-2 text-center bg-indigo-50 px-3 py-1 rounded-full z-10 relative">{targetMember.group}</p>
-                
-                <div className="mt-8 space-y-3 w-full z-10 relative">
-                   <div className="flex items-center text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                      <User size={18} className="mr-3 text-slate-400" />
-                      <span>{targetMember.role || '성도'}</span>
-                   </div>
-                   <div className="flex items-center text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                      <Phone size={18} className="mr-3 text-slate-400" />
-                      <span>{targetMember.phoneNumber || '연락처 없음'}</span>
-                   </div>
-                   <div className="flex items-center text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                      <Calendar size={18} className="mr-3 text-slate-400" />
-                      <span>등반일: {targetMember.MemberRegistration || (targetMember as any).registrationDate || '정보 없음'}</span>
-                   </div>
-                   {targetMember.specialNotes && (
-                     <div className="flex items-start text-sm text-slate-700 bg-indigo-50/70 p-4 rounded-lg mt-2 border border-indigo-100">
-                        <StickyNote size={18} className="mr-3 mt-0.5 flex-shrink-0 text-indigo-400" />
-                        <div className="flex-1">
-                           <span className="font-semibold text-xs text-indigo-600 block mb-1">비고 (Memo)</span>
-                           <span className="leading-relaxed">{targetMember.specialNotes}</span>
+                   <div className="relative w-36 h-36 md:w-44 md:h-44 rounded-full bg-white p-2 shadow-lg mb-6 z-10 border border-slate-50">
+                      {targetMember.photoUrl ? (
+                        <div className="w-full h-full rounded-full overflow-hidden bg-slate-100 border-4 border-lime-400 shadow-md">
+                          <img src={targetMember.photoUrl} alt={targetMember.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                         </div>
+                      ) : (
+                        <div className="w-full h-full rounded-full bg-slate-100 flex items-center justify-center text-slate-400 text-3xl md:text-5xl font-bold border-4 border-lime-400 shadow-inner">
+                          {memberDisplay.avatarText}
+                        </div>
+                      )}
+                   </div>
+                   
+                   <h3 className="text-2xl md:text-3xl font-bold text-slate-800 text-center tracking-tight z-10 relative break-keep">
+                     {memberDisplay.displayName}
+                     {isNewFamily(targetMember) && (
+                       <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-lime-500 text-white border border-lime-600 animate-pulse shadow-sm">새가족</span>
+                     )}
+                   </h3>
+                   <p className="text-indigo-600 font-semibold text-sm md:text-base mt-2 text-center bg-indigo-50 px-3 py-1 rounded-full z-10 relative">{targetMember.group}</p>
+                   {targetMember.status && targetMember.status !== 'ACTIVE' && (
+                     <div className="z-10 relative mt-2 mb-1">
+                       {renderStatusBadge(targetMember)}
                      </div>
                    )}
                    
-                   {isVisitationMode && (
-                     <button
-                       onClick={() => setIsVisitationFormOpen(true)}
-                       className="w-full flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-lg shadow-sm transition-all active:scale-[0.98] mt-4 mb-2 cursor-pointer text-sm"
-                     >
-                       <Heart size={16} className="fill-rose-100" />
-                       심방 기록 입력
-                     </button>
-                   )}
-                   
-                   <div className="pt-4 border-t border-slate-100 text-xs text-slate-400 text-center">
-                     * 통계 기준: 1월 1일 ~ 오늘 ({stats.passedWeeksCount}주 경과)
+                   <div className="mt-8 space-y-3 w-full z-10 relative">
+                      <div className="flex items-center text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                         <User size={18} className="mr-3 text-slate-400" />
+                         <span>{targetMember.role || '성도'}</span>
+                      </div>
+                      <div className="flex items-center text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                         <Phone size={18} className="mr-3 text-slate-400" />
+                         <span>{targetMember.phoneNumber || '연락처 없음'}</span>
+                      </div>
+                      <div className="flex items-center text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                         <Calendar size={18} className="mr-3 text-slate-400" />
+                         <span>등반일: {targetMember.MemberRegistration || (targetMember as any).registrationDate || '정보 없음'}</span>
+                      </div>
+                      {/* Editable Memo Section */}
+                      {!isEditingMemo ? (
+                        <div className="flex flex-col text-sm text-slate-700 bg-indigo-50/50 p-4 rounded-xl mt-2 border border-indigo-100/50 w-full">
+                           <div className="flex items-center justify-between mb-1.5">
+                              <span className="flex items-center font-bold text-xs text-indigo-600">
+                                 <StickyNote size={14} className="mr-1.5 text-indigo-500" />
+                                 비고 (Memo)
+                              </span>
+                              <button
+                                 type="button"
+                                 onClick={() => {
+                                    setMemoText(targetMember.specialNotes || '');
+                                    setIsEditingMemo(true);
+                                 }}
+                                 className="text-[10px] font-bold text-indigo-500 hover:text-indigo-700 cursor-pointer transition-colors"
+                              >
+                                 수정
+                              </button>
+                           </div>
+                           {targetMember.specialNotes ? (
+                              <p className="leading-relaxed text-xs font-medium whitespace-pre-wrap">{targetMember.specialNotes}</p>
+                           ) : (
+                              <span className="text-slate-400 text-xs italic">등록된 비고(메모) 사항이 없습니다.</span>
+                           )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col text-sm text-slate-700 bg-indigo-50/50 p-4 rounded-xl mt-2 border border-indigo-200 w-full">
+                           <div className="flex items-center justify-between mb-1.5">
+                              <span className="flex items-center font-bold text-xs text-indigo-600">
+                                 <StickyNote size={14} className="mr-1.5 text-indigo-500" />
+                                 비고 (Memo) 편집
+                              </span>
+                           </div>
+                           <textarea
+                              value={memoText}
+                              onChange={(e) => setMemoText(e.target.value)}
+                              placeholder="비고(메모) 내용을 입력하세요 (선택 사항)"
+                              rows={3}
+                              className="w-full text-xs p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 mb-2 font-medium"
+                           />
+                           <div className="flex gap-2 justify-end">
+                              <button
+                                 type="button"
+                                 onClick={async () => {
+                                    if (!onUpdateMember) return;
+                                    try {
+                                       const updated: Member = {
+                                          ...targetMember,
+                                          specialNotes: memoText.trim()
+                                       };
+                                       await onUpdateMember(updated);
+                                       setIsEditingMemo(false);
+                                    } catch (err) {
+                                       console.error(err);
+                                       alert('비고 수정 중 오류가 발생했습니다.');
+                                    }
+                                 }}
+                                 className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[10px] font-bold cursor-pointer transition-all"
+                              >
+                                 저장
+                              </button>
+                              <button
+                                 type="button"
+                                 onClick={() => setIsEditingMemo(false)}
+                                 className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[10px] font-bold cursor-pointer transition-all"
+                              >
+                                 취소
+                              </button>
+                           </div>
+                        </div>
+                      )}
+                      
+                      {isVisitationMode && (
+                        <button
+                          onClick={() => setIsVisitationFormOpen(true)}
+                          className="w-full flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-lg shadow-sm transition-all active:scale-[0.98] mt-4 mb-2 cursor-pointer text-sm"
+                        >
+                          <Heart size={16} className="fill-rose-100" />
+                          심방 기록 입력
+                        </button>
+                      )}
+                      
+                      <div className="pt-4 border-t border-slate-100 text-xs text-slate-400 text-center">
+                        * 통계 기준: 1월 1일 ~ 오늘 ({stats.passedWeeksCount}주 경과)
+                      </div>
                    </div>
                 </div>
-             </div>
 
              {/* Stats Cards & Chart */}
              <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6">
@@ -1051,10 +1284,10 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
             </div>
 
             {/* Unified Profile, Stats, Radar & Memo Row */}
-            <div className="grid grid-cols-12 gap-2 mb-3 border border-slate-200 rounded-xl p-2.5 bg-slate-50/50">
+            <div className={`grid grid-cols-12 gap-2 mb-3 border rounded-xl p-2.5 ${isNewFamily(targetMember) ? 'border-lime-400 bg-lime-50/10' : 'border-slate-200 bg-slate-50/50'}`}>
               {/* Profile Image & Basic Info (col-span-2) */}
               <div className="col-span-2 flex flex-col items-center justify-center border-r border-slate-200/80 pr-1.5 text-center">
-                <div className="w-14 h-14 rounded-full bg-white border border-slate-200 p-0.5 flex items-center justify-center overflow-hidden shadow-sm">
+                <div className="w-14 h-14 rounded-full bg-white border-2 border-lime-400 p-0.5 flex items-center justify-center overflow-hidden shadow-sm">
                   {targetMember.photoUrl ? (
                     <img src={targetMember.photoUrl} alt={targetMember.name} className="w-full h-full rounded-full object-cover" referrerPolicy="no-referrer" />
                   ) : (
@@ -1063,7 +1296,12 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                     </div>
                   )}
                 </div>
-                <h2 className="text-sm font-bold text-slate-900 mt-1 tracking-tight">{memberDisplay.displayName}</h2>
+                <h2 className="text-sm font-bold text-slate-900 mt-1 tracking-tight">
+                  {memberDisplay.displayName}
+                  {isNewFamily(targetMember) && (
+                    <span className="ml-1 inline-block text-[8px] bg-lime-500 text-white px-1 rounded font-bold">새가족</span>
+                  )}
+                </h2>
                 <span className="text-[8px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.2 rounded-full mt-0.5 border border-indigo-100">{targetMember.group}</span>
               </div>
 
@@ -1406,8 +1644,8 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                   </div>
                   <input 
                     type="text"
-                    required
-                    placeholder="예: 교회 로비, 만남의 카페, 성도 가정, 전화통화 등"
+                    required={formType !== '기타심방'}
+                    placeholder="예: 교회 로비, 만남의 카페, 성도 가정, 전화통화 등 (기타심방은 입력 생략 가능)"
                     className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-rose-500 focus:border-rose-500"
                     value={formPlace}
                     onChange={(e) => setFormPlace(e.target.value)}

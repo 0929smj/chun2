@@ -7,6 +7,13 @@ import { getClosestSunday } from '../services/utils';
 import { exportDataToExcel } from '../services/excelService';
 import { matchKoreanFuzzy, sortAndFilterMembersByName } from '../services/searchAlgorithm';
 
+const isNewFamily = (member?: Member | null) => {
+  if (!member) return false;
+  const regDate = member.MemberRegistration || (member as any).registrationDate;
+  if (!regDate) return false;
+  return String(regDate).trim().startsWith('2026');
+};
+
 const GAS_CODE_SNIPPET = `/* 
  [구글 스프레드시트 연결 스크립트 v4.8]
  - 업데이트: 심방 기록(Visitations) 등록, 수정, 삭제 기능 및 다양한 열 이름 매핑(성도ID, 심방ID 등) 유연 대응
@@ -843,7 +850,7 @@ const DataManagement: React.FC<DataManagementProps> = ({
   const processedAttendanceMembers = useMemo(() => {
     let items = [...members];
     // Filter out inactive for Attendance Input
-    items = items.filter(m => m.status !== 'INACTIVE');
+    items = items.filter(m => (m.status?.split(':')[0] || 'ACTIVE') !== 'INACTIVE');
 
     // Filter
     if (attendanceFilterGroup !== 'all') {
@@ -1175,19 +1182,19 @@ const DataManagement: React.FC<DataManagementProps> = ({
                 </thead>
                 <tbody>
                   {processedMembers.map(member => (
-                    <tr key={member.id} className={`border-b group ${member.status === 'INACTIVE' ? 'bg-slate-100 text-slate-400 hover:bg-slate-200' : 'bg-white hover:bg-slate-50 text-slate-900'}`}>
+                    <tr key={member.id} className={`border-b group ${member.status?.split(':')[0] === 'INACTIVE' ? 'bg-slate-100 text-slate-400 hover:bg-slate-200' : isNewFamily(member) ? 'bg-lime-50/20 hover:bg-lime-50/45 dark:bg-lime-950/5 text-slate-900' : 'bg-white hover:bg-slate-50 text-slate-900'}`}>
                       <td className="px-4 md:px-6 py-4 font-medium flex items-center whitespace-nowrap">
                         <div className="flex items-center gap-2">
                            {member.photoUrl ? (
-                             <img src={member.photoUrl} alt={member.name} className="w-6 h-6 rounded-full object-cover border border-slate-200" referrerPolicy="no-referrer" />
+                             <img src={member.photoUrl} alt={member.name} className="w-6 h-6 rounded-full object-cover border-2 border-lime-400" referrerPolicy="no-referrer" />
                            ) : (
-                             <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] text-slate-500 font-bold border border-slate-300 shrink-0">
+                             <div className="w-6 h-6 rounded-full bg-lime-50 flex items-center justify-center text-[10px] text-lime-700 font-bold border-2 border-lime-400 shrink-0">
                                {member.name.substring(0, 1)}
                              </div>
                            )}
-                           <span>{member.name}</span>
+                           <span>{member.name} {isNewFamily(member) && <span className="ml-1 text-[9px] bg-lime-500 text-white font-extrabold px-1 py-0.2 rounded leading-none">새가족</span>}</span>
                         </div>
-                        {member.status === 'INACTIVE' && (
+                        {member.status?.split(':')[0] === 'INACTIVE' && (
                            <span className="ml-2 text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded border border-slate-300">비활성</span>
                         )}
                       </td>
@@ -1311,17 +1318,17 @@ const DataManagement: React.FC<DataManagementProps> = ({
                     };
 
                     return (
-                      <tr key={member.id} className="bg-white border-b hover:bg-slate-50">
+                      <tr key={member.id} className={`border-b hover:bg-slate-50 ${isNewFamily(member) ? 'bg-lime-50/20' : 'bg-white'}`}>
                         <td className="px-4 md:px-6 py-4 font-medium text-slate-900 whitespace-nowrap">
                            <div className="flex items-center gap-2">
                              {member.photoUrl ? (
-                               <img src={member.photoUrl} alt={member.name} className="w-6 h-6 rounded-full object-cover border border-slate-200" referrerPolicy="no-referrer" />
+                               <img src={member.photoUrl} alt={member.name} className="w-6 h-6 rounded-full object-cover border-2 border-lime-400" referrerPolicy="no-referrer" />
                              ) : (
-                               <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] text-slate-500 font-bold border border-slate-300 shrink-0">
+                               <div className="w-6 h-6 rounded-full bg-lime-50 flex items-center justify-center text-[10px] text-lime-700 font-bold border-2 border-lime-400 shrink-0">
                                  {member.name.substring(0, 1)}
                                </div>
                              )}
-                             <span>{member.name}</span>
+                             <span>{member.name} {isNewFamily(member) && <span className="ml-1 text-[9px] bg-lime-500 text-white font-extrabold px-1 py-0.2 rounded leading-none">새가족</span>}</span>
                           </div>
                         </td>
                         <td className="px-4 md:px-6 py-4 whitespace-nowrap">{member.group}</td>
