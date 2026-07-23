@@ -706,6 +706,12 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
 
     return members
       .filter(m => {
+        if (!m) return false;
+        const nameStr = String(m.name || (m as any).이름 || '').trim();
+        // Exclude members without a valid name or where name is purely 1-3 digits without a Korean name
+        if (!nameStr || (/^\d{1,3}$/.test(nameStr) && !(m as any).이름)) {
+          return false;
+        }
         const status = m.status || 'ACTIVE';
         const coreStatus = status.split(':')[0];
         if (coreStatus === 'INACTIVE' || coreStatus === 'TRANSFER' || coreStatus === 'STUDY_ABROAD' || coreStatus === 'MILITARY' || coreStatus === 'DELETED') {
@@ -1989,7 +1995,9 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                                   className="text-xs font-bold text-slate-900 dark:text-slate-100 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline transition-all duration-150 truncate"
                                   title="개인별 종합 현황 보기"
                                 >
-                                  {member.name}
+                                  {member.name && !/^\d{1,3}$/.test(member.name.trim()) 
+                                    ? member.name 
+                                    : ((member as any).이름 || (member as any).memberName || member.name || member.id)}
                                 </span>
                                 <span className="text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.2 rounded font-medium shrink-0">
                                   {member.group}

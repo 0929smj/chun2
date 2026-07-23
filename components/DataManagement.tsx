@@ -83,13 +83,15 @@ function doGet(e) {
   }
 
   const members = membersData.map(m => {
-    const mid = String(m['memberid'] || m['id'] || m['name']).trim();
-    const matchId = String(m['name']).replace(/\\s+/g, '');
+    const rawName = String(m['name'] || m['이름'] || m['성도명'] || m['성도이름'] || m['성도'] || m['membername'] || m['member_name'] || '').trim();
+    const rawId = String(m['memberid'] || m['id'] || m['성도id'] || m['번호'] || '').trim();
+    const mid = rawId || rawName;
+    const matchId = rawName.replace(/\\s+/g, '');
     return {
       id: mid,
-      name: m['name'],
-      group: m['group'] || m['소그룹'] || m['wool'] || m['woolname'] || m['소속'] || '',
-      wool: m['group'] || m['소그룹'] || m['wool'] || m['woolname'] || m['소속'] || '',
+      name: rawName || rawId || '성도',
+      group: m['group'] || m['소그룹'] || m['wool'] || m['woolname'] || m['소속'] || m['구역'] || '',
+      wool: m['group'] || m['소그룹'] || m['wool'] || m['woolname'] || m['소속'] || m['구역'] || '',
       phoneNumber: m['phone'] || m['phonenumber'] || m['연락처'] || m['전화번호'] || '',
       role: m['role'] || m['직분'] || '성도',
       status: m['status'] || m['상태'] || 'ACTIVE',
@@ -97,7 +99,7 @@ function doGet(e) {
       specialNotes: m['notes'] || m['비고'] || m['specialnotes'] || m['memo'] || m['메모'] || '',
       photoUrl: photoFiles[matchId] || photoFiles[mid.replace(/\\s+/g, '')] || ''
     };
-  }).filter(m => m.name);
+  }).filter(m => m.name && m.name !== '성도' && !/^\d+$/.test(m.name));
 
   // 2. 소그룹 목록 및 AccessCode 가져오기 (시트명: groups)
   const groupsData = getSheetData(ss, 'groups');
