@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Member, AttendanceRecord, AttendanceType, MeetingStatus, PrayerRecord } from '../types';
 import { Plus, Edit2, Save, Trash2, X, Phone, ArrowUpDown, Settings, Link as LinkIcon, AlertCircle, Copy, Check, HelpCircle, Filter, Loader2, StickyNote, Search, Download, Calendar } from 'lucide-react';
 import { SUNDAYS_2026 } from '../services/mockData';
@@ -582,6 +583,8 @@ const DataManagement: React.FC<DataManagementProps> = ({
   refreshData, 
   prayerRecords = [] 
 }) => {
+  const navigate = useNavigate();
+
   // Helper to load state from sessionStorage
   const loadSessionState = <T,>(key: string, defaultValue: T): T => {
     try {
@@ -763,21 +766,52 @@ const DataManagement: React.FC<DataManagementProps> = ({
     }
   };
 
-  const handleDeleteMember = async () => {
+  const handleDeactivateMember = async () => {
     if (!deletingMember) return;
-    setIsAddingMember(true); // Reuse loading state
+    setIsAddingMember(true);
 
     try {
-      // Soft Delete: Set status to INACTIVE
       const inactiveMember = { ...deletingMember, status: 'INACTIVE' };
       await sendAction('UPDATE_MEMBER', inactiveMember);
-
-      // Update Local State: Do NOT remove, just update status
       setMembers(prev => prev.map(m => m.id === deletingMember.id ? inactiveMember : m));
       setDeletingMember(null);
-      showToast("멤버가 삭제되었습니다.", "success");
+      showToast("멤버가 비활성화되었습니다.", "success");
     } catch (e) {
-      showToast("삭제 중 오류가 발생했습니다.", "error");
+      showToast("비활성화 중 오류가 발생했습니다.", "error");
+    } finally {
+      setIsAddingMember(false);
+    }
+  };
+
+  const handleReactivateMember = async () => {
+    if (!deletingMember) return;
+    setIsAddingMember(true);
+
+    try {
+      const activeMember = { ...deletingMember, status: 'ACTIVE' };
+      await sendAction('UPDATE_MEMBER', activeMember);
+      setMembers(prev => prev.map(m => m.id === deletingMember.id ? activeMember : m));
+      setDeletingMember(null);
+      showToast("비활성화가 해제되어 멤버가 다시 활성화되었습니다.", "success");
+    } catch (e) {
+      showToast("활성화 처리 중 오류가 발생했습니다.", "error");
+    } finally {
+      setIsAddingMember(false);
+    }
+  };
+
+  const handlePermanentDeleteMember = async () => {
+    if (!deletingMember) return;
+    setIsAddingMember(true);
+
+    try {
+      const deletedMember = { ...deletingMember, status: 'DELETED' };
+      await sendAction('UPDATE_MEMBER', deletedMember);
+      setMembers(prev => prev.map(m => m.id === deletingMember.id ? deletedMember : m));
+      setDeletingMember(null);
+      showToast("멤버가 완전히 삭제되었습니다. (DB status: DELETED)", "success");
+    } catch (e) {
+      showToast("삭제 처리 중 오류가 발생했습니다.", "error");
     } finally {
       setIsAddingMember(false);
     }
@@ -796,6 +830,12 @@ const DataManagement: React.FC<DataManagementProps> = ({
   // Sort and Filter for Member Management Tab
   const processedMembers = useMemo(() => {
     let items = [...members];
+
+    // Filter out DELETED members
+    items = items.filter(m => {
+      const coreStatus = (m.status?.split(':')[0] || 'ACTIVE').toUpperCase();
+      return coreStatus !== 'DELETED';
+    });
 
     // Filter by Group
     if (memberFilterGroup !== 'all') {
@@ -849,8 +889,11 @@ const DataManagement: React.FC<DataManagementProps> = ({
   // Sort and Filter for Attendance Tab
   const processedAttendanceMembers = useMemo(() => {
     let items = [...members];
-    // Filter out inactive for Attendance Input
-    items = items.filter(m => (m.status?.split(':')[0] || 'ACTIVE') !== 'INACTIVE');
+    // Filter out inactive and deleted for Attendance Input
+    items = items.filter(m => {
+      const coreStatus = (m.status?.split(':')[0] || 'ACTIVE').toUpperCase();
+      return coreStatus !== 'INACTIVE' && coreStatus !== 'DELETED';
+    });
 
     // Filter
     if (attendanceFilterGroup !== 'all') {
@@ -1051,23 +1094,75 @@ const DataManagement: React.FC<DataManagementProps> = ({
       {/* Delete Confirmation Modal */}
       {deletingMember && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full overflow-hidden">
-             <div className="p-6 text-center">
-               <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                 <Trash2 size={32} />
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl max-w-sm w-full overflow-hidden border border-slate-100 dark:border-slate-800">
+             {((deletingMember.status?.split(':')[0] || 'ACTIVE').toUpperCase() === 'INACTIVE') ? (
+               // Already Inactive Member -> Option to Reactivate or Permanently Delete (DELETED)
+               <div>
+                 <div className="p-6 text-center">
+                   <div className="w-16 h-16 bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                     <AlertCircle size={32} />
+                   </div>
+                   <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-2">비활성화된 멤버 처리</h3>
+                   <p className="text-slate-600 dark:text-slate-300 text-sm mb-4 leading-relaxed">
+                     <span className="font-bold text-slate-900 dark:text-white">{deletingMember.name}</span>님은 현재 <span className="font-semibold text-amber-600 dark:text-amber-400">비활성화</span> 상태입니다.<br/>
+                     원하시는 작업을 선택해 주세요.
+                   </p>
+                 </div>
+                 <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-2">
+                    <button 
+                      onClick={handleReactivateMember} 
+                      disabled={isAddingMember}
+                      className="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                    >
+                      비활성화 해제 (다시 활성화)
+                    </button>
+                    <button 
+                      onClick={handlePermanentDeleteMember} 
+                      disabled={isAddingMember}
+                      className="w-full px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                    >
+                      완전 삭제 (상태: DELETED)
+                    </button>
+                    <button 
+                      onClick={() => setDeletingMember(null)} 
+                      disabled={isAddingMember}
+                      className="w-full px-4 py-2 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg font-medium text-sm transition-colors cursor-pointer mt-1"
+                    >
+                      취소
+                    </button>
+                 </div>
                </div>
-               <h3 className="text-lg font-bold text-slate-800 mb-2">비활성화 하시겠습니까?</h3>
-               <p className="text-slate-600 text-sm mb-4">
-                 <span className="font-bold">{deletingMember.name}</span>님을 목록에서 삭제(비활성화)합니다.<br/>
-                 데이터 관리 목록에는 흐리게 표시되지만, 다른 통계 화면에서는 숨겨집니다.
-               </p>
-             </div>
-             <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
-                <button onClick={() => setDeletingMember(null)} className="flex-1 px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">취소</button>
-                <button onClick={handleDeleteMember} className="flex-1 px-4 py-2 bg-rose-600 text-white hover:bg-rose-700 rounded-lg font-medium text-sm">
-                   비활성화 (삭제)
-                </button>
-             </div>
+             ) : (
+               // Active Member -> Prompt Deactivation
+               <div>
+                 <div className="p-6 text-center">
+                   <div className="w-16 h-16 bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                     <Trash2 size={32} />
+                   </div>
+                   <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-2">비활성화 하시겠습니까?</h3>
+                   <p className="text-slate-600 dark:text-slate-300 text-sm mb-4 leading-relaxed">
+                     <span className="font-bold text-slate-900 dark:text-white">{deletingMember.name}</span>님을 목록에서 비활성화합니다.<br/>
+                     데이터 관리 목록에는 흐리게 표시되며, 다른 출석부 및 통계 화면에서는 숨겨집니다.
+                   </p>
+                 </div>
+                 <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex gap-3">
+                    <button 
+                      onClick={() => setDeletingMember(null)} 
+                      disabled={isAddingMember}
+                      className="flex-1 px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg font-medium text-sm transition-colors cursor-pointer"
+                    >
+                      취소
+                    </button>
+                    <button 
+                      onClick={handleDeactivateMember} 
+                      disabled={isAddingMember}
+                      className="flex-1 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-medium text-sm transition-colors cursor-pointer"
+                    >
+                      비활성화 (삭제)
+                    </button>
+                 </div>
+               </div>
+             )}
           </div>
         </div>
       )}
@@ -1184,18 +1279,39 @@ const DataManagement: React.FC<DataManagementProps> = ({
                   {processedMembers.map(member => (
                     <tr key={member.id} className={`border-b group ${member.status?.split(':')[0] === 'INACTIVE' ? 'bg-slate-100 text-slate-400 hover:bg-slate-200' : isNewFamily(member) ? 'bg-lime-50/20 hover:bg-lime-50/45 dark:bg-lime-950/5 text-slate-900' : 'bg-white hover:bg-slate-50 text-slate-900'}`}>
                       <td className="px-4 md:px-6 py-4 font-medium flex items-center whitespace-nowrap">
-                        <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => navigate('/profile', { state: { memberId: member.id } })}
+                          className="flex items-center gap-2 text-left group/name hover:text-indigo-600 transition-colors cursor-pointer"
+                          title={`${member.name} 님의 개인별 현황 보기`}
+                        >
                            {member.photoUrl ? (
-                             <img src={member.photoUrl} alt={member.name} className="w-6 h-6 rounded-full object-cover border-2 border-lime-400" referrerPolicy="no-referrer" />
+                             <img 
+                               src={member.photoUrl} 
+                               alt={member.name} 
+                               className={`w-6 h-6 rounded-full object-cover shrink-0 ${
+                                 isNewFamily(member) ? 'border-2 border-lime-400' : 'border border-slate-200 dark:border-slate-700'
+                               }`} 
+                               referrerPolicy="no-referrer" 
+                             />
                            ) : (
-                             <div className="w-6 h-6 rounded-full bg-lime-50 flex items-center justify-center text-[10px] text-lime-700 font-bold border-2 border-lime-400 shrink-0">
+                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                               isNewFamily(member)
+                                 ? 'bg-lime-100 text-lime-800 border-2 border-lime-400'
+                                 : 'bg-slate-100 text-slate-600 border border-slate-200 dark:border-slate-700'
+                             }`}>
                                {member.name.substring(0, 1)}
                              </div>
                            )}
-                           <span>{member.name} {isNewFamily(member) && <span className="ml-1 text-[9px] bg-lime-500 text-white font-extrabold px-1 py-0.2 rounded leading-none">새가족</span>}</span>
-                        </div>
+                           <span className="font-semibold text-slate-900 dark:text-slate-100 group-hover/name:text-indigo-600 group-hover/name:underline underline-offset-2">
+                             {member.name}
+                           </span>
+                           {isNewFamily(member) && (
+                             <span className="ml-1 text-[9px] bg-lime-500 text-white font-extrabold px-1 py-0.2 rounded leading-none">새가족</span>
+                           )}
+                        </button>
                         {member.status?.split(':')[0] === 'INACTIVE' && (
-                           <span className="ml-2 text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded border border-slate-300">비활성</span>
+                           <span className="ml-2 text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded border border-slate-300 shrink-0">비활성</span>
                         )}
                       </td>
                       <td className="px-4 md:px-6 py-4 whitespace-nowrap">{member.group}</td>
@@ -1209,7 +1325,15 @@ const DataManagement: React.FC<DataManagementProps> = ({
                           <button onClick={() => setEditingMember(member)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors" title="수정">
                              <Edit2 size={16} />
                           </button>
-                          <button onClick={() => setDeletingMember(member)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-full transition-colors" title="비활성화(삭제)">
+                          <button 
+                            onClick={() => setDeletingMember(member)} 
+                            className={`p-2 rounded-full transition-colors ${
+                              member.status?.split(':')[0] === 'INACTIVE' 
+                                ? 'text-amber-600 hover:bg-amber-100 dark:hover:bg-amber-950/40' 
+                                : 'text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30'
+                            }`} 
+                            title={member.status?.split(':')[0] === 'INACTIVE' ? '비활성화 해제 또는 완전 삭제' : '비활성화(삭제)'}
+                          >
                              <Trash2 size={16} />
                           </button>
                         </div>
@@ -1320,16 +1444,37 @@ const DataManagement: React.FC<DataManagementProps> = ({
                     return (
                       <tr key={member.id} className={`border-b hover:bg-slate-50 ${isNewFamily(member) ? 'bg-lime-50/20' : 'bg-white'}`}>
                         <td className="px-4 md:px-6 py-4 font-medium text-slate-900 whitespace-nowrap">
-                           <div className="flex items-center gap-2">
+                           <button
+                             type="button"
+                             onClick={() => navigate('/profile', { state: { memberId: member.id } })}
+                             className="flex items-center gap-2 text-left group/name hover:text-indigo-600 transition-colors cursor-pointer"
+                             title={`${member.name} 님의 개인별 현황 보기`}
+                           >
                              {member.photoUrl ? (
-                               <img src={member.photoUrl} alt={member.name} className="w-6 h-6 rounded-full object-cover border-2 border-lime-400" referrerPolicy="no-referrer" />
+                               <img 
+                                 src={member.photoUrl} 
+                                 alt={member.name} 
+                                 className={`w-6 h-6 rounded-full object-cover shrink-0 ${
+                                   isNewFamily(member) ? 'border-2 border-lime-400' : 'border border-slate-200 dark:border-slate-700'
+                                 }`} 
+                                 referrerPolicy="no-referrer" 
+                               />
                              ) : (
-                               <div className="w-6 h-6 rounded-full bg-lime-50 flex items-center justify-center text-[10px] text-lime-700 font-bold border-2 border-lime-400 shrink-0">
+                               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                                 isNewFamily(member)
+                                   ? 'bg-lime-100 text-lime-800 border-2 border-lime-400'
+                                   : 'bg-slate-100 text-slate-600 border border-slate-200 dark:border-slate-700'
+                               }`}>
                                  {member.name.substring(0, 1)}
                                </div>
                              )}
-                             <span>{member.name} {isNewFamily(member) && <span className="ml-1 text-[9px] bg-lime-500 text-white font-extrabold px-1 py-0.2 rounded leading-none">새가족</span>}</span>
-                          </div>
+                             <span className="font-semibold text-slate-900 dark:text-slate-100 group-hover/name:text-indigo-600 group-hover/name:underline underline-offset-2">
+                               {member.name}
+                             </span>
+                             {isNewFamily(member) && (
+                               <span className="ml-1 text-[9px] bg-lime-500 text-white font-extrabold px-1 py-0.2 rounded leading-none">새가족</span>
+                             )}
+                           </button>
                         </td>
                         <td className="px-4 md:px-6 py-4 whitespace-nowrap">{member.group}</td>
                         <td className="px-4 md:px-6 py-4 text-center">

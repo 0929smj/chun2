@@ -36,7 +36,7 @@ const App: React.FC = () => {
     return members.filter(m => {
       const status = m.status || 'ACTIVE';
       const coreStatus = status.split(':')[0];
-      return coreStatus !== 'INACTIVE' && coreStatus !== 'TRANSFER' && coreStatus !== 'STUDY_ABROAD' && coreStatus !== 'MILITARY';
+      return coreStatus !== 'INACTIVE' && coreStatus !== 'TRANSFER' && coreStatus !== 'STUDY_ABROAD' && coreStatus !== 'MILITARY' && coreStatus !== 'DELETED';
     });
   }, [members]);
 

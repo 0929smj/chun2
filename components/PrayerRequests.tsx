@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Member, PrayerRecord } from '../types';
 import { Quote, AlertCircle, Calendar, User, Search, FileText, X } from 'lucide-react';
 import { SUNDAYS_2026 } from '../services/mockData';
@@ -19,6 +20,8 @@ interface PrayerRequestsProps {
 }
 
 const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords, availableGroups }) => {
+  const navigate = useNavigate();
+
   // Helper to load state from sessionStorage
   const loadSessionState = <T,>(key: string, defaultValue: T): T => {
     try {
@@ -291,12 +294,12 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
       )}
 
       {viewMode === 'date' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+        <div className="columns-1 sm:columns-[310px] gap-3.5 space-y-0">
           {Object.entries(recordsByDate).map(([groupName, items]) => {
             const groupItems = items as { member: Member; record: PrayerRecord }[];
             if (groupItems.length === 0) return null;
             return (
-               <div key={groupName} className="bg-white dark:bg-slate-900 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.01)] border border-slate-200/50 dark:border-slate-800/80 p-3.5">
+               <div key={groupName} className="break-inside-avoid mb-3.5 bg-white dark:bg-slate-900 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.01)] border border-slate-200/50 dark:border-slate-800/80 p-3.5">
                   <h3 className="text-xs font-bold text-slate-800 dark:text-slate-100 mb-3 flex items-center">
                     <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full mr-2"></span>
                     {groupName}
@@ -306,18 +309,38 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                     {groupItems.map(({ member, record }) => (
                       <div key={member.id} className={`relative pl-3 border-l-2 transition-colors ${isNewFamily(member) ? 'border-lime-400 bg-lime-50/10 dark:bg-lime-950/5' : 'border-slate-100 dark:border-slate-800/60 hover:border-indigo-300'}`}>
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
+                          <div 
+                            onClick={() => navigate('/profile', { state: { memberId: member.id } })}
+                            className="flex items-center gap-1.5 cursor-pointer group/name hover:opacity-80 transition-opacity"
+                            title={`${member.name}님의 개인별 현황 보기`}
+                          >
                              {member.photoUrl ? (
-                               <img src={member.photoUrl} alt={member.name} className="w-5 h-5 rounded-full object-cover border-2 border-lime-400 dark:border-lime-500" referrerPolicy="no-referrer" />
+                               <img 
+                                 src={member.photoUrl} 
+                                 alt={member.name} 
+                                 className={`w-5 h-5 rounded-full object-cover ${isNewFamily(member) ? 'border-2 border-lime-400 dark:border-lime-500' : 'border border-slate-200 dark:border-slate-700'}`} 
+                                 referrerPolicy="no-referrer" 
+                               />
                              ) : (
-                               <div className="w-5 h-5 rounded-full bg-lime-50 dark:bg-lime-950/40 flex items-center justify-center text-[9px] text-lime-700 dark:text-lime-400 font-bold border-2 border-lime-400 shrink-0">
+                               <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${
+                                 isNewFamily(member) 
+                                   ? 'bg-lime-100 dark:bg-lime-950/60 text-lime-800 dark:text-lime-300 border-2 border-lime-400 dark:border-lime-500' 
+                                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                               }`}>
                                  {member.name.substring(0, 1)}
                                </div>
                              )}
-                            <h4 className="font-semibold text-xs text-slate-800 dark:text-slate-200 flex items-center gap-1">{member.name}{isNewFamily(member) && <span className="text-[8px] bg-lime-500 text-white font-black px-1 rounded leading-none">새가족</span>}</h4>
+                            <h4 className="font-semibold text-xs text-slate-800 dark:text-slate-200 group-hover/name:text-indigo-600 dark:group-hover/name:text-indigo-400 group-hover/name:underline flex items-center gap-1 transition-colors">
+                              {member.name}
+                              {isNewFamily(member) && <span className="text-[8px] bg-lime-500 text-white font-black px-1 rounded leading-none">새가족</span>}
+                            </h4>
                           </div>
                           {member.specialNotes && (
-                            <span className="flex items-center text-[9px] text-rose-500 dark:text-rose-400 bg-rose-50/60 dark:bg-rose-950/25 px-1.5 py-0.5 rounded-full border border-rose-100/40 dark:border-rose-900/30 max-w-[50%] truncate">
+                            <span 
+                              onClick={() => navigate('/profile', { state: { memberId: member.id } })}
+                              className="flex items-center text-[9px] text-rose-500 dark:text-rose-400 bg-rose-50/60 dark:bg-rose-950/25 px-1.5 py-0.5 rounded-full border border-rose-100/40 dark:border-rose-900/30 max-w-[50%] truncate cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors"
+                              title={`${member.name}님의 개인별 현황 보기`}
+                            >
                               <AlertCircle size={8} className="mr-0.5" />
                               {member.specialNotes}
                             </span>
@@ -388,21 +411,42 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                  <div key={member.id} className={`rounded-xl border shadow-[0_1px_3px_rgba(0,0,0,0.01)] overflow-hidden ${isNewFamily(member) ? 'border-lime-400 bg-lime-50/5 dark:bg-lime-950/5' : 'bg-white dark:bg-slate-900 border-slate-200/50 dark:border-slate-800/80'}`}>
                     <div className="p-3 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-950/20">
                        <div className="flex justify-between items-center gap-4">
-                          <div className="flex items-center gap-3">
+                          <div 
+                            onClick={() => navigate('/profile', { state: { memberId: member.id } })}
+                            className="flex items-center gap-3 cursor-pointer group/name hover:opacity-80 transition-opacity"
+                            title={`${member.name}님의 개인별 현황 보기`}
+                          >
                              {member.photoUrl ? (
-                               <img src={member.photoUrl} alt={member.name} className="w-8 h-8 rounded-full object-cover border-2 border-lime-400 dark:border-lime-500 shadow-xs" referrerPolicy="no-referrer" />
+                               <img 
+                                 src={member.photoUrl} 
+                                 alt={member.name} 
+                                 className={`w-8 h-8 rounded-full object-cover shadow-xs ${
+                                   isNewFamily(member) 
+                                     ? 'border-2 border-lime-400 dark:border-lime-500' 
+                                     : 'border border-slate-200 dark:border-slate-700'
+                                 }`} 
+                                 referrerPolicy="no-referrer" 
+                               />
                              ) : (
-                               <div className="w-8 h-8 rounded-full bg-lime-50 dark:bg-lime-950/40 flex items-center justify-center text-xs text-lime-700 dark:text-lime-400 font-bold border-2 border-lime-400 shadow-xs shrink-0">
+                               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shadow-xs shrink-0 ${
+                                 isNewFamily(member)
+                                   ? 'bg-lime-100 dark:bg-lime-950/60 text-lime-800 dark:text-lime-300 border-2 border-lime-400 dark:border-lime-500'
+                                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                               }`}>
                                  {member.name.substring(0, 1)}
                                </div>
                              )}
                              <div>
-                                 <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-1.5">{member.name}{isNewFamily(member) && <span className="text-[9px] bg-lime-500 text-white font-black px-1.5 py-0.2 rounded leading-none animate-pulse">새가족</span>}</h3>
+                                 <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 group-hover/name:text-indigo-600 dark:group-hover/name:text-indigo-400 group-hover/name:underline flex items-center gap-1.5 transition-colors">{member.name}{isNewFamily(member) && <span className="text-[9px] bg-lime-500 text-white font-black px-1.5 py-0.2 rounded leading-none animate-pulse">새가족</span>}</h3>
                                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{member.group}</p>
                              </div>
                           </div>
                           {member.specialNotes && (
-                             <div className="bg-rose-50/40 dark:bg-rose-950/15 border border-rose-100/50 dark:border-rose-900/20 text-rose-600 dark:text-rose-400 px-2.5 py-1.5 rounded-lg max-w-xs text-xs">
+                             <div 
+                               onClick={() => navigate('/profile', { state: { memberId: member.id } })}
+                               className="bg-rose-50/40 dark:bg-rose-950/15 border border-rose-100/50 dark:border-rose-900/20 text-rose-600 dark:text-rose-400 px-2.5 py-1.5 rounded-lg max-w-xs text-xs cursor-pointer hover:bg-rose-100/50 dark:hover:bg-rose-900/30 transition-colors"
+                               title={`${member.name}님의 개인별 현황 보기`}
+                             >
                                 <p className="text-[9px] font-bold flex items-center mb-0.5">
                                    <AlertCircle size={10} className="mr-1" /> 기본 비고
                                 </p>

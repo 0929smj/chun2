@@ -481,7 +481,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
     if (!selectedGroup) return [];
     
     return members
-      .filter(m => m.group === selectedGroup)
+      .filter(m => m.group === selectedGroup && (m.status?.split(':')[0] || 'ACTIVE').toUpperCase() !== 'DELETED')
       .sort((a, b) => {
         // Priority: Leader -> Alphabetical
         
@@ -1287,7 +1287,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
             <div className={`grid grid-cols-12 gap-2 mb-3 border rounded-xl p-2.5 ${isNewFamily(targetMember) ? 'border-lime-400 bg-lime-50/10' : 'border-slate-200 bg-slate-50/50'}`}>
               {/* Profile Image & Basic Info (col-span-2) */}
               <div className="col-span-2 flex flex-col items-center justify-center border-r border-slate-200/80 pr-1.5 text-center">
-                <div className="w-14 h-14 rounded-full bg-white border-2 border-lime-400 p-0.5 flex items-center justify-center overflow-hidden shadow-sm">
+                <div className={`w-14 h-14 rounded-full bg-white border-2 p-0.5 flex items-center justify-center overflow-hidden shadow-sm ${isNewFamily(targetMember) ? 'border-lime-400' : 'border-slate-200'}`}>
                   {targetMember.photoUrl ? (
                     <img src={targetMember.photoUrl} alt={targetMember.name} className="w-full h-full rounded-full object-cover" referrerPolicy="no-referrer" />
                   ) : (

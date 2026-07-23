@@ -443,9 +443,22 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
                           className="flex items-center gap-1 min-w-0 w-full cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 group/name"
                         >
                            {member.photoUrl ? (
-                             <img src={member.photoUrl} alt={member.name} className="w-4 h-4 md:w-5 md:h-5 rounded-full object-cover border-2 border-lime-400 dark:border-lime-500 shrink-0" referrerPolicy="no-referrer" />
+                             <img 
+                               src={member.photoUrl} 
+                               alt={member.name} 
+                               className={`w-4 h-4 md:w-5 md:h-5 rounded-full object-cover shrink-0 ${
+                                 isNewFamily(member) 
+                                   ? 'border-2 border-lime-400 dark:border-lime-500' 
+                                   : 'border border-slate-200 dark:border-slate-700'
+                               }`} 
+                               referrerPolicy="no-referrer" 
+                             />
                            ) : (
-                             <div className="w-4 h-4 md:w-5 md:h-5 rounded-full bg-lime-50 dark:bg-lime-950/40 flex items-center justify-center text-[8px] text-lime-700 dark:text-lime-400 font-extrabold border-2 border-lime-400 shrink-0">
+                             <div className={`w-4 h-4 md:w-5 md:h-5 rounded-full flex items-center justify-center text-[8px] font-extrabold shrink-0 ${
+                               isNewFamily(member)
+                                 ? 'bg-lime-100 dark:bg-lime-950/60 text-lime-800 dark:text-lime-300 border-2 border-lime-400 dark:border-lime-500'
+                                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                             }`}>
                                {member.name.substring(0, 1)}
                              </div>
                            )}

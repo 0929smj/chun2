@@ -99,6 +99,16 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
   const activePointers = useRef(new Map<number, {x: number, y: number}>());
   const initialPinchDist = useRef<number | null>(null);
   const initialZoom = useRef<number>(1);
+  const rafId = useRef<number | null>(null);
+  const pendingPan = useRef<{ x: number; y: number } | null>(null);
+
+  const nodeMap = useMemo(() => {
+    const map = new Map<string, RankedNode>();
+    for (let i = 0; i < layoutNodes.length; i++) {
+      map.set(layoutNodes[i].id, layoutNodes[i]);
+    }
+    return map;
+  }, [layoutNodes]);
 
   const handleBgPointerDown = (e: React.PointerEvent) => {
     activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -142,7 +152,17 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
     if (Math.abs(e.clientX - dragStartPos.current.x) > 5 || Math.abs(e.clientY - dragStartPos.current.y) > 5) {
        isDraggingCanvas.current = true;
     }
-    setPan({ x: newX, y: newY });
+    
+    pendingPan.current = { x: newX, y: newY };
+    if (!rafId.current) {
+      rafId.current = requestAnimationFrame(() => {
+        if (pendingPan.current) {
+          setPan(pendingPan.current);
+          pendingPan.current = null;
+        }
+        rafId.current = null;
+      });
+    }
   };
 
   const handleBgPointerUp = (e: React.PointerEvent) => {
@@ -569,6 +589,17 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
         </div>
       )}
 
+      <style>{`
+        @keyframes orgFloat {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-6px); }
+        }
+        .org-float-node {
+          animation: orgFloat var(--float-dur, 4s) ease-in-out infinite;
+          animation-delay: var(--float-delay, 0s);
+          will-change: transform;
+        }
+      `}</style>
       <div 
         ref={containerRef}
         className="w-full flex-1 min-h-[500px] relative bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-inner cursor-grab active:cursor-grabbing touch-none select-none"
@@ -580,7 +611,7 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
         onWheel={handleBgWheel}
         onClick={handleBgClick}
       >
-        <div className="absolute inset-0 w-full h-full pointer-events-none" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center center' }}>
+        <div className="absolute inset-0 w-full h-full pointer-events-none will-change-transform" style={{ transform: `translate3d(${pan.x}px, ${pan.y}px, 0px) scale(${zoom})`, transformOrigin: 'center center' }}>
           <div 
             className="absolute z-0 pointer-events-none opacity-20 bg-grid" 
             style={{
@@ -594,38 +625,25 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
             }} 
           />
         <svg className="absolute inset-0 w-full h-full pointer-events-none z-10 overflow-visible">
-           <AnimatePresence>
            {layoutEdges.map(edge => {
-             const sourceNode = layoutNodes.find(n => n.id === edge.sourceId) || { x: dimensions.width/2, y: dimensions.height/2, springStiffness: 60, springDamping: 12, springMass: 1 } as RankedNode;
-             const targetNode = layoutNodes.find(n => n.id === edge.targetId) || { x: dimensions.width/2, y: dimensions.height/2, springStiffness: 60, springDamping: 12, springMass: 1 } as RankedNode;
+             const defaultNode = { x: dimensions.width/2, y: dimensions.height/2 } as RankedNode;
+             const sourceNode = nodeMap.get(edge.sourceId) || defaultNode;
+             const targetNode = nodeMap.get(edge.targetId) || defaultNode;
              
              return (
-               <motion.line
+               <line
                  key={edge.id}
-                 initial={{ 
-                   x1: dimensions.width/2, y1: dimensions.height/2, 
-                   x2: dimensions.width/2, y2: dimensions.height/2, 
-                   opacity: 0 
-                 }}
-                 animate={{ 
-                   x1: sourceNode.x, y1: sourceNode.y, 
-                   x2: targetNode.x, y2: targetNode.y, 
-                   opacity: edge.opacity 
-                 }}
-                 exit={{ opacity: 0 }}
-                 transition={{ 
-                   x1: { type: 'spring', stiffness: sourceNode.springStiffness || 60, damping: sourceNode.springDamping || 12, mass: sourceNode.springMass || 1 },
-                   y1: { type: 'spring', stiffness: sourceNode.springStiffness || 60, damping: sourceNode.springDamping || 12, mass: sourceNode.springMass || 1 },
-                   x2: { type: 'spring', stiffness: targetNode.springStiffness || 60, damping: targetNode.springDamping || 12, mass: targetNode.springMass || 1 },
-                   y2: { type: 'spring', stiffness: targetNode.springStiffness || 60, damping: targetNode.springDamping || 12, mass: targetNode.springMass || 1 },
-                   opacity: { duration: 0.4 }
-                 }}
-                 stroke="#475569" // slate-600
+                 x1={sourceNode.x}
+                 y1={sourceNode.y}
+                 x2={targetNode.x}
+                 y2={targetNode.y}
+                 opacity={edge.opacity}
+                 stroke="#475569"
                  strokeWidth="1.5"
+                 className="transition-all duration-300 ease-out"
                />
-             )
+             );
            })}
-           </AnimatePresence>
         </svg>
 
         <div className="absolute inset-0 z-20 pointer-events-none">
@@ -662,21 +680,18 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
                      
                      onContextMenu={(e) => e.preventDefault()}
                    >
-                      <motion.div 
-                         className="relative cursor-pointer flex flex-col items-center group pointer-events-auto"
-                          
-                          
-                          
-                          
-                          
+                      <div 
+                         className="relative cursor-pointer flex flex-col items-center group pointer-events-auto org-float-node"
+                         style={{
+                           '--float-dur': `${node.animDuration}s`,
+                           '--float-delay': `${node.animDelay}s`
+                         } as React.CSSProperties}
                          onClick={(e) => handleClick(e as any, type, groupName, m.id)}
-                         animate={{ y: [0, -6, 0] }}
-                         transition={{ repeat: Infinity, duration: node.animDuration, delay: node.animDelay, ease: "easeInOut" }}
                       >
                           {/* Tooltip Float (Rich Stats) - highest z-index via parent state */}
                           <div 
-                            className={`absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 w-max max-w-[180px] bg-slate-800/95 backdrop-blur-xl px-2 py-1.5 rounded bg-clip-padding shadow-[0_10px_20px_-5px_rgba(0,0,0,0.5)] border border-slate-700/50 flex flex-col items-center gap-1 transition-all pointer-events-none origin-bottom 
-                            ${isTooltipActive ? 'opacity-100 scale-100 visible duration-300' : 'opacity-0 scale-90 invisible duration-0'}`}
+                            className={`absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 w-max max-w-[180px] bg-slate-900/95 px-2 py-1.5 rounded shadow-[0_10px_20px_-5px_rgba(0,0,0,0.6)] border border-slate-700/80 flex flex-col items-center gap-1 pointer-events-none origin-bottom 
+                            ${isTooltipActive ? 'opacity-100 scale-100 visible transition-all duration-150' : 'opacity-0 scale-90 invisible transition-none'}`}
                           >
                             <div className="flex items-center justify-center gap-1.5 text-[9px] text-slate-300 font-medium tracking-tight whitespace-nowrap leading-none">
                                {m.phoneNumber && <span className="flex items-center"><Phone size={9} className="mr-0.5 text-slate-400" />{m.phoneNumber}</span>}
@@ -725,18 +740,21 @@ const OrganizationChart: React.FC<OrganizationChartProps> = ({ members, records,
                                 </div>
                              )}
                           </div>
-                      </motion.div>
+                      </div>
 
                       {/* Standard Nameplate Below */}
-                      <motion.div 
-                         animate={{ y: [0, -6, 0] }}
-                         transition={{ repeat: Infinity, duration: node.animDuration, delay: node.animDelay, ease: "easeInOut" }}
-                         className={`mt-3 font-bold tracking-tight whitespace-nowrap bg-slate-800/80 backdrop-blur-md px-2.5 py-0.5 rounded-full shadow-lg border pointer-events-auto cursor-pointer 
-                         ${isNewFamily(m) ? 'border-lime-400 text-lime-400' : 'border-slate-700/50'} 
-                         ${type === 'leader' ? 'text-slate-100 text-sm' : 'text-slate-300 text-[11px]'}`} onClick={(e) => handleClick(e as any, type, groupName, m.id)}
+                      <div 
+                         className={`mt-3 font-bold tracking-tight whitespace-nowrap bg-slate-800/95 px-2.5 py-0.5 rounded-full shadow-lg border pointer-events-auto cursor-pointer org-float-node
+                         ${isNewFamily(m) ? 'border-lime-400 text-lime-400' : 'border-slate-700/60'} 
+                         ${type === 'leader' ? 'text-slate-100 text-sm' : 'text-slate-300 text-[11px]'}`}
+                         style={{
+                           '--float-dur': `${node.animDuration}s`,
+                           '--float-delay': `${node.animDelay}s`
+                         } as React.CSSProperties}
+                         onClick={(e) => handleClick(e as any, type, groupName, m.id)}
                       >
                          {num && <span className="text-slate-500 font-medium mr-1.5">{num}</span>}{name}
-                      </motion.div>
+                      </div>
                    </motion.div>
                 );
              })}

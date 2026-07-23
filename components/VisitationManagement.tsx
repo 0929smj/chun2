@@ -509,7 +509,10 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
   // Filter members list in the dropdown based on search name
   const filteredFormMembersSearch = useMemo(() => {
     if (!memberSearchQuery.trim()) return [];
-    const activeMembers = members.filter(m => (m.status?.split(':')[0] || 'ACTIVE') !== 'INACTIVE');
+    const activeMembers = members.filter(m => {
+      const s = (m.status?.split(':')[0] || 'ACTIVE').toUpperCase();
+      return s !== 'INACTIVE' && s !== 'DELETED';
+    });
     return runUniversalSearch(activeMembers, memberSearchQuery);
   }, [members, memberSearchQuery]);
 
@@ -517,7 +520,10 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
   const filteredFormMembersByGroup = useMemo(() => {
     if (!selectedFormGroup) return [];
     return members
-      .filter(m => (m.status?.split(':')[0] || 'ACTIVE') !== 'INACTIVE')
+      .filter(m => {
+        const s = (m.status?.split(':')[0] || 'ACTIVE').toUpperCase();
+        return s !== 'INACTIVE' && s !== 'DELETED';
+      })
       .filter(m => m.group === selectedFormGroup);
   }, [members, selectedFormGroup]);
 
@@ -1971,7 +1977,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                 </button>
               </div>
             ) : (
-              <div className="columns-1 md:columns-2 lg:columns-3 xl:columns-4 gap-4 sm:gap-6 space-y-4 md:space-y-0">
+              <div className="columns-1 sm:columns-[310px] gap-4 space-y-4 md:space-y-0">
                 {filteredVisitations.map((v) => {
                   const member = memberMap[v.memberId];
                   return (
@@ -1993,10 +1999,18 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                                 src={member.photoUrl}
                                 alt={member.name}
                                 referrerPolicy="no-referrer"
-                                className="w-8 h-8 rounded-full object-cover border-2 border-lime-400 dark:border-lime-500 flex-shrink-0"
+                                className={`w-8 h-8 rounded-full object-cover flex-shrink-0 ${
+                                  isNewFamily(member)
+                                    ? 'border-2 border-lime-400 dark:border-lime-500'
+                                    : 'border border-slate-200 dark:border-slate-700'
+                                }`}
                               />
                             ) : (
-                              <div className="w-8 h-8 bg-lime-50 dark:bg-lime-950/40 rounded-full flex items-center justify-center text-lime-700 dark:text-lime-400 font-extrabold border-2 border-lime-400 flex-shrink-0 text-[10px]">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-extrabold flex-shrink-0 text-[10px] ${
+                                isNewFamily(member)
+                                  ? 'bg-lime-100 dark:bg-lime-950/60 text-lime-800 dark:text-lime-300 border-2 border-lime-400 dark:border-lime-500'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                              }`}>
                                 {member?.name?.substring(0, 2)}
                               </div>
                             )}
