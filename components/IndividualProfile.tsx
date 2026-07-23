@@ -269,6 +269,63 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
   const [isEditingMemo, setIsEditingMemo] = useState(false);
   const [memoText, setMemoText] = useState('');
 
+  // Member Personal Info Edit States
+  const [isEditingMemberInfo, setIsEditingMemberInfo] = useState(false);
+  const [editMemberForm, setEditMemberForm] = useState({
+    name: '',
+    phoneNumber: '',
+    group: '',
+    role: '',
+    MemberRegistration: '',
+    photoUrl: '',
+    status: 'ACTIVE',
+  });
+  const [isSavingMemberInfo, setIsSavingMemberInfo] = useState(false);
+
+  const startEditingMemberInfo = () => {
+    if (!targetMember) return;
+    setEditMemberForm({
+      name: targetMember.name || '',
+      phoneNumber: targetMember.phoneNumber || '',
+      group: targetMember.group || '',
+      role: targetMember.role || '성도',
+      MemberRegistration: targetMember.MemberRegistration || (targetMember as any).registrationDate || '',
+      photoUrl: targetMember.photoUrl || '',
+      status: targetMember.status || 'ACTIVE',
+    });
+    setIsEditingMemberInfo(true);
+  };
+
+  const handleSaveMemberInfo = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!targetMember || !onUpdateMember) return;
+    if (!editMemberForm.name.trim()) {
+      alert('성도 이름을 입력해주세요.');
+      return;
+    }
+    setIsSavingMemberInfo(true);
+    try {
+      const updatedMember: Member = {
+        ...targetMember,
+        name: editMemberForm.name.trim(),
+        phoneNumber: editMemberForm.phoneNumber.trim(),
+        group: editMemberForm.group.trim(),
+        wool: editMemberForm.group.trim(),
+        role: editMemberForm.role.trim(),
+        MemberRegistration: editMemberForm.MemberRegistration.trim(),
+        photoUrl: editMemberForm.photoUrl.trim(),
+        status: editMemberForm.status,
+      };
+      await onUpdateMember(updatedMember);
+      setIsEditingMemberInfo(false);
+    } catch (err) {
+      console.error(err);
+      alert('개인 정보 수정 중 오류가 발생했습니다.');
+    } finally {
+      setIsSavingMemberInfo(false);
+    }
+  };
+
   const VISITATION_TYPES = ['대면심방', '전화심방', '연계심방', 'SNS심방', '가정방문', '병원심방', '기타심방'];
 
   const fetchCurrentLocationAddress = () => {
@@ -848,6 +905,17 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
              {/* Profile Card */}
              <div className={`bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col items-center pt-8 md:pt-10 pb-6 px-6 relative w-full ${isNewFamily(targetMember) ? 'border-lime-400 bg-lime-50/10' : 'border-slate-200'}`}>
+                   {/* Clean Top-Right Edit Button */}
+                   <button
+                     type="button"
+                     onClick={startEditingMemberInfo}
+                     className="absolute top-3 right-3 z-20 flex items-center gap-1.5 px-3 py-1.5 bg-white/90 hover:bg-white text-slate-700 hover:text-indigo-600 rounded-full shadow-xs border border-slate-200/80 text-xs font-medium backdrop-blur-xs transition-all cursor-pointer hover:shadow-sm"
+                     title="개인 정보 수정"
+                   >
+                     <Edit2 size={13} className="text-slate-500 hover:text-indigo-600 transition-colors" />
+                     <span>정보 수정</span>
+                   </button>
+
                    {isNewFamily(targetMember) ? (
                      <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-r from-lime-500 to-emerald-500 rounded-t-xl z-0" />
                    ) : (
@@ -872,6 +940,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                      )}
                    </h3>
                    <p className="text-indigo-600 font-semibold text-sm md:text-base mt-2 text-center bg-indigo-50 px-3 py-1 rounded-full z-10 relative">{targetMember.group}</p>
+                   
                    {targetMember.status && targetMember.status !== 'ACTIVE' && (
                      <div className="z-10 relative mt-2 mb-1">
                        {renderStatusBadge(targetMember)}
@@ -885,7 +954,9 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                       </div>
                       <div className="flex items-center text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
                          <Phone size={18} className="mr-3 text-slate-400" />
-                         <span>{targetMember.phoneNumber || '연락처 없음'}</span>
+                         <span className={targetMember.phoneNumber ? "font-semibold text-slate-800" : "text-slate-400"}>
+                            {targetMember.phoneNumber || '연락처 없음'}
+                         </span>
                       </div>
                       <div className="flex items-center text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
                          <Calendar size={18} className="mr-3 text-slate-400" />
@@ -1695,6 +1766,154 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                 >
                   {editingVisitation ? <Edit2 size={16} /> : <Plus size={16} />}
                   {editingVisitation ? '수정하기' : '심방 기록 등록'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Member Info Modal */}
+      {isEditingMemberInfo && targetMember && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative space-y-4 my-8">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <Edit2 size={18} className="text-indigo-600 dark:text-indigo-400" />
+                성도 개인 정보 수정
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsEditingMemberInfo(false)}
+                className="p-1 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMemberInfo} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  이름 <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editMemberForm.name}
+                  onChange={(e) => setEditMemberForm({ ...editMemberForm, name: e.target.value })}
+                  className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
+                  placeholder="성도 이름"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    전화번호 (연락처)
+                  </label>
+                  <input
+                    type="text"
+                    value={editMemberForm.phoneNumber}
+                    onChange={(e) => setEditMemberForm({ ...editMemberForm, phoneNumber: e.target.value })}
+                    placeholder="010-0000-0000"
+                    className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    직분
+                  </label>
+                  <input
+                    type="text"
+                    value={editMemberForm.role}
+                    onChange={(e) => setEditMemberForm({ ...editMemberForm, role: e.target.value })}
+                    placeholder="성도, 집사, 권사 등"
+                    className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    소그룹 / 울
+                  </label>
+                  <input
+                    type="text"
+                    list="available-groups-list"
+                    value={editMemberForm.group}
+                    onChange={(e) => setEditMemberForm({ ...editMemberForm, group: e.target.value })}
+                    placeholder="소그룹명 입력"
+                    className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                  />
+                  <datalist id="available-groups-list">
+                    {availableGroups.map((g) => (
+                      <option key={g} value={g} />
+                    ))}
+                  </datalist>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    등반일
+                  </label>
+                  <input
+                    type="text"
+                    value={editMemberForm.MemberRegistration}
+                    onChange={(e) => setEditMemberForm({ ...editMemberForm, MemberRegistration: e.target.value })}
+                    placeholder="YYYY-MM-DD"
+                    className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  프로필 사진 URL (선택)
+                </label>
+                <input
+                  type="text"
+                  value={editMemberForm.photoUrl}
+                  onChange={(e) => setEditMemberForm({ ...editMemberForm, photoUrl: e.target.value })}
+                  placeholder="https://..."
+                  className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  성도 상태
+                </label>
+                <select
+                  value={editMemberForm.status}
+                  onChange={(e) => setEditMemberForm({ ...editMemberForm, status: e.target.value })}
+                  className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
+                >
+                  <option value="ACTIVE">활동 성도 (정상)</option>
+                  <option value="DEFERRED">⏳ 심방 추천 보류</option>
+                  <option value="TRANSFER">🚪 교회 이동</option>
+                  <option value="STUDY_ABROAD">✈️ 유학 중</option>
+                  <option value="MILITARY">🪖 군 복무 중</option>
+                  <option value="INACTIVE">💤 비활동</option>
+                </select>
+              </div>
+
+              <div className="flex gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="submit"
+                  disabled={isSavingMemberInfo}
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Save size={14} />
+                  {isSavingMemberInfo ? '저장 중...' : '정보 저장하기'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingMemberInfo(false)}
+                  className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  취소
                 </button>
               </div>
             </form>

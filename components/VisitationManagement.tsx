@@ -108,8 +108,11 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
 
   // Sorting & Priority States
   const [sortBy, setSortBy] = useState<'latest' | 'oldest' | 'priority'>(() => loadSessionState<'latest' | 'oldest' | 'priority'>('visitation_sortBy', 'latest'));
-  const [priorityFilter, setPriorityFilter] = useState<'ALL' | 'attendance' | 'prayer' | 'longTime'>(() => loadSessionState<'ALL' | 'attendance' | 'prayer' | 'longTime'>('visitation_priorityFilter', 'ALL'));
+  const [priorityFilter, setPriorityFilter] = useState<'ALL' | 'consecutive3' | 'attendance' | 'prayer' | 'longTime'>(() => loadSessionState<'ALL' | 'consecutive3' | 'attendance' | 'prayer' | 'longTime'>('visitation_priorityFilter', 'ALL'));
   const [showPriorityRecommend, setShowPriorityRecommend] = useState(() => loadSessionState<boolean>('visitation_showPriorityRecommend', true));
+  const [excludeZeroAttendanceThisYear, setExcludeZeroAttendanceThisYear] = useState(() => loadSessionState<boolean>('visitation_excludeZeroAttendance', false));
+  const [recommendFilter, setRecommendFilter] = useState<'ALL' | '3consecutive' | 'attendance' | 'prayer' | 'longTime'>(() => loadSessionState<'ALL' | '3consecutive' | 'attendance' | 'prayer' | 'longTime'>('visitation_recommendFilter', 'ALL'));
+  const [showAllPriorityRecommend, setShowAllPriorityRecommend] = useState(false);
 
   // GPS states
   const [gpsLoading, setGpsLoading] = useState(false);
@@ -689,6 +692,8 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
     const todayStr = now.toISOString().substring(0, 10);
     // Get recent 4 Sundays from SUNDAYS_2026
     const passedSundays = SUNDAYS_2026.filter(d => d <= todayStr).slice(-4);
+    const passedSundaysThisYear = SUNDAYS_2026.filter(d => d <= todayStr);
+    const recent3Sundays = passedSundaysThisYear.slice(-3);
 
     // Get last visitation for each member
     const lastVisitationMap: Record<string, Visitation> = {};
@@ -703,7 +708,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
       .filter(m => {
         const status = m.status || 'ACTIVE';
         const coreStatus = status.split(':')[0];
-        if (coreStatus === 'INACTIVE' || coreStatus === 'TRANSFER' || coreStatus === 'STUDY_ABROAD' || coreStatus === 'MILITARY') {
+        if (coreStatus === 'INACTIVE' || coreStatus === 'TRANSFER' || coreStatus === 'STUDY_ABROAD' || coreStatus === 'MILITARY' || coreStatus === 'DELETED') {
           return false;
         }
         if (coreStatus === 'DEFERRED') {
@@ -718,6 +723,31 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
       .map(member => {
         let score = 0;
         const reasons: string[] = [];
+
+        // 0) Yearly Small Group (Wool) Attendance Count
+        let yearlyWoolAttendanceCount = 0;
+        passedSundaysThisYear.forEach(sunday => {
+          const record = records.find(r => r.memberId === member.id && r.date === sunday);
+          if (record && record.types && record.types.includes(AttendanceType.Wool)) {
+            yearlyWoolAttendanceCount++;
+          }
+        });
+        const isZeroAttendanceThisYear = (passedSundaysThisYear.length > 0 && yearlyWoolAttendanceCount === 0);
+
+        // Check 3 consecutive weeks absence
+        let consecutiveAbsence3Count = 0;
+        let recent3ValidSundaysCount = 0;
+        recent3Sundays.forEach(sunday => {
+          const isWorshipCanceled = meetingStatus.some(s => s.date === sunday && s.type === AttendanceType.Worship && s.isCanceled);
+          if (!isWorshipCanceled) {
+            recent3ValidSundaysCount++;
+            const record = records.find(r => r.memberId === member.id && r.date === sunday);
+            if (!record || !record.types || record.types.length === 0) {
+              consecutiveAbsence3Count++;
+            }
+          }
+        });
+        const isThreeConsecutiveAbsences = (recent3ValidSundaysCount >= 3 && consecutiveAbsence3Count === recent3ValidSundaysCount);
         
         // 1) Attendance Rate (Last 4 Sundays)
         let attendanceCount = 0;
@@ -736,20 +766,31 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
 
         const attendanceRate = totalExpected > 0 ? (attendanceCount / totalExpected) * 100 : 100;
         let hasAttendanceIssue = false;
+
+        if (isThreeConsecutiveAbsences) {
+          score += 45;
+          reasons.push('🚨 최근 3주 연속 결석 (3주간 무출석)');
+          hasAttendanceIssue = true;
+        }
+
         if (totalExpected > 0) {
-          if (attendanceCount === 0) {
+          if (attendanceCount === 0 && !isThreeConsecutiveAbsences) {
             score += 50;
             reasons.push('최근 4주 연속 결석 (출석률 0%)');
             hasAttendanceIssue = true;
-          } else if (attendanceRate <= 25) {
+          } else if (attendanceRate <= 25 && !isThreeConsecutiveAbsences) {
             score += 35;
             reasons.push(`최근 출석률 극히 저조 (${attendanceRate.toFixed(0)}%)`);
             hasAttendanceIssue = true;
-          } else if (attendanceRate <= 50) {
+          } else if (attendanceRate <= 50 && !isThreeConsecutiveAbsences) {
             score += 20;
             reasons.push(`최근 출석률 저조 (${attendanceRate.toFixed(0)}%)`);
             hasAttendanceIssue = true;
           }
+        }
+
+        if (isZeroAttendanceThisYear && !isThreeConsecutiveAbsences) {
+          reasons.push('⚠️ 올해 소그룹 모임 출석 없음 (0회)');
         }
 
         // 2) Interval since last visitation
@@ -795,11 +836,53 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
           lastVisitationDate: lastVis ? lastVis.date : null,
           hasAttendanceIssue,
           hasIntervalIssue,
-          hasRecentPrayerUpdate
+          hasRecentPrayerUpdate,
+          yearlyWoolAttendanceCount,
+          isZeroAttendanceThisYear,
+          isThreeConsecutiveAbsences
         };
       })
       .sort((a, b) => b.score - a.score);
   }, [members, visitations, records, prayerRecords, meetingStatus]);
+
+  // Filtered recommendations based on excludeZeroAttendanceThisYear and recommendFilter
+  const filteredPriorityMembers = useMemo(() => {
+    let list = memberPriorityScores;
+
+    // 1. Option to exclude members with zero attendance this year
+    if (excludeZeroAttendanceThisYear) {
+      list = list.filter(p => !p.isZeroAttendanceThisYear);
+    }
+
+    // 2. Filter by recommendation category
+    if (recommendFilter === '3consecutive') {
+      list = list.filter(p => p.isThreeConsecutiveAbsences);
+    } else if (recommendFilter === 'attendance') {
+      list = list.filter(p => p.hasAttendanceIssue);
+    } else if (recommendFilter === 'prayer') {
+      list = list.filter(p => p.hasRecentPrayerUpdate);
+    } else if (recommendFilter === 'longTime') {
+      list = list.filter(p => p.hasIntervalIssue);
+    }
+
+    return list;
+  }, [memberPriorityScores, excludeZeroAttendanceThisYear, recommendFilter]);
+
+  // Summary counts for recommendation filters
+  const recommendStats = useMemo(() => {
+    const baseList = excludeZeroAttendanceThisYear
+      ? memberPriorityScores.filter(p => !p.isZeroAttendanceThisYear)
+      : memberPriorityScores;
+
+    return {
+      total: baseList.length,
+      threeConsecutive: baseList.filter(p => p.isThreeConsecutiveAbsences).length,
+      zeroAttendance: memberPriorityScores.filter(p => p.isZeroAttendanceThisYear).length,
+      attendance: baseList.filter(p => p.hasAttendanceIssue).length,
+      prayer: baseList.filter(p => p.hasRecentPrayerUpdate).length,
+      longTime: baseList.filter(p => p.hasIntervalIssue).length
+    };
+  }, [memberPriorityScores, excludeZeroAttendanceThisYear]);
 
   // List filtered by other search parameters, excluding selectedType (for accurate stats counting)
   const baseFilteredVisitations = useMemo(() => {
@@ -833,6 +916,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
         const v = item.visitation;
         const pScore = memberPriorityScores.find(p => p.member.id === v.memberId);
         if (!pScore) return false;
+        if (priorityFilter === 'consecutive3') return pScore.isThreeConsecutiveAbsences;
         if (priorityFilter === 'attendance') return pScore.hasAttendanceIssue;
         if (priorityFilter === 'prayer') return pScore.hasRecentPrayerUpdate;
         if (priorityFilter === 'longTime') return pScore.hasIntervalIssue;
@@ -1779,6 +1863,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                 className="flex-1 sm:flex-initial border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 text-[11px] sm:text-xs text-slate-700 dark:text-slate-300 outline-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700"
               >
                 <option value="ALL">모든 우선순위 상태</option>
+                <option value="consecutive3">🚨 3주 연속 결석</option>
                 <option value="attendance">🚨 최근 출석률 저조</option>
                 <option value="prayer">💬 기도제목 최근 등록/변경</option>
                 <option value="longTime">⏳ 미심방 오랜 기간 경과</option>
@@ -1808,157 +1893,259 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
             </div>
 
             {showPriorityRecommend && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                {memberPriorityScores.slice(0, 4).map(({ member, score, reasons, attendanceRate, lastVisitationDate }) => (
-                  <div
-                    key={member.id}
-                    className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 rounded-2xl p-3.5 flex flex-col justify-between hover:border-indigo-200 dark:hover:border-indigo-800/80 hover:shadow-sm transition-all duration-300"
+              <>
+                {/* Sub-toolbar inside recommendation dashboard */}
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3.5 pb-2.5 border-b border-indigo-100/30 dark:border-slate-800">
+                  {/* Category Filter Tabs */}
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setRecommendFilter('ALL')}
+                      className={`px-2.5 py-1 rounded-xl font-bold transition-all cursor-pointer ${
+                        recommendFilter === 'ALL'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700/60'
+                      }`}
+                    >
+                      전체 ({recommendStats.total})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRecommendFilter('3consecutive')}
+                      className={`px-2.5 py-1 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                        recommendFilter === '3consecutive'
+                          ? 'bg-rose-600 text-white shadow-xs'
+                          : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 border border-rose-200/50 dark:border-rose-900/30'
+                      }`}
+                    >
+                      🚨 3주 연속 결석자 ({recommendStats.threeConsecutive})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRecommendFilter('prayer')}
+                      className={`px-2.5 py-1 rounded-xl font-bold transition-all cursor-pointer ${
+                        recommendFilter === 'prayer'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700/60'
+                      }`}
+                    >
+                      💬 기도제목 업데이트 ({recommendStats.prayer})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRecommendFilter('longTime')}
+                      className={`px-2.5 py-1 rounded-xl font-bold transition-all cursor-pointer ${
+                        recommendFilter === 'longTime'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700/60'
+                      }`}
+                    >
+                      ⏳ 미심방 장기 경과 ({recommendStats.longTime})
+                    </button>
+                  </div>
+
+                  {/* Toggle Button: Exclude Zero Small Group Attendance Members This Year */}
+                  <button
+                    type="button"
+                    onClick={() => setExcludeZeroAttendanceThisYear(!excludeZeroAttendanceThisYear)}
+                    className={`px-2.5 py-1 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                      excludeZeroAttendanceThisYear
+                        ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                    title="올해(2026년) 소그룹 모임(울모임) 출석 기록이 한 번도 없는(0회) 성도를 추천 목록에서 제외합니다."
                   >
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span 
-                            onClick={() => navigate('/profile', { state: { memberId: member.id, from: '/visitation' } })}
-                            className="text-xs font-bold text-slate-900 dark:text-slate-100 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline transition-all duration-150"
-                            title="개인별 종합 현황 보기"
-                          >
-                            {member.name}
-                          </span>
-                          <span className="text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.2 rounded font-medium">
-                            {member.group}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[9px] font-extrabold text-rose-500 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-full border border-rose-100/50 dark:border-rose-900/25">
-                            우선 지수: {score}점
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => startEditingStatus(member)}
-                            className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
-                            title="상태 및 추천 보류 설정"
-                          >
-                            <Settings size={12} className={editingMemberId === member.id ? "text-indigo-600 dark:text-indigo-400 animate-spin" : ""} />
-                          </button>
-                        </div>
-                      </div>
+                    <span>{excludeZeroAttendanceThisYear ? '✓ 올해 소그룹 0회 출석자 제외 중' : '🚫 올해 소그룹 0회 출석자 제외'}</span>
+                    <span className={`text-[9px] px-1.5 py-0.2 rounded-full ${excludeZeroAttendanceThisYear ? 'bg-amber-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
+                      {recommendStats.zeroAttendance}명
+                    </span>
+                  </button>
+                </div>
 
-                      {/* Reasons list */}
-                      <div className="space-y-1">
-                        {reasons.map((r, i) => (
-                          <div key={i} className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-                            <span className="w-1 h-1 rounded-full bg-indigo-400 shrink-0" />
-                            <span className="truncate">{r}</span>
+                {filteredPriorityMembers.length === 0 ? (
+                  <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 text-center text-slate-400 border border-slate-200/50 dark:border-slate-800">
+                    <p className="text-xs font-bold text-slate-600 dark:text-slate-300">선택한 조건에 해당하는 추천 대상자가 없습니다.</p>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      {excludeZeroAttendanceThisYear ? '올해 소그룹 0회 출석자 제외 옵션을 해제하거나 필터를 변경해 보세요.' : '필터를 변경해 보세요.'}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                      {(showAllPriorityRecommend ? filteredPriorityMembers : filteredPriorityMembers.slice(0, 4)).map(({ member, score, reasons, attendanceRate, lastVisitationDate, yearlyWoolAttendanceCount, isThreeConsecutiveAbsences }) => (
+                        <div
+                          key={member.id}
+                          className={`bg-white dark:bg-slate-900 border rounded-2xl p-3.5 flex flex-col justify-between hover:shadow-sm transition-all duration-300 ${
+                            isThreeConsecutiveAbsences
+                              ? 'border-rose-300 dark:border-rose-900/60 ring-1 ring-rose-200 dark:ring-rose-900/30'
+                              : 'border-slate-200/50 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-indigo-800/80'
+                          }`}
+                        >
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span 
+                                  onClick={() => navigate('/profile', { state: { memberId: member.id, from: '/visitation' } })}
+                                  className="text-xs font-bold text-slate-900 dark:text-slate-100 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline transition-all duration-150 truncate"
+                                  title="개인별 종합 현황 보기"
+                                >
+                                  {member.name}
+                                </span>
+                                <span className="text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.2 rounded font-medium shrink-0">
+                                  {member.group}
+                                </span>
+                                {isThreeConsecutiveAbsences && (
+                                  <span className="text-[9px] bg-rose-600 text-white font-extrabold px-1.5 py-0.2 rounded shrink-0 animate-pulse">
+                                    3주연속결석
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="text-[9px] font-extrabold text-rose-500 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-full border border-rose-100/50 dark:border-rose-900/25">
+                                  우선 지수: {score}점
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => startEditingStatus(member)}
+                                  className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                                  title="상태 및 추천 보류 설정"
+                                >
+                                  <Settings size={12} className={editingMemberId === member.id ? "text-indigo-600 dark:text-indigo-400 animate-spin" : ""} />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Reasons list */}
+                            <div className="space-y-1">
+                              {reasons.map((r, i) => (
+                                <div key={i} className={`flex items-center gap-1.5 text-[10px] font-medium leading-relaxed ${r.includes('3주 연속 결석') ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-slate-500 dark:text-slate-400'}`}>
+                                  <span className={`w-1 h-1 rounded-full shrink-0 ${r.includes('3주 연속 결석') ? 'bg-rose-500' : 'bg-indigo-400'}`} />
+                                  <span className="truncate">{r}</span>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 pt-2 border-t border-slate-50 dark:border-slate-850">
+                              <span>최근 출석률: <strong className={attendanceRate <= 50 ? "text-rose-500 font-bold" : "font-semibold text-slate-600 dark:text-slate-300"}>{attendanceRate.toFixed(0)}%</strong></span>
+                              <span>올해 소그룹: <strong className={yearlyWoolAttendanceCount === 0 ? "text-amber-600 dark:text-amber-400 font-bold" : "font-semibold text-slate-600 dark:text-slate-300"}>{yearlyWoolAttendanceCount}회</strong></span>
+                            </div>
                           </div>
-                        ))}
-                      </div>
 
-                      <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 pt-2 border-t border-slate-50 dark:border-slate-850">
-                        <span>최근 출석률: <strong className={attendanceRate <= 50 ? "text-rose-500 font-bold" : "font-semibold text-slate-600 dark:text-slate-300"}>{attendanceRate.toFixed(0)}%</strong></span>
-                        <span>마지막 심방: <strong className="font-semibold text-slate-600 dark:text-slate-300">{lastVisitationDate ? lastVisitationDate : '없음'}</strong></span>
-                      </div>
+                          {editingMemberId === member.id ? (
+                            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2.5 bg-slate-50/50 dark:bg-slate-950/25 p-2.5 rounded-xl border border-indigo-100/20 dark:border-indigo-900/20 animate-fade-in">
+                              <div>
+                                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">성도 상태 설정</label>
+                                <select
+                                  value={cardStatusType}
+                                  onChange={(e) => setCardStatusType(e.target.value as any)}
+                                  className="w-full border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-[11px] bg-white dark:bg-slate-900 focus:ring-indigo-500 focus:border-indigo-500 font-semibold text-slate-800 dark:text-slate-200"
+                                >
+                                  <option value="ACTIVE">활동 성도 (정상 추천)</option>
+                                  <option value="DEFERRED">⏳ 심방 추천 보류</option>
+                                  <option value="TRANSFER">🚪 교회 이동 (추천 제외)</option>
+                                  <option value="STUDY_ABROAD">✈️ 유학 중 (추천 제외)</option>
+                                  <option value="MILITARY">🪖 군 복무 중 (추천 제외)</option>
+                                  <option value="INACTIVE">💤 비활동 (추천 제외)</option>
+                                </select>
+                              </div>
+
+                              {cardStatusType === 'DEFERRED' ? (
+                                <div className="space-y-2 p-2 bg-amber-50/60 dark:bg-amber-950/20 rounded-lg border border-amber-200/30">
+                                  <div>
+                                    <label className="block text-[9px] font-bold text-amber-800 dark:text-amber-400 mb-0.5">추천 재개일 (보류 기한) <span className="text-rose-500">*</span></label>
+                                    <input 
+                                      type="date"
+                                      value={cardDeferUntil}
+                                      onChange={(e) => setCardDeferUntil(e.target.value)}
+                                      className="w-full border border-amber-200 dark:border-amber-900 rounded p-1 text-[10px] bg-white dark:bg-slate-900 focus:ring-amber-500 font-medium text-slate-800 dark:text-slate-200"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[9px] font-bold text-amber-800 dark:text-amber-400 mb-0.5">보류 구체적 사유 (메모)</label>
+                                    <input 
+                                      type="text"
+                                      value={cardDeferReason}
+                                      onChange={(e) => setCardDeferReason(e.target.value)}
+                                      placeholder="예: 개인 사정"
+                                      className="w-full border border-amber-200 dark:border-amber-900 rounded p-1 text-[10px] bg-white dark:bg-slate-900 focus:ring-amber-500 font-medium text-slate-800 dark:text-slate-200"
+                                    />
+                                  </div>
+                                </div>
+                              ) : cardStatusType !== 'ACTIVE' && (
+                                <div className="space-y-2 p-2 bg-slate-50 dark:bg-slate-900/40 rounded-lg border border-slate-200/50 dark:border-slate-800/50">
+                                  <div>
+                                    <label className="block text-[9px] font-bold text-slate-700 dark:text-slate-400 mb-0.5">
+                                      {cardStatusType === 'TRANSFER' ? '교회 이동 사유 (메모 / 선택 사항)' :
+                                       cardStatusType === 'STUDY_ABROAD' ? '유학 관련 메모 (선택 사항)' :
+                                       cardStatusType === 'MILITARY' ? '군 복무 관련 메모 (선택 사항)' :
+                                       '비활동 관련 메모 (선택 사항)'}
+                                    </label>
+                                    <input 
+                                      type="text"
+                                      value={cardDeferReason}
+                                      onChange={(e) => setCardDeferReason(e.target.value)}
+                                      placeholder="예: 사유, 이사지역 등 메모 입력"
+                                      className="w-full border border-slate-200 dark:border-slate-800 rounded p-1 text-[10px] bg-white dark:bg-slate-900 focus:ring-indigo-500 font-medium text-slate-800 dark:text-slate-200"
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="flex gap-1.5 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveCardStatus(member)}
+                                  disabled={isUpdatingCardStatus}
+                                  className="flex-1 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-bold transition-all disabled:bg-slate-300 disabled:cursor-not-allowed cursor-pointer"
+                                >
+                                  {isUpdatingCardStatus ? '저장중...' : '저장'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingMemberId(null)}
+                                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-lg text-[10px] cursor-pointer"
+                                >
+                                  취소
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveSubTab('entry');
+                                setFormMemberId(member.id);
+                                setMemberSearchQuery(member.name);
+                                const target = members.find(m => m.id === member.id);
+                                if (target) {
+                                  setSelectedFormGroup(target.group || '');
+                                }
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                              }}
+                              className="mt-3.5 w-full py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-950/30 dark:hover:bg-indigo-950/60 dark:text-indigo-400 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer border border-indigo-100/30 dark:border-indigo-900/20"
+                            >
+                              <Heart size={10} className="fill-indigo-100 dark:fill-indigo-950/20 text-indigo-600 dark:text-indigo-400" />
+                              이 성도 심방하기
+                            </button>
+                          )}
+                        </div>
+                      ))}
                     </div>
 
-                    {editingMemberId === member.id ? (
-                      <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2.5 bg-slate-50/50 dark:bg-slate-950/25 p-2.5 rounded-xl border border-indigo-100/20 dark:border-indigo-900/20 animate-fade-in">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">성도 상태 설정</label>
-                          <select
-                            value={cardStatusType}
-                            onChange={(e) => setCardStatusType(e.target.value as any)}
-                            className="w-full border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-[11px] bg-white dark:bg-slate-900 focus:ring-indigo-500 focus:border-indigo-500 font-semibold text-slate-800 dark:text-slate-200"
-                          >
-                            <option value="ACTIVE">활동 성도 (정상 추천)</option>
-                            <option value="DEFERRED">⏳ 심방 추천 보류</option>
-                            <option value="TRANSFER">🚪 교회 이동 (추천 제외)</option>
-                            <option value="STUDY_ABROAD">✈️ 유학 중 (추천 제외)</option>
-                            <option value="MILITARY">🪖 군 복무 중 (추천 제외)</option>
-                            <option value="INACTIVE">💤 비활동 (추천 제외)</option>
-                          </select>
-                        </div>
-
-                        {cardStatusType === 'DEFERRED' ? (
-                          <div className="space-y-2 p-2 bg-amber-50/60 dark:bg-amber-950/20 rounded-lg border border-amber-200/30">
-                            <div>
-                              <label className="block text-[9px] font-bold text-amber-800 dark:text-amber-400 mb-0.5">추천 재개일 (보류 기한) <span className="text-rose-500">*</span></label>
-                              <input 
-                                type="date"
-                                value={cardDeferUntil}
-                                onChange={(e) => setCardDeferUntil(e.target.value)}
-                                className="w-full border border-amber-200 dark:border-amber-900 rounded p-1 text-[10px] bg-white dark:bg-slate-900 focus:ring-amber-500 font-medium text-slate-800 dark:text-slate-200"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[9px] font-bold text-amber-800 dark:text-amber-400 mb-0.5">보류 구체적 사유 (메모)</label>
-                              <input 
-                                type="text"
-                                value={cardDeferReason}
-                                onChange={(e) => setCardDeferReason(e.target.value)}
-                                placeholder="예: 개인 사정"
-                                className="w-full border border-amber-200 dark:border-amber-900 rounded p-1 text-[10px] bg-white dark:bg-slate-900 focus:ring-amber-500 font-medium text-slate-800 dark:text-slate-200"
-                              />
-                            </div>
-                          </div>
-                        ) : cardStatusType !== 'ACTIVE' && (
-                          <div className="space-y-2 p-2 bg-slate-50 dark:bg-slate-900/40 rounded-lg border border-slate-200/50 dark:border-slate-800/50">
-                            <div>
-                              <label className="block text-[9px] font-bold text-slate-700 dark:text-slate-400 mb-0.5">
-                                {cardStatusType === 'TRANSFER' ? '교회 이동 사유 (메모 / 선택 사항)' :
-                                 cardStatusType === 'STUDY_ABROAD' ? '유학 관련 메모 (선택 사항)' :
-                                 cardStatusType === 'MILITARY' ? '군 복무 관련 메모 (선택 사항)' :
-                                 '비활동 관련 메모 (선택 사항)'}
-                              </label>
-                              <input 
-                                type="text"
-                                value={cardDeferReason}
-                                onChange={(e) => setCardDeferReason(e.target.value)}
-                                placeholder="예: 사유, 이사지역 등 메모 입력"
-                                className="w-full border border-slate-200 dark:border-slate-800 rounded p-1 text-[10px] bg-white dark:bg-slate-900 focus:ring-indigo-500 font-medium text-slate-800 dark:text-slate-200"
-                              />
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="flex gap-1.5 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => handleSaveCardStatus(member)}
-                            disabled={isUpdatingCardStatus}
-                            className="flex-1 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-bold transition-all disabled:bg-slate-300 disabled:cursor-not-allowed cursor-pointer"
-                          >
-                            {isUpdatingCardStatus ? '저장중...' : '저장'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditingMemberId(null)}
-                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-lg text-[10px] cursor-pointer"
-                          >
-                            취소
-                          </button>
-                        </div>
+                    {filteredPriorityMembers.length > 4 && (
+                      <div className="text-center mt-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowAllPriorityRecommend(!showAllPriorityRecommend)}
+                          className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline px-3 py-1.5 bg-white dark:bg-slate-800 rounded-xl border border-indigo-100 dark:border-indigo-900 cursor-pointer shadow-2xs"
+                        >
+                          {showAllPriorityRecommend ? '접기 (4명만 보기)' : `추천 성도 더보기 (전체 ${filteredPriorityMembers.length}명 보기)`}
+                        </button>
                       </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveSubTab('entry');
-                          setFormMemberId(member.id);
-                          setMemberSearchQuery(member.name);
-                          const target = members.find(m => m.id === member.id);
-                          if (target) {
-                            setSelectedFormGroup(target.group || '');
-                          }
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
-                        className="mt-3.5 w-full py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-950/30 dark:hover:bg-indigo-950/60 dark:text-indigo-400 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer border border-indigo-100/30 dark:border-indigo-900/20"
-                      >
-                        <Heart size={10} className="fill-indigo-100 dark:fill-indigo-950/20 text-indigo-600 dark:text-indigo-400" />
-                        이 성도 심방하기
-                      </button>
                     )}
-                  </div>
-                ))}
-              </div>
+                  </>
+                )}
+              </>
             )}
           </div>
 
