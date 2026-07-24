@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Member, AttendanceRecord, PrayerRecord, AttendanceType, MeetingStatus, Visitation } from '../types';
 import { Search, User, Phone, StickyNote, Calendar, Quote, TrendingUp, AlertCircle, FileText, Printer, Heart, MapPin, Plus, X, Edit2, ChevronLeft, Save } from 'lucide-react';
@@ -198,6 +198,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const profileCardRef = useRef<HTMLDivElement>(null);
 
   // Helper to load state from sessionStorage
   const loadSessionState = <T,>(key: string, defaultValue: T): T => {
@@ -754,8 +755,42 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
     setIsVisitationFormOpen(false);
   };
 
+  useEffect(() => {
+    if (selectedMemberId && targetMember) {
+      const timer = setTimeout(() => {
+        const mainEl = document.querySelector('main');
+        const isMobile = window.innerWidth < 768;
+        if (mainEl && isMobile && profileCardRef.current) {
+          const cardTop = profileCardRef.current.getBoundingClientRect().top;
+          const mainTop = mainEl.getBoundingClientRect().top;
+          const stickyHeaderHeight = 52;
+          const scrollTarget = mainEl.scrollTop + (cardTop - mainTop) - stickyHeaderHeight;
+          mainEl.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'smooth' });
+        } else if (mainEl && !isMobile) {
+          mainEl.scrollTop = 0;
+        }
+      }, 80);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedMemberId, targetMember?.id]);
+
   return (
     <div className="space-y-4 md:space-y-6">
+      {location.state && (
+        <div>
+          <button 
+            onClick={() => navigate(-1)}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3 py-1.5 rounded-lg shadow-xs transition-colors cursor-pointer"
+          >
+            <ChevronLeft size={16} />
+            {location.state.from === '/prayer' ? '기도제목 목록으로 돌아가기' : 
+             location.state.from === '/visitation' ? '심방기록 목록으로 돌아가기' : 
+             location.state.from === '/attendance' ? '출석현황으로 돌아가기' : 
+             location.state.from === '/manage' ? '데이터 관리로 돌아가기' :
+             location.state.from === '/org' ? '조직도로 돌아가기' : '이전 화면으로 돌아가기'}
+          </button>
+        </div>
+      )}
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-slate-100">개인별 종합 현황</h2>
@@ -902,7 +937,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
       {targetMember && stats ? (
         <>
           {/* Top Section: Profile & Analytics */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div ref={profileCardRef} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
              {/* Profile Card */}
              <div className={`bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col items-center pt-8 md:pt-10 pb-6 px-6 relative w-full ${isNewFamily(targetMember) ? 'border-lime-400 bg-lime-50/10' : 'border-slate-200'}`}>
                    {/* Clean Top-Right Edit Button */}

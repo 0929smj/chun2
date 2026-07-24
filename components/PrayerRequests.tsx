@@ -36,7 +36,11 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
   };
 
   const [viewMode, setViewMode] = useState<'member' | 'date'>(() => loadSessionState<'member' | 'date'>('prayer_viewMode', 'date'));
-  const [selectedDate, setSelectedDate] = useState<string>(() => loadSessionState<string>('prayer_selectedDate', getClosestSunday()));
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const closestPast = getClosestSunday();
+    const stored = loadSessionState<string>('prayer_selectedDate', closestPast);
+    return stored > closestPast ? closestPast : stored;
+  });
   
   // Member View State
   const [selectedGroup, setSelectedGroup] = useState<string>(() => loadSessionState<string>('prayer_selectedGroup', ''));
@@ -307,22 +311,22 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                   
                   <div className="space-y-3">
                     {groupItems.map(({ member, record }) => (
-                      <div key={member.id} className={`relative pl-3 border-l-2 transition-colors ${isNewFamily(member) ? 'border-lime-400 bg-lime-50/10 dark:bg-lime-950/5' : 'border-slate-100 dark:border-slate-800/60 hover:border-indigo-300'}`}>
-                        <div className="flex items-center justify-between">
+                      <div key={member.id} className={`relative pl-3.5 sm:pl-3 border-l-2 transition-colors ${isNewFamily(member) ? 'border-lime-400 bg-lime-50/10 dark:bg-lime-950/5' : 'border-slate-200 dark:border-slate-800 hover:border-indigo-300'}`}>
+                        <div className="flex items-center justify-between gap-2">
                           <div 
-                            onClick={() => navigate('/profile', { state: { memberId: member.id } })}
-                            className="flex items-center gap-1.5 cursor-pointer group/name hover:opacity-80 transition-opacity"
+                            onClick={() => navigate('/profile', { state: { memberId: member.id, from: '/prayer' } })}
+                            className="flex items-center gap-2 sm:gap-1.5 cursor-pointer group/name hover:opacity-80 transition-opacity"
                             title={`${member.name}님의 개인별 현황 보기`}
                           >
                              {member.photoUrl ? (
                                <img 
                                  src={member.photoUrl} 
                                  alt={member.name} 
-                                 className={`w-5 h-5 rounded-full object-cover ${isNewFamily(member) ? 'border-2 border-lime-400 dark:border-lime-500' : 'border border-slate-200 dark:border-slate-700'}`} 
+                                 className={`w-9 h-9 sm:w-6 sm:h-6 rounded-full object-cover shrink-0 shadow-xs ${isNewFamily(member) ? 'border-2 border-lime-400 dark:border-lime-500' : 'border border-slate-200 dark:border-slate-700'}`} 
                                  referrerPolicy="no-referrer" 
                                />
                              ) : (
-                               <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${
+                               <div className={`w-9 h-9 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-xs sm:text-[9px] font-bold shrink-0 shadow-xs ${
                                  isNewFamily(member) 
                                    ? 'bg-lime-100 dark:bg-lime-950/60 text-lime-800 dark:text-lime-300 border-2 border-lime-400 dark:border-lime-500' 
                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
@@ -330,19 +334,19 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                                  {member.name.substring(0, 1)}
                                </div>
                              )}
-                            <h4 className="font-semibold text-xs text-slate-800 dark:text-slate-200 group-hover/name:text-indigo-600 dark:group-hover/name:text-indigo-400 group-hover/name:underline flex items-center gap-1 transition-colors">
+                            <h4 className="font-bold text-sm sm:text-xs text-slate-800 dark:text-slate-200 group-hover/name:text-indigo-600 dark:group-hover/name:text-indigo-400 group-hover/name:underline flex items-center gap-1 transition-colors">
                               {member.name}
-                              {isNewFamily(member) && <span className="text-[8px] bg-lime-500 text-white font-black px-1 rounded leading-none">새가족</span>}
+                              {isNewFamily(member) && <span className="text-[9px] sm:text-[8px] bg-lime-500 text-white font-black px-1.5 py-0.5 rounded leading-none">새가족</span>}
                             </h4>
                           </div>
                           {member.specialNotes && (
                             <span 
-                              onClick={() => navigate('/profile', { state: { memberId: member.id } })}
-                              className="flex items-center text-[9px] text-rose-500 dark:text-rose-400 bg-rose-50/60 dark:bg-rose-950/25 px-1.5 py-0.5 rounded-full border border-rose-100/40 dark:border-rose-900/30 max-w-[50%] truncate cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors"
+                              onClick={() => navigate('/profile', { state: { memberId: member.id, from: '/prayer' } })}
+                              className="flex items-center text-xs sm:text-[9px] text-rose-500 dark:text-rose-400 bg-rose-50/60 dark:bg-rose-950/25 px-2 sm:px-1.5 py-0.5 rounded-full border border-rose-100/40 dark:border-rose-900/30 max-w-[50%] truncate cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors"
                               title={`${member.name}님의 개인별 현황 보기`}
                             >
-                              <AlertCircle size={8} className="mr-0.5" />
-                              {member.specialNotes}
+                              <AlertCircle size={10} className="mr-0.5 shrink-0" />
+                              <span className="truncate">{member.specialNotes}</span>
                             </span>
                           )}
                         </div>
@@ -350,21 +354,21 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                         {/* Always show content since we filtered by record existence */}
                          <>
                            {hasActualPrayerContent(record.content) && (
-                             <div className="mt-1.5 text-xs text-slate-600 dark:text-slate-400 flex items-start gap-1.5">
-                               <Quote size={10} className="text-slate-300 dark:text-slate-700 mt-0.5 flex-shrink-0" />
-                               <div className="flex-1 space-y-0.5 text-xs leading-snug">
+                             <div className="mt-2 text-sm sm:text-xs text-slate-800 dark:text-slate-200 bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-100/60 dark:border-indigo-900/30 p-2.5 sm:p-2 rounded-lg flex items-start gap-2 sm:gap-1.5">
+                               <Quote size={12} className="text-indigo-400 dark:text-indigo-500 mt-0.5 flex-shrink-0" />
+                               <div className="flex-1 space-y-1.5 sm:space-y-0.5 leading-relaxed">
                                  {parsePrayerRequests(record.content).map((line, idx) => {
                                    if (!line.text && !line.marker) return null;
                                    if (line.marker) {
                                      return (
-                                       <div key={idx} className="flex items-start gap-1 leading-snug">
-                                         <span className="font-bold text-indigo-600 dark:text-indigo-400 shrink-0 min-w-[14px]">{line.marker}</span>
+                                       <div key={idx} className="flex items-start gap-1.5 sm:gap-1 leading-relaxed">
+                                         <span className="font-bold text-indigo-600 dark:text-indigo-400 shrink-0 min-w-[18px] sm:min-w-[14px] text-sm sm:text-xs">{line.marker}</span>
                                          <span className="flex-1">{line.text}</span>
                                        </div>
                                      );
                                    }
                                    return (
-                                     <div key={idx} className="leading-snug">
+                                     <div key={idx} className="leading-relaxed">
                                        {line.text}
                                      </div>
                                    );
@@ -373,9 +377,9 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                              </div>
                            )}
                            {record.note && (
-                             <div className="mt-1.5 text-xs text-slate-700 dark:text-slate-350 flex items-start bg-yellow-50/50 dark:bg-yellow-950/15 p-1.5 rounded border border-yellow-100/50 dark:border-yellow-900/20">
-                               <FileText size={10} className="text-yellow-600 dark:text-yellow-400 mr-1.5 mt-0.5 flex-shrink-0" />
-                               <p>{record.note}</p>
+                             <div className="mt-2 text-sm sm:text-xs text-slate-800 dark:text-slate-200 flex items-start bg-amber-50/60 dark:bg-amber-950/20 p-2.5 sm:p-1.5 rounded-lg border border-amber-100 dark:border-amber-900/30 leading-relaxed gap-2 sm:gap-1.5">
+                               <FileText size={12} className="text-amber-600 dark:text-amber-400 mr-0.5 mt-0.5 flex-shrink-0" />
+                               <p className="flex-1">{record.note}</p>
                              </div>
                            )}
                          </>
@@ -412,7 +416,7 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                     <div className="p-3 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-950/20">
                        <div className="flex justify-between items-center gap-4">
                           <div 
-                            onClick={() => navigate('/profile', { state: { memberId: member.id } })}
+                            onClick={() => navigate('/profile', { state: { memberId: member.id, from: '/prayer' } })}
                             className="flex items-center gap-3 cursor-pointer group/name hover:opacity-80 transition-opacity"
                             title={`${member.name}님의 개인별 현황 보기`}
                           >
@@ -420,7 +424,7 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                                <img 
                                  src={member.photoUrl} 
                                  alt={member.name} 
-                                 className={`w-8 h-8 rounded-full object-cover shadow-xs ${
+                                 className={`w-11 h-11 sm:w-8 sm:h-8 rounded-full object-cover shadow-xs shrink-0 ${
                                    isNewFamily(member) 
                                      ? 'border-2 border-lime-400 dark:border-lime-500' 
                                      : 'border border-slate-200 dark:border-slate-700'
@@ -428,7 +432,7 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                                  referrerPolicy="no-referrer" 
                                />
                              ) : (
-                               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shadow-xs shrink-0 ${
+                               <div className={`w-11 h-11 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-sm sm:text-xs font-bold shadow-xs shrink-0 ${
                                  isNewFamily(member)
                                    ? 'bg-lime-100 dark:bg-lime-950/60 text-lime-800 dark:text-lime-300 border-2 border-lime-400 dark:border-lime-500'
                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
@@ -437,52 +441,52 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                                </div>
                              )}
                              <div>
-                                 <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 group-hover/name:text-indigo-600 dark:group-hover/name:text-indigo-400 group-hover/name:underline flex items-center gap-1.5 transition-colors">{member.name}{isNewFamily(member) && <span className="text-[9px] bg-lime-500 text-white font-black px-1.5 py-0.2 rounded leading-none animate-pulse">새가족</span>}</h3>
-                                 <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{member.group}</p>
+                                 <h3 className="font-bold text-base sm:text-sm text-slate-800 dark:text-slate-100 group-hover/name:text-indigo-600 dark:group-hover/name:text-indigo-400 group-hover/name:underline flex items-center gap-1.5 transition-colors">{member.name}{isNewFamily(member) && <span className="text-[9px] bg-lime-500 text-white font-black px-1.5 py-0.2 rounded leading-none animate-pulse">새가족</span>}</h3>
+                                 <p className="text-xs sm:text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{member.group}</p>
                              </div>
                           </div>
                           {member.specialNotes && (
                              <div 
-                               onClick={() => navigate('/profile', { state: { memberId: member.id } })}
-                               className="bg-rose-50/40 dark:bg-rose-950/15 border border-rose-100/50 dark:border-rose-900/20 text-rose-600 dark:text-rose-400 px-2.5 py-1.5 rounded-lg max-w-xs text-xs cursor-pointer hover:bg-rose-100/50 dark:hover:bg-rose-900/30 transition-colors"
+                               onClick={() => navigate('/profile', { state: { memberId: member.id, from: '/prayer' } })}
+                               className="bg-rose-50/40 dark:bg-rose-950/15 border border-rose-100/50 dark:border-rose-900/20 text-rose-600 dark:text-rose-400 px-2.5 py-1.5 rounded-lg max-w-xs text-xs sm:text-[11px] cursor-pointer hover:bg-rose-100/50 dark:hover:bg-rose-900/30 transition-colors"
                                title={`${member.name}님의 개인별 현황 보기`}
                              >
-                                <p className="text-[9px] font-bold flex items-center mb-0.5">
-                                   <AlertCircle size={10} className="mr-1" /> 기본 비고
+                                <p className="text-xs sm:text-[9px] font-bold flex items-center mb-0.5">
+                                   <AlertCircle size={10} className="mr-1 shrink-0" /> 기본 비고
                                 </p>
-                                <p className="text-[11px] leading-normal">{member.specialNotes}</p>
+                                <p className="text-xs sm:text-[11px] leading-relaxed">{member.specialNotes}</p>
                              </div>
                           )}
                        </div>
                     </div>
                     
-                    <div className="p-3">
-                       <h4 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-2 uppercase tracking-wider">히스토리</h4>
+                    <div className="p-3.5 sm:p-3">
+                       <h4 className="text-xs sm:text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-2 uppercase tracking-wider">히스토리</h4>
                        <div className="space-y-3.5">
                           {records.length > 0 ? (
                              records.map(record => (
                                 <div key={record.id} className="relative pl-4 border-l-2 border-indigo-100 dark:border-indigo-900/30">
                                    <div className="absolute -left-[4.5px] top-1.5 w-1.5 h-1.5 rounded-full bg-indigo-500 ring-2 ring-white dark:ring-slate-900"></div>
-                                   <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 block mb-1">{record.date}</span>
-                                   <div className="space-y-1.5">
+                                   <span className="text-xs sm:text-[11px] font-bold text-indigo-600 dark:text-indigo-400 block mb-1.5">{record.date}</span>
+                                   <div className="space-y-2 sm:space-y-1.5">
                                       {hasActualPrayerContent(record.content) && (
-                                        <div className="bg-slate-50/50 dark:bg-slate-950/20 p-2.5 rounded-lg text-slate-700 dark:text-slate-300 text-xs leading-snug border border-slate-100 dark:border-slate-800/60">
-                                           <div className="flex items-center text-[10px] text-slate-400 dark:text-slate-500 mb-1 font-bold">
-                                             <Quote size={10} className="mr-1"/> 기도제목
+                                        <div className="bg-indigo-50/30 dark:bg-indigo-950/20 p-3 sm:p-2.5 rounded-lg text-slate-800 dark:text-slate-200 text-sm sm:text-xs leading-relaxed border border-indigo-100/60 dark:border-indigo-900/30">
+                                           <div className="flex items-center text-xs sm:text-[10px] text-indigo-600 dark:text-indigo-400 mb-1.5 font-bold">
+                                             <Quote size={12} className="mr-1 shrink-0"/> 기도제목
                                            </div>
-                                           <div className="space-y-0.5">
+                                           <div className="space-y-1.5 sm:space-y-0.5">
                                              {parsePrayerRequests(record.content).map((line, idx) => {
                                                if (!line.text && !line.marker) return null;
                                                if (line.marker) {
                                                  return (
-                                                   <div key={idx} className="flex items-start gap-1 leading-snug">
-                                                     <span className="font-bold text-indigo-600 dark:text-indigo-400 shrink-0 min-w-[14px]">{line.marker}</span>
-                                                     <span className="flex-1">{line.text}</span>
+                                                   <div key={idx} className="flex items-start gap-1.5 sm:gap-1 leading-relaxed">
+                                                     <span className="font-bold text-indigo-600 dark:text-indigo-400 shrink-0 min-w-[18px] sm:min-w-[14px] text-sm sm:text-xs">{line.marker}</span>
+                                                     <span className="flex-1 text-slate-800 dark:text-slate-200">{line.text}</span>
                                                    </div>
                                                  );
                                                }
                                                return (
-                                                 <div key={idx} className="leading-snug">
+                                                 <div key={idx} className="leading-relaxed text-slate-800 dark:text-slate-200">
                                                    {line.text}
                                                  </div>
                                                );
@@ -491,11 +495,11 @@ const PrayerRequests: React.FC<PrayerRequestsProps> = ({ members, prayerRecords,
                                         </div>
                                       )}
                                       {record.note && (
-                                        <div className="bg-yellow-50/50 dark:bg-yellow-950/15 p-2 rounded-lg text-slate-700 dark:text-slate-300 text-xs leading-relaxed border border-yellow-100/40 dark:border-yellow-900/20">
-                                           <div className="flex items-center text-[10px] text-yellow-600 dark:text-yellow-400 mb-0.5 font-bold">
-                                             <FileText size={10} className="mr-1"/> 특이사항
+                                        <div className="bg-amber-50/60 dark:bg-amber-950/20 p-2.5 sm:p-2 rounded-lg text-slate-800 dark:text-slate-200 text-sm sm:text-xs leading-relaxed border border-amber-100 dark:border-amber-900/30">
+                                           <div className="flex items-center text-xs sm:text-[10px] text-amber-600 dark:text-amber-400 mb-1 font-bold">
+                                             <FileText size={12} className="mr-1 shrink-0"/> 특이사항
                                            </div>
-                                           {record.note}
+                                           <p className="leading-relaxed">{record.note}</p>
                                         </div>
                                       )}
                                    </div>

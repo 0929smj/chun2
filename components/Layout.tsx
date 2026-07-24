@@ -1,5 +1,5 @@
-import React from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import React, { useRef, useEffect, useLayoutEffect } from 'react';
+import { NavLink, useLocation, useNavigationType } from 'react-router-dom';
 import { LayoutDashboard, CalendarDays, BookOpen, Users, Menu, X, UserSearch, Network, Heart, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 interface LayoutProps {
@@ -14,7 +14,61 @@ const Layout: React.FC<LayoutProps> = ({ children, isVisitationMode = false }) =
   });
 
   const location = useLocation();
+  const navigationType = useNavigationType();
   const isOrgPage = location.pathname === '/org';
+
+  const mainRef = useRef<HTMLElement>(null);
+  const scrollPositionsRef = useRef<Record<string, number>>({});
+
+  // Continuously record scroll position of the current route in main container
+  useEffect(() => {
+    const mainEl = mainRef.current;
+    if (!mainEl) return;
+
+    const handleScroll = () => {
+      scrollPositionsRef.current[location.pathname] = mainEl.scrollTop;
+    };
+
+    mainEl.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      mainEl.removeEventListener('scroll', handleScroll);
+    };
+  }, [location.pathname]);
+
+  // Handle scroll position when location changes
+  useLayoutEffect(() => {
+    const mainEl = mainRef.current;
+    if (!mainEl) return;
+
+    if (navigationType === 'POP') {
+      const savedPosition = scrollPositionsRef.current[location.pathname] ?? 0;
+      mainEl.scrollTop = savedPosition;
+
+      // Ensure position is preserved after React layout and dynamic content render
+      const timer1 = requestAnimationFrame(() => {
+        if (mainEl) mainEl.scrollTop = savedPosition;
+      });
+      const timer2 = setTimeout(() => {
+        if (mainEl) mainEl.scrollTop = savedPosition;
+      }, 50);
+      const timer3 = setTimeout(() => {
+        if (mainEl) mainEl.scrollTop = savedPosition;
+      }, 150);
+
+      return () => {
+        cancelAnimationFrame(timer1);
+        clearTimeout(timer2);
+        clearTimeout(timer3);
+      };
+    } else {
+      // PUSH or REPLACE: start at the top of the new page
+      mainEl.scrollTop = 0;
+      const timer1 = requestAnimationFrame(() => {
+        if (mainEl) mainEl.scrollTop = 0;
+      });
+      return () => cancelAnimationFrame(timer1);
+    }
+  }, [location.pathname, navigationType]);
 
   const toggleMobileSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
@@ -112,7 +166,7 @@ const Layout: React.FC<LayoutProps> = ({ children, isVisitationMode = false }) =
       </aside>
 
       {/* Main Content */}
-      <main className={`flex-1 w-full relative flex flex-col ${isOrgPage ? 'h-screen overflow-hidden' : 'h-screen overflow-auto'}`}>
+      <main ref={mainRef} className={`flex-1 w-full relative flex flex-col ${isOrgPage ? 'h-screen overflow-hidden' : 'h-screen overflow-auto'}`}>
         {/* Unified Top Header - Mobile Always, Desktop when Collapsed */}
         <header className={`sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-4 py-2.5 shadow-sm transition-all flex items-center justify-between ${
           isDesktopCollapsed ? '' : 'lg:hidden'
