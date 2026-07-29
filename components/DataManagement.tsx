@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Member, AttendanceRecord, AttendanceType, MeetingStatus, PrayerRecord } from '../types';
-import { Plus, Edit2, Save, Trash2, X, Phone, ArrowUpDown, Settings, Link as LinkIcon, AlertCircle, Copy, Check, HelpCircle, Filter, Loader2, StickyNote, Search, Download, Calendar } from 'lucide-react';
+import { Plus, Edit2, Save, Trash2, X, Phone, ArrowUpDown, Settings, Link as LinkIcon, AlertCircle, Copy, Check, HelpCircle, Filter, Loader2, StickyNote, Search, Download, Calendar, Sliders, Tag, CheckCircle2, XCircle } from 'lucide-react';
 import { SUNDAYS_2026 } from '../services/mockData';
 import { getScriptUrl, setScriptUrl, fetchSheetData, sendAction, DEFAULT_SCRIPT_URL } from '../services/sheetService';
 import { getClosestSunday } from '../services/utils';
@@ -16,7 +16,7 @@ const isNewFamily = (member?: Member | null) => {
 };
 
 const GAS_CODE_SNIPPET = `/* 
- [구글 스프레드시트 연결 스크립트 v4.8]
+ [구글 스프레드시트 연결 스크립트 v5.3 - 계수인원 0 생성 방지 완전판]
  - 업데이트: 심방 기록(Visitations) 등록, 수정, 삭제 기능 및 다양한 열 이름 매핑(성도ID, 심방ID 등) 유연 대응
  
  1. 스프레드시트 메뉴: 확장 프로그램 > Apps Script 클릭
@@ -127,21 +127,21 @@ function doGet(e) {
     const eventName = row['ministryevent'] || row['event'] || row['사역'] || row['행사'] || '';
 
     // 예배
-    const wVal = row['worship'] || row['예배'] || row['hasworship'];
-    const mCount = Number(row['manualassemblycount'] || row['계수인원'] || 0);
-    
-    if (!isChecked(wVal)) meetingStatus.push({ date: date, type: '예배', isCanceled: true, event: eventName, manualAssemblyCount: mCount });
-    else meetingStatus.push({ date: date, type: '예배', isCanceled: false, event: eventName, manualAssemblyCount: mCount });
+    const wVal = row['hasworship'] || row['worship'] || row['예배'];
+    const rawCnt = (row['manualassemblycount'] !== undefined && row['manualassemblycount'] !== '') ? row['manualassemblycount'] : ((row['계수인원'] !== undefined && row['계수인원'] !== '') ? row['계수인원'] : null);
+    const numCnt = Number(rawCnt); const mCount = (rawCnt !== null && rawCnt !== undefined && String(rawCnt).trim() !== '' && !isNaN(numCnt) && numCnt > 0) ? numCnt : undefined;
+    const wCanceled = isCanceledVal(wVal);
+    meetingStatus.push({ date: date, type: '예배', isCanceled: wCanceled, event: eventName, manualAssemblyCount: mCount });
     
     // 집회
-    const gVal = row['gathering'] || row['meeting'] || row['집회'] || row['hasassembly'] || row['assembly'];
-    if (!isChecked(gVal)) meetingStatus.push({ date: date, type: '집회', isCanceled: true, event: eventName });
-    else meetingStatus.push({ date: date, type: '집회', isCanceled: false, event: eventName });
+    const gVal = row['hasassembly'] || row['assembly'] || row['gathering'] || row['meeting'] || row['집회'];
+    const gCanceled = isCanceledVal(gVal);
+    meetingStatus.push({ date: date, type: '집회', isCanceled: gCanceled, event: eventName });
     
     // 울모임
-    const woolVal = row['wool'] || row['울모임'] || row['haswool'] || row['haswoorl'];
-    if (!isChecked(woolVal)) meetingStatus.push({ date: date, type: '울모임', isCanceled: true, event: eventName });
-    else meetingStatus.push({ date: date, type: '울모임', isCanceled: false, event: eventName });
+    const woolVal = row['haswoorl'] || row['haswool'] || row['wool'] || row['울모임'];
+    const woolCanceled = isCanceledVal(woolVal);
+    meetingStatus.push({ date: date, type: '울모임', isCanceled: woolCanceled, event: eventName });
   });
 
   // 4. 출석 및 기도제목 (시트명: attendance)
@@ -279,25 +279,51 @@ function formatDate(dateObj) {
   if (!dateObj) return null;
   if (dateObj instanceof Date) {
     try {
-      return Utilities.formatDate(dateObj, 'Asia/Seoul', 'yyyy-MM-dd');
+      return Utilities.formatDate(dateObj, "Asia/Seoul", "yyyy-MM-dd");
     } catch(err) {}
   }
   let s = String(dateObj).trim();
+  if (!s) return null;
+  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return s;
   try {
-    if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return s;
-    s = s.replace(/년/g, '-').replace(/월/g, '-').replace(/일/g, '').replace(/\\./g, '-').replace(/\\s/g, '');
-    if (/^\\d{2}-/.test(s)) s = '20' + s;
-    const d = new Date(s);
-    if (isNaN(d.getTime())) return null;
-    return Utilities.formatDate(d, 'Asia/Seoul', 'yyyy-MM-dd');
-  } catch (e) { return null; }
+    s = s.replace(/년/g, "-").replace(/월/g, "-").replace(/일/g, "").replace(/[\\.\\/\\s]+/g, "-");
+    while (s.length > 0 && s.charAt(s.length - 1) === "-") {
+      s = s.substring(0, s.length - 1);
+    }
+    const parts = s.split("-");
+    if (parts.length === 3) {
+      let y = parts[0].trim();
+      let m = parts[1].trim();
+      let d = parts[2].trim();
+      if (m.length === 1) m = "0" + m;
+      if (d.length === 1) d = "0" + d;
+      if (y.length === 2) y = "20" + y;
+      if (y.length === 4 && !isNaN(Number(y)) && !isNaN(Number(m)) && !isNaN(Number(d))) {
+        return y + "-" + m + "-" + d;
+      }
+    }
+    const dt = new Date(s);
+    if (!isNaN(dt.getTime())) {
+      return Utilities.formatDate(dt, "Asia/Seoul", "yyyy-MM-dd");
+    }
+  } catch (e) {}
+  return null;
 }
 
 function isChecked(val) {
   if (val === true) return true;
   if (typeof val === 'string') {
     const v = val.trim().toUpperCase();
-    return ['TRUE', 'O', 'Y', 'YES', 'PRESENT'].includes(v);
+    return ['TRUE', 'O', 'Y', 'YES', 'PRESENT', '진행', '참석'].includes(v);
+  }
+  return false;
+}
+
+function isCanceledVal(val) {
+  if (val === false) return true;
+  if (typeof val === 'string') {
+    const v = val.trim().toUpperCase();
+    return ['FALSE', 'X', 'N', 'NO', 'CANCELED', 'CANCELLED', '취소', '미진행'].includes(v);
   }
   return false;
 }
@@ -422,35 +448,65 @@ function updateMember(ss, payload) {
 }
 
 function updateSessionConfig(ss, payload) {
-  let sheet = ss.getSheets().find(s => s.getName().toLowerCase() === 'sessionconfig');
-  if (!sheet) return;
+  let sheet = ss.getSheets().find(s => s.getName().toLowerCase() === "sessionconfig");
+  if (!sheet) {
+    sheet = ss.insertSheet("SessionConfig");
+    sheet.appendRow(["date", "hasWorship", "hasAssembly", "hasWoorl", "ministryEvent", "manualAssemblyCount"]);
+  }
 
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).toLowerCase().replace(/\\s/g, ''));
-  const dateIdx = headers.indexOf('date') !== -1 ? headers.indexOf('date') : headers.indexOf('날짜');
-  if (dateIdx === -1) return;
+  let headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0].map(h => String(h).toLowerCase().replace(/\\s/g, ""));
+  let dateIdx = headers.indexOf("date");
+  if (dateIdx === -1) dateIdx = headers.indexOf("날짜");
+  if (dateIdx === -1) dateIdx = 0;
 
   const data = sheet.getDataRange().getDisplayValues();
   let foundRowIndex = -1;
 
   for (let i = 1; i < data.length; i++) {
-    if (formatDate(data[i][dateIdx]) === payload.date) {
+    const rowDate = formatDate(data[i][dateIdx]);
+    if (rowDate === payload.date) {
       foundRowIndex = i + 1;
       break;
     }
   }
 
-  if (foundRowIndex > 0) {
-    const colName = 'manualassemblycount';
-    let colIdx = headers.indexOf(colName);
-    if (colIdx === -1) colIdx = headers.indexOf('계수인원');
-    
-    if (colIdx !== -1) {
-      sheet.getRange(foundRowIndex, colIdx + 1).setValue(payload.count);
-    } else {
-      // Add column if missing
-      sheet.getRange(1, headers.length + 1).setValue('manualAssemblyCount');
-      sheet.getRange(foundRowIndex, headers.length + 1).setValue(payload.count);
+  function setValInRow(rowNum, colNames, val) {
+    let colIdx = -1;
+    for (let cn of colNames) {
+      colIdx = headers.indexOf(cn);
+      if (colIdx !== -1) break;
     }
+    if (colIdx !== -1) {
+      sheet.getRange(rowNum, colIdx + 1).setValue(val);
+    } else {
+      headers.push(colNames[0]);
+      sheet.getRange(1, headers.length).setValue(colNames[0]);
+      sheet.getRange(rowNum, headers.length).setValue(val);
+    }
+  }
+
+  if (foundRowIndex > 0) {
+    if (payload.hasWorship !== undefined) setValInRow(foundRowIndex, ["hasworship", "worship", "예배"], payload.hasWorship ? "TRUE" : "FALSE");
+    if (payload.hasAssembly !== undefined) setValInRow(foundRowIndex, ["hasassembly", "assembly", "gathering", "meeting", "집회"], payload.hasAssembly ? "TRUE" : "FALSE");
+    if (payload.hasWoorl !== undefined) setValInRow(foundRowIndex, ["haswoorl", "haswool", "wool", "울모임"], payload.hasWoorl ? "TRUE" : "FALSE");
+    if (payload.ministryEvent !== undefined) setValInRow(foundRowIndex, ["ministryevent", "event", "사역", "행사"], payload.ministryEvent);
+    if (payload.count !== undefined || payload.manualAssemblyCount !== undefined) {
+      const rawCnt = payload.manualAssemblyCount !== undefined ? payload.manualAssemblyCount : payload.count;
+      const numCnt = Number(rawCnt);
+      const cnt = (rawCnt !== null && rawCnt !== undefined && String(rawCnt).trim() !== '' && !isNaN(numCnt) && numCnt > 0) ? numCnt : "";
+      setValInRow(foundRowIndex, ["manualassemblycount", "계수인원"], cnt);
+    }
+  } else {
+    const targetRow = sheet.getLastRow() + 1;
+    setValInRow(targetRow, ["date", "날짜"], payload.date);
+    setValInRow(targetRow, ["hasworship", "worship", "예배"], payload.hasWorship !== false ? "TRUE" : "FALSE");
+    setValInRow(targetRow, ["hasassembly", "assembly", "gathering", "meeting", "집회"], payload.hasAssembly !== false ? "TRUE" : "FALSE");
+    setValInRow(targetRow, ["haswoorl", "haswool", "wool", "울모임"], payload.hasWoorl !== false ? "TRUE" : "FALSE");
+    setValInRow(targetRow, ["ministryevent", "event", "사역", "행사"], payload.ministryEvent || "");
+    const rawCnt = payload.manualAssemblyCount !== undefined ? payload.manualAssemblyCount : payload.count;
+    const numCnt = Number(rawCnt);
+    const cnt = (rawCnt !== null && rawCnt !== undefined && String(rawCnt).trim() !== '' && !isNaN(numCnt) && numCnt > 0) ? numCnt : "";
+    setValInRow(targetRow, ["manualassemblycount", "계수인원"], cnt);
   }
 }
 
@@ -571,6 +627,7 @@ interface DataManagementProps {
   meetingStatus: MeetingStatus[];
   availableGroups: string[];
   onToggleAttendance: (memberId: string, date: string, type: AttendanceType) => void;
+  onUpdateMeetingStatus?: (date: string, config: { hasWorship: boolean; hasAssembly: boolean; hasWoorl: boolean; ministryEvent: string; manualAssemblyCount?: number }) => void;
   refreshData: () => void;
   prayerRecords?: PrayerRecord[];
 }
@@ -582,6 +639,7 @@ const DataManagement: React.FC<DataManagementProps> = ({
   meetingStatus, 
   availableGroups, 
   onToggleAttendance, 
+  onUpdateMeetingStatus,
   refreshData, 
   prayerRecords = [] 
 }) => {
@@ -600,7 +658,7 @@ const DataManagement: React.FC<DataManagementProps> = ({
     return defaultValue;
   };
 
-  const [activeTab, setActiveTab] = useState<'members' | 'attendance' | 'settings' | 'export'>(() => loadSessionState<'members' | 'attendance' | 'settings' | 'export'>('datamanage_activeTab', 'members'));
+  const [activeTab, setActiveTab] = useState<'members' | 'attendance' | 'sessionConfig' | 'export' | 'settings'>(() => loadSessionState<'members' | 'attendance' | 'sessionConfig' | 'export' | 'settings'>('datamanage_activeTab', 'members'));
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [deletingMember, setDeletingMember] = useState<Member | null>(null); // For delete confirmation
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -639,6 +697,137 @@ const DataManagement: React.FC<DataManagementProps> = ({
   const [manualCount, setManualCount] = useState<string>('');
   const [isUpdatingManualCount, setIsUpdatingManualCount] = useState(false);
 
+  // Session Config Management State
+  const [sessionSearchQuery, setSessionSearchQuery] = useState<string>('');
+  const [sessionMonthFilter, setSessionMonthFilter] = useState<string>('all');
+  const [sessionStatusFilter, setSessionStatusFilter] = useState<'all' | 'active' | 'canceled'>('all');
+  const [editingSessionConfig, setEditingSessionConfig] = useState<{
+    date: string;
+    hasWorship: boolean;
+    hasAssembly: boolean;
+    hasWoorl: boolean;
+    ministryEvent: string;
+    manualAssemblyCount?: number;
+  } | null>(null);
+  const [isAddingSessionDate, setIsAddingSessionDate] = useState<boolean>(false);
+  const [newSessionConfig, setNewSessionConfig] = useState<{
+    date: string;
+    hasWorship: boolean;
+    hasAssembly: boolean;
+    hasWoorl: boolean;
+    ministryEvent: string;
+    manualAssemblyCount?: number;
+  }>({
+    date: getClosestSunday(),
+    hasWorship: true,
+    hasAssembly: true,
+    hasWoorl: true,
+    ministryEvent: '',
+    manualAssemblyCount: undefined
+  });
+
+  // Helper to get session config for a given date
+  const getSessionConfigForDate = (date: string) => {
+    const wStatus = meetingStatus.find(s => s.date === date && s.type === AttendanceType.Worship);
+    const gStatus = meetingStatus.find(s => s.date === date && s.type === AttendanceType.Gathering);
+    const lStatus = meetingStatus.find(s => s.date === date && s.type === AttendanceType.Wool);
+    const anyStatus = wStatus || gStatus || lStatus;
+
+    const validCount = (wStatus?.manualAssemblyCount && wStatus.manualAssemblyCount > 0) ? wStatus.manualAssemblyCount : undefined;
+
+    return {
+      date,
+      hasWorship: wStatus ? !wStatus.isCanceled : true,
+      hasAssembly: gStatus ? !gStatus.isCanceled : true,
+      hasWoorl: lStatus ? !lStatus.isCanceled : true,
+      ministryEvent: anyStatus?.event || '',
+      manualAssemblyCount: validCount
+    };
+  };
+
+  // Get all unique dates for session config
+  const allSessionDates = useMemo(() => {
+    const datesSet = new Set<string>();
+    meetingStatus.forEach(s => {
+      if (s.date) datesSet.add(s.date);
+    });
+    SUNDAYS_2026.forEach(d => datesSet.add(d));
+    return Array.from(datesSet).sort((a, b) => b.localeCompare(a));
+  }, [meetingStatus]);
+
+  // Filtered session configs
+  const filteredSessionConfigs = useMemo(() => {
+    return allSessionDates.map(date => getSessionConfigForDate(date)).filter(item => {
+      if (sessionMonthFilter !== 'all') {
+        const monthStr = item.date.split('-')[1];
+        if (monthStr !== sessionMonthFilter) return false;
+      }
+      if (sessionStatusFilter === 'active') {
+        if (!item.hasWorship || !item.hasAssembly || !item.hasWoorl) return false;
+      } else if (sessionStatusFilter === 'canceled') {
+        if (item.hasWorship && item.hasAssembly && item.hasWoorl && !item.ministryEvent) return false;
+      }
+      if (sessionSearchQuery.trim()) {
+        const q = sessionSearchQuery.trim().toLowerCase();
+        const dateMatch = item.date.toLowerCase().includes(q);
+        const eventMatch = item.ministryEvent.toLowerCase().includes(q);
+        if (!dateMatch && !eventMatch) return false;
+      }
+      return true;
+    });
+  }, [allSessionDates, meetingStatus, sessionMonthFilter, sessionStatusFilter, sessionSearchQuery]);
+
+  // Quick toggle session config function
+  const handleQuickToggleSession = async (date: string, key: 'hasWorship' | 'hasAssembly' | 'hasWoorl', currentVal: boolean) => {
+    const current = getSessionConfigForDate(date);
+    const validCount = (current.manualAssemblyCount && current.manualAssemblyCount > 0) ? current.manualAssemblyCount : undefined;
+    const updated = {
+      ...current,
+      [key]: !currentVal,
+      manualAssemblyCount: validCount
+    };
+    if (onUpdateMeetingStatus) {
+      onUpdateMeetingStatus(date, updated);
+    } else {
+      await sendAction('UPDATE_SESSION_CONFIG', {
+        date,
+        hasWorship: updated.hasWorship,
+        hasAssembly: updated.hasAssembly,
+        hasWoorl: updated.hasWoorl,
+        ministryEvent: updated.ministryEvent,
+        manualAssemblyCount: validCount ?? ""
+      });
+      refreshData();
+    }
+    showToast(`${date} 모임 설정이 업데이트되었습니다.`, 'success');
+  };
+
+  // Save session config from modal
+  const handleSaveSessionConfig = async (config: { date: string; hasWorship: boolean; hasAssembly: boolean; hasWoorl: boolean; ministryEvent: string; manualAssemblyCount?: number }) => {
+    if (!config.date) {
+      showToast('날짜를 지정해 주세요.', 'error');
+      return;
+    }
+    const validCount = (config.manualAssemblyCount && config.manualAssemblyCount > 0) ? config.manualAssemblyCount : undefined;
+    const cleanConfig = { ...config, manualAssemblyCount: validCount };
+    if (onUpdateMeetingStatus) {
+      onUpdateMeetingStatus(config.date, cleanConfig);
+    } else {
+      await sendAction('UPDATE_SESSION_CONFIG', {
+        date: config.date,
+        hasWorship: config.hasWorship,
+        hasAssembly: config.hasAssembly,
+        hasWoorl: config.hasWoorl,
+        ministryEvent: config.ministryEvent,
+        manualAssemblyCount: validCount ?? ""
+      });
+      refreshData();
+    }
+    showToast(`${config.date} 모임 및 행사 설정이 저장되었습니다.`, 'success');
+    setEditingSessionConfig(null);
+    setIsAddingSessionDate(false);
+  };
+
   // Sync state to sessionStorage
   useEffect(() => {
     sessionStorage.setItem('datamanage_activeTab', JSON.stringify(activeTab));
@@ -676,12 +865,22 @@ const DataManagement: React.FC<DataManagementProps> = ({
   const handleUpdateManualAssemblyCount = async () => {
     if (!selectedDate) return;
     setIsUpdatingManualCount(true);
+    const parsed = parseInt(manualCount.trim(), 10);
+    const validCount = (!isNaN(parsed) && parsed > 0) ? parsed : undefined;
     try {
-      await sendAction('UPDATE_SESSION_CONFIG', {
-        date: selectedDate,
-        count: parseInt(manualCount) || 0
-      });
-      refreshData();
+      if (onUpdateMeetingStatus) {
+        const currentCfg = getSessionConfigForDate(selectedDate);
+        onUpdateMeetingStatus(selectedDate, {
+          ...currentCfg,
+          manualAssemblyCount: validCount
+        });
+      } else {
+        await sendAction('UPDATE_SESSION_CONFIG', {
+          date: selectedDate,
+          manualAssemblyCount: validCount ?? ""
+        });
+        refreshData();
+      }
       showToast("인원 계수가 성공적으로 저장되었습니다.", "success");
     } catch (e) {
       showToast("인원 계수 저장 중 오류가 발생했습니다.", "error");
@@ -689,8 +888,7 @@ const DataManagement: React.FC<DataManagementProps> = ({
       setIsUpdatingManualCount(false);
     }
   };
-  
-  // Helper to get event name for selected date in Attendance tab
+
   const getEventName = (date: string) => {
     return meetingStatus.find(s => s.date === date)?.event || '';
   };
@@ -1067,11 +1265,11 @@ const DataManagement: React.FC<DataManagementProps> = ({
                 <div>
                    <label className="block text-xs font-bold text-slate-500 mb-1">등반일</label>
                    <input 
-                     type="text" 
-                     className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" 
-                     placeholder="YYYY-MM-DD 또는 YYYY"
+                     type="date" 
+                     className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg p-2.5 text-sm cursor-pointer" 
                      value={editingMember.MemberRegistration || ''} 
                      onChange={e => setEditingMember({...editingMember, MemberRegistration: e.target.value})}
+                     onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch {} }}
                    />
                 </div>
                 <div>
@@ -1183,10 +1381,15 @@ const DataManagement: React.FC<DataManagementProps> = ({
             <button onClick={() => { setActiveTab('members'); setSortConfig(null); }} className={`inline-block p-4 rounded-t-lg border-b-2 whitespace-nowrap ${activeTab === 'members' ? 'text-indigo-600 border-indigo-600' : 'border-transparent hover:text-slate-600 hover:border-slate-300'}`}>멤버 관리</button>
           </li>
           <li className="mr-2">
-            <button onClick={() => { setActiveTab('attendance'); setSortConfig(null); }} className={`inline-block p-4 rounded-t-lg border-b-2 whitespace-nowrap ${activeTab === 'attendance' ? 'text-indigo-600 border-indigo-600' : 'border-transparent hover:text-slate-600 hover:border-slate-300'}`}>출석 입력</button>
+            <button onClick={() => { setActiveTab('attendance'); setSortConfig(null); }} className={`inline-block p-4 rounded-t-lg border-b-2 whitespace-nowrap ${activeTab === 'attendance' ? 'text-indigo-600 border-indigo-600 font-bold' : 'border-transparent hover:text-slate-600 hover:border-slate-300'}`}>출석 입력</button>
           </li>
           <li className="mr-2">
-            <button onClick={() => setActiveTab('export')} className={`flex items-center p-4 rounded-t-lg border-b-2 whitespace-nowrap ${activeTab === 'export' ? 'text-indigo-600 border-indigo-600' : 'border-transparent hover:text-slate-600 hover:border-slate-300'}`}>
+            <button onClick={() => setActiveTab('sessionConfig')} className={`flex items-center p-4 rounded-t-lg border-b-2 whitespace-nowrap ${activeTab === 'sessionConfig' ? 'text-indigo-600 border-indigo-600 font-bold' : 'border-transparent hover:text-slate-600 hover:border-slate-300'}`}>
+              <Sliders size={16} className="mr-2 text-indigo-600" /> 모임/행사 설정
+            </button>
+          </li>
+          <li className="mr-2">
+            <button onClick={() => setActiveTab('export')} className={`flex items-center p-4 rounded-t-lg border-b-2 whitespace-nowrap ${activeTab === 'export' ? 'text-indigo-600 border-indigo-600 font-bold' : 'border-transparent hover:text-slate-600 hover:border-slate-300'}`}>
               <Download size={16} className="mr-2" /> 데이터 내보내기
             </button>
           </li>
@@ -1212,7 +1415,7 @@ const DataManagement: React.FC<DataManagementProps> = ({
                      </select>
                      <input type="text" className="border border-slate-300 rounded p-2 text-sm w-full" value={newMember.phoneNumber || ''} onChange={e => setNewMember({...newMember, phoneNumber: e.target.value})} placeholder="연락처" />
                      <div className="relative group">
-                        <input type="text" className="border border-slate-300 rounded p-2 text-sm w-full" placeholder="등반일(YYYY-MM-DD)" value={newMember.MemberRegistration || ''} onChange={e => setNewMember({...newMember, MemberRegistration: e.target.value})} />
+                        <input type="date" className="border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded p-2 text-sm w-full cursor-pointer" placeholder="등반일(YYYY-MM-DD)" value={newMember.MemberRegistration || ''} onChange={e => setNewMember({...newMember, MemberRegistration: e.target.value})} onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch {} }} />
                         <div className="absolute left-0 -bottom-5 hidden group-hover:block whitespace-nowrap bg-slate-800 text-white text-[10px] px-2 py-0.5 rounded z-10">등반일 (입력 시 해당일부터 출석률 계산)</div>
                      </div>
                      <input type="text" className="border border-slate-300 rounded p-2 text-sm w-full" value={newMember.specialNotes || ''} onChange={e => setNewMember({...newMember, specialNotes: e.target.value})} placeholder="비고(메모)" />
@@ -1589,6 +1792,508 @@ const DataManagement: React.FC<DataManagementProps> = ({
                  </button>
               </div>
            </div>
+        </div>
+      )}
+
+      {activeTab === 'sessionConfig' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6 space-y-6">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-slate-100">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-slate-800 flex items-center">
+                  <Sliders size={20} className="mr-2 text-indigo-600" />
+                  모임 및 행사 일정 설정 (SessionConfig)
+                </h3>
+                <span className="px-2 py-0.5 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full">
+                  DB 실시간 연동
+                </span>
+              </div>
+              <p className="text-xs md:text-sm text-slate-500 mt-1">
+                날짜별 예배, 집회, 울모임 진행 여부(<code className="bg-slate-100 px-1 py-0.5 rounded text-indigo-600 font-mono text-xs">hasWorship</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-indigo-600 font-mono text-xs">hasAssembly</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-indigo-600 font-mono text-xs">hasWoorl</code>) 및 사유(<code className="bg-slate-100 px-1 py-0.5 rounded text-indigo-600 font-mono text-xs">ministryEvent</code>)를 수정 및 등록합니다.
+              </p>
+            </div>
+          </div>
+
+          {/* Notice Banner */}
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex items-start gap-3 text-indigo-900 text-xs md:text-sm">
+            <AlertCircle size={20} className="text-indigo-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-bold">⚠️ 구글 시트 DB 반영 필수 안내</p>
+              <p className="text-indigo-800 leading-relaxed">
+                모임 설정 수정 사항이 실제 구글 시트에 저장되지 않거나 새로고침 시 원래대로 돌아간다면, <button onClick={() => setActiveTab('settings')} className="underline font-bold text-indigo-700 hover:text-indigo-900">[DB 연결 설정]</button> 탭에서 <strong>'최신 앱스크립트 코드(v5.3)'</strong>를 복사하여 구글 시트의 Apps Script에 붙여넣고 <strong>[배포] &gt; [새 배포]</strong>를 진행해주세요. (구글 스크립트 버전 업그레이드가 되어야 구글 시트 데이터베이스에 정상 입력됩니다.)
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5">
+              <span className="text-xs font-medium text-slate-500">전체 일정</span>
+              <div className="text-xl font-bold text-slate-800 mt-0.5">{allSessionDates.length} <span className="text-xs font-normal text-slate-500">일</span></div>
+            </div>
+            <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3.5">
+              <span className="text-xs font-medium text-emerald-700">집회 진행</span>
+              <div className="text-xl font-bold text-emerald-800 mt-0.5">
+                {allSessionDates.filter(d => {
+                  const cfg = getSessionConfigForDate(d);
+                  return cfg.hasAssembly;
+                }).length} <span className="text-xs font-normal text-emerald-600">일</span>
+              </div>
+            </div>
+            <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3.5">
+              <span className="text-xs font-medium text-amber-700">행사 및 프로그램</span>
+              <div className="text-xl font-bold text-amber-800 mt-0.5">
+                {allSessionDates.filter(d => {
+                  const cfg = getSessionConfigForDate(d);
+                  return !!cfg.ministryEvent;
+                }).length} <span className="text-xs font-normal text-amber-600">일</span>
+              </div>
+            </div>
+            <div className="bg-indigo-50/60 border border-indigo-200/80 rounded-xl p-3.5">
+              <span className="text-xs font-medium text-indigo-700">이번주 주일 ({getClosestSunday()})</span>
+              <div className="text-xs font-bold text-indigo-900 mt-1 flex items-center gap-1">
+                {(() => {
+                  const cfg = getSessionConfigForDate(getClosestSunday());
+                  if (cfg.hasWorship && cfg.hasAssembly && cfg.hasWoorl && !cfg.ministryEvent) {
+                    return <span className="text-emerald-700 font-bold">⛪ 정상 진행</span>;
+                  }
+                  return <span className="text-amber-800 font-bold">{cfg.ministryEvent || '일정 변경/취소'}</span>;
+                })()}
+              </div>
+            </div>
+          </div>
+
+          {/* Filter Bar */}
+          <div className="flex flex-wrap items-center justify-end gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+            {/* Month Filter Dropdown */}
+            <select
+              className="border border-slate-300 rounded-lg px-3 py-2 text-xs md:text-sm bg-white font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              value={sessionMonthFilter}
+              onChange={e => setSessionMonthFilter(e.target.value)}
+            >
+              <option value="all">월 선택 (전체)</option>
+              {Array.from({ length: 12 }, (_, i) => {
+                const m = String(i + 1).padStart(2, '0');
+                return <option key={m} value={m}>{i + 1}월 일정</option>;
+              })}
+            </select>
+
+            {/* Status Filter */}
+            <select
+              className="border border-slate-300 rounded-lg px-3 py-2 text-xs md:text-sm bg-white font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              value={sessionStatusFilter}
+              onChange={e => setSessionStatusFilter(e.target.value as any)}
+            >
+              <option value="all">전체 상태 보기</option>
+              <option value="active">정상 진행만</option>
+              <option value="canceled">취소/행사일만</option>
+            </select>
+          </div>
+
+          {/* Desktop PC Table View */}
+          <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-xs">
+                  <th className="py-3 px-4">날짜 (Date)</th>
+                  <th className="py-3 px-4 text-center">예배 (hasWorship)</th>
+                  <th className="py-3 px-4 text-center">집회 (hasAssembly)</th>
+                  <th className="py-3 px-4 text-center">울모임 (hasWoorl)</th>
+                  <th className="py-3 px-4">사역/행사/취소 사유 (ministryEvent)</th>
+                  <th className="py-3 px-4 text-center">계수 인원</th>
+                  <th className="py-3 px-4 text-center">관리</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {filteredSessionConfigs.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-slate-400">
+                      검색 조건에 해당되는 모임/행사 설정 데이터가 없습니다.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredSessionConfigs.map(cfg => {
+                    const isUpcoming = cfg.date === getClosestSunday();
+                    return (
+                      <tr key={cfg.date} className={`hover:bg-slate-50/80 transition-colors ${isUpcoming ? 'bg-indigo-50/30' : ''}`}>
+                        <td className="py-3 px-4 font-semibold text-slate-800">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar size={14} className="text-slate-400" />
+                            <span>{cfg.date}</span>
+                            {isUpcoming && (
+                              <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-indigo-100 text-indigo-700 rounded">
+                                이번주
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Worship Toggle */}
+                        <td className="py-3 px-4 text-center">
+                          <button
+                            onClick={() => handleQuickToggleSession(cfg.date, 'hasWorship', cfg.hasWorship)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer active:scale-95 ${
+                              cfg.hasWorship
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200'
+                                : 'bg-rose-100 text-rose-700 border border-rose-300 hover:bg-rose-200'
+                            }`}
+                          >
+                            {cfg.hasWorship ? '⛪ 예배 진행 (TRUE)' : '❌ 예배 취소 (FALSE)'}
+                          </button>
+                        </td>
+
+                        {/* Assembly Toggle */}
+                        <td className="py-3 px-4 text-center">
+                          <button
+                            onClick={() => handleQuickToggleSession(cfg.date, 'hasAssembly', cfg.hasAssembly)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer active:scale-95 ${
+                              cfg.hasAssembly
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200'
+                                : 'bg-rose-100 text-rose-700 border border-rose-300 hover:bg-rose-200'
+                            }`}
+                          >
+                            {cfg.hasAssembly ? '📢 집회 진행 (TRUE)' : '❌ 집회 취소 (FALSE)'}
+                          </button>
+                        </td>
+
+                        {/* Woorl Toggle */}
+                        <td className="py-3 px-4 text-center">
+                          <button
+                            onClick={() => handleQuickToggleSession(cfg.date, 'hasWoorl', cfg.hasWoorl)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer active:scale-95 ${
+                              cfg.hasWoorl
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200'
+                                : 'bg-rose-100 text-rose-700 border border-rose-300 hover:bg-rose-200'
+                            }`}
+                          >
+                            {cfg.hasWoorl ? '👥 울모임 진행 (TRUE)' : '❌ 울모임 취소 (FALSE)'}
+                          </button>
+                        </td>
+
+                        {/* Ministry Event */}
+                        <td className="py-3 px-4">
+                          {cfg.ministryEvent ? (
+                            <span className="inline-flex items-center px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-xs font-semibold">
+                              <Tag size={12} className="mr-1 text-amber-600" />
+                              {cfg.ministryEvent}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">-</span>
+                          )}
+                        </td>
+
+                        {/* Manual Assembly Count */}
+                        <td className="py-3 px-4 text-center font-medium text-slate-700">
+                          {cfg.manualAssemblyCount ? `${cfg.manualAssemblyCount}명` : '-'}
+                        </td>
+
+                        {/* Edit Button */}
+                        <td className="py-3 px-4 text-center">
+                          <button
+                            onClick={() => setEditingSessionConfig(cfg)}
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs inline-flex items-center transition-colors cursor-pointer"
+                          >
+                            <Edit2 size={13} className="mr-1 text-slate-500" />
+                            수정
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Card View (md:hidden) */}
+          <div className="block md:hidden space-y-3">
+            {filteredSessionConfigs.length === 0 ? (
+              <div className="py-10 text-center text-slate-400 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                검색 조건에 해당되는 모임/행사 설정 데이터가 없습니다.
+              </div>
+            ) : (
+              filteredSessionConfigs.map(cfg => {
+                const isUpcoming = cfg.date === getClosestSunday();
+                return (
+                  <div
+                    key={cfg.date}
+                    className={`bg-white border rounded-xl p-4 shadow-sm space-y-3 ${
+                      isUpcoming ? 'border-indigo-300 ring-1 ring-indigo-200 bg-indigo-50/20' : 'border-slate-200'
+                    }`}
+                  >
+                    {/* Top Row: Date & Main Status Badge */}
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar size={15} className="text-indigo-600" />
+                        <span className="font-bold text-sm text-slate-800">{cfg.date}</span>
+                        {isUpcoming && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-100 text-indigo-700 rounded">
+                            이번주
+                          </span>
+                        )}
+                      </div>
+
+                      {cfg.ministryEvent ? (
+                        <span className="px-2.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-full text-xs font-bold">
+                          {cfg.ministryEvent}
+                        </span>
+                      ) : cfg.hasWorship && cfg.hasAssembly && cfg.hasWoorl ? (
+                        <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold">
+                          정상 진행
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-full text-xs font-bold">
+                          일부/전체 취소
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Quick Toggles Row */}
+                    <div className="grid grid-cols-3 gap-2 pt-1">
+                      <button
+                        onClick={() => handleQuickToggleSession(cfg.date, 'hasWorship', cfg.hasWorship)}
+                        className={`p-2 rounded-lg text-xs font-bold text-center border transition-all active:scale-95 cursor-pointer ${
+                          cfg.hasWorship
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            : 'bg-rose-50 text-rose-700 border-rose-200'
+                        }`}
+                      >
+                        <div className="text-[10px] text-slate-500 font-normal">예배</div>
+                        {cfg.hasWorship ? '진행 (O)' : '취소 (X)'}
+                      </button>
+
+                      <button
+                        onClick={() => handleQuickToggleSession(cfg.date, 'hasAssembly', cfg.hasAssembly)}
+                        className={`p-2 rounded-lg text-xs font-bold text-center border transition-all active:scale-95 cursor-pointer ${
+                          cfg.hasAssembly
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            : 'bg-rose-50 text-rose-700 border-rose-200'
+                        }`}
+                      >
+                        <div className="text-[10px] text-slate-500 font-normal">집회</div>
+                        {cfg.hasAssembly ? '진행 (O)' : '취소 (X)'}
+                      </button>
+
+                      <button
+                        onClick={() => handleQuickToggleSession(cfg.date, 'hasWoorl', cfg.hasWoorl)}
+                        className={`p-2 rounded-lg text-xs font-bold text-center border transition-all active:scale-95 cursor-pointer ${
+                          cfg.hasWoorl
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            : 'bg-rose-50 text-rose-700 border-rose-200'
+                        }`}
+                      >
+                        <div className="text-[10px] text-slate-500 font-normal">울모임</div>
+                        {cfg.hasWoorl ? '진행 (O)' : '취소 (X)'}
+                      </button>
+                    </div>
+
+                    {/* Footer Row: Headcount & Full Edit button */}
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+                      <span className="text-slate-500 font-medium">
+                        계수인원: <strong className="text-slate-800">{cfg.manualAssemblyCount ? `${cfg.manualAssemblyCount}명` : '-'}</strong>
+                      </span>
+                      <button
+                        onClick={() => setEditingSessionConfig(cfg)}
+                        className="px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold rounded-lg flex items-center transition-colors cursor-pointer"
+                      >
+                        <Edit2 size={13} className="mr-1" /> 상세 수정
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal for Editing / Adding Session Config */}
+      {(editingSessionConfig || isAddingSessionDate) && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-5 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center">
+                <Sliders size={18} className="mr-2 text-indigo-600" />
+                {isAddingSessionDate ? '새 모임일 추가' : `${editingSessionConfig?.date} 모임 설정 수정`}
+              </h3>
+              <button
+                onClick={() => {
+                  setEditingSessionConfig(null);
+                  setIsAddingSessionDate(false);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Form Content */}
+            {(() => {
+              const cfg = isAddingSessionDate ? newSessionConfig : editingSessionConfig!;
+              const updateCfg = (fields: Partial<typeof cfg>) => {
+                if (isAddingSessionDate) {
+                  setNewSessionConfig(prev => ({ ...prev, ...fields }));
+                } else {
+                  setEditingSessionConfig(prev => prev ? ({ ...prev, ...fields }) : null);
+                }
+              };
+
+              return (
+                <div className="space-y-4">
+                  {/* Date Input */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      날짜 (Date)
+                    </label>
+                    <input
+                      type="date"
+                      value={cfg.date}
+                      onChange={e => updateCfg({ date: e.target.value })}
+                      onClick={e => (e.target as any).showPicker && (e.target as any).showPicker()}
+                      className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  {/* Toggles for Worship, Assembly, Woorl */}
+                  <div className="space-y-2 pt-1">
+                    <label className="block text-xs font-bold text-slate-700">
+                      모임별 진행 여부 설정 (hasWorship, hasAssembly, hasWoorl)
+                    </label>
+
+                    {/* 예배 (hasWorship) */}
+                    <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-slate-800">⛪ 예배 (hasWorship)</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => updateCfg({ hasWorship: !cfg.hasWorship })}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          cfg.hasWorship
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'bg-rose-100 text-rose-700 border border-rose-300'
+                        }`}
+                      >
+                        {cfg.hasWorship ? '진행 (TRUE)' : '취소 (FALSE)'}
+                      </button>
+                    </div>
+
+                    {/* 집회 (hasAssembly) */}
+                    <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-slate-800">📢 집회 (hasAssembly)</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => updateCfg({ hasAssembly: !cfg.hasAssembly })}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          cfg.hasAssembly
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'bg-rose-100 text-rose-700 border border-rose-300'
+                        }`}
+                      >
+                        {cfg.hasAssembly ? '진행 (TRUE)' : '취소 (FALSE)'}
+                      </button>
+                    </div>
+
+                    {/* 울모임 (hasWoorl) */}
+                    <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-slate-800">👥 울모임 (hasWoorl)</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => updateCfg({ hasWoorl: !cfg.hasWoorl })}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          cfg.hasWoorl
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'bg-rose-100 text-rose-700 border border-rose-300'
+                        }`}
+                      >
+                        {cfg.hasWoorl ? '진행 (TRUE)' : '취소 (FALSE)'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Ministry Event (사역/행사/취소 사유) */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      행사 명칭 / 취소 사유 (<code className="text-indigo-600">ministryEvent</code>)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="예: 설연휴, 봄 수련회, 울 미편성 등"
+                      value={cfg.ministryEvent || ''}
+                      onChange={e => updateCfg({ ministryEvent: e.target.value })}
+                      className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+
+                    {/* Preset Event Chips */}
+                    <div className="mt-2 space-y-1">
+                      <span className="text-[11px] font-medium text-slate-400">자주 쓰는 명칭 빠른 선택:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {['설연휴', '추석연휴', '봄 수련회', '청년대주일', '울 미편성', '전교인수련회', '부활절', '성탄절', '바로울'].map(preset => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => updateCfg({ ministryEvent: preset })}
+                            className="px-2 py-1 text-xs bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 rounded border border-slate-200 transition-colors cursor-pointer"
+                          >
+                            + {preset}
+                          </button>
+                        ))}
+                        {cfg.ministryEvent && (
+                          <button
+                            type="button"
+                            onClick={() => updateCfg({ ministryEvent: '' })}
+                            className="px-2 py-1 text-xs bg-rose-50 text-rose-600 rounded border border-rose-200 hover:bg-rose-100 cursor-pointer"
+                          >
+                            지우기
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Manual Assembly Count */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      현장 계수인원 (선택 사항)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="예: 50"
+                      value={cfg.manualAssemblyCount || ''}
+                      onChange={e => updateCfg({ manualAssemblyCount: e.target.value.trim() === "" ? undefined : (parseInt(e.target.value) || undefined) })}
+                      className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-2 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingSessionConfig(null);
+                        setIsAddingSessionDate(false);
+                      }}
+                      className="w-1/2 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm transition-colors cursor-pointer"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveSessionConfig(cfg)}
+                      className="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm shadow-md transition-all active:scale-95 flex items-center justify-center cursor-pointer"
+                    >
+                      <Save size={16} className="mr-1.5" /> 저장하기
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
         </div>
       )}
 

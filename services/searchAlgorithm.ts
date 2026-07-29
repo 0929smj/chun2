@@ -92,10 +92,11 @@ export function extractTwoDigitNumbers(str: string): string[] {
 
 export function sortAndFilterMembersByName(members: Member[], query: string): Member[] {
   const trimmed = query.trim();
-  if (!trimmed) return members;
+  const nonDeleted = members.filter(m => (m?.status?.split(':')[0] || 'ACTIVE').trim().toUpperCase() !== 'DELETED');
+  if (!trimmed) return nonDeleted;
 
   // 1. Filter using our fuzzy/choseong match
-  const matched = members.filter(m => matchKoreanFuzzy(trimmed, String(m.name || '')));
+  const matched = nonDeleted.filter(m => matchKoreanFuzzy(trimmed, String(m.name || '')));
 
   // 2. Sort: prioritize name matches with the 2-digit number if query contains a 2-digit number
   const twoDigitNums = extractTwoDigitNumbers(trimmed);
@@ -233,6 +234,12 @@ export function runUniversalSearch(
   const trimmedQuery = query.trim();
   if (!trimmedQuery) return [];
 
+  // Filter out DELETED members
+  const nonDeletedMembers = members.filter(m => {
+    const status = m?.status || 'ACTIVE';
+    return status.split(':')[0].trim().toUpperCase() !== 'DELETED';
+  });
+
   // 1. Tokenize query (e.g. "역삼역 기도" -> ["역삼역", "기도"])
   const tokens = trimmedQuery.toLowerCase().split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return [];
@@ -253,7 +260,7 @@ export function runUniversalSearch(
     prayerRecordNote: 4.0,
   };
 
-  for (const member of members) {
+  for (const member of nonDeletedMembers) {
     // We will calculate a score for each token, and tracks which fields matched
     let totalScore = 0;
     let matchedTokensCount = 0;
@@ -401,6 +408,8 @@ export function runVisitationSearch(
   const preFiltered = visitations.filter(v => {
     const member = memberMap[v.memberId];
     if (!member) return false;
+    const coreStatus = (member.status?.split(':')[0] || 'ACTIVE').trim().toUpperCase();
+    if (coreStatus === 'DELETED') return false;
     
     // Group match
     const matchesGroup = selectedGroup === 'ALL' || member.group === selectedGroup;

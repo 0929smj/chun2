@@ -31,14 +31,26 @@ const App: React.FC = () => {
   const [loginError, setLoginError] = useState('');
   const [validAccessCodes, setValidAccessCodes] = useState<string[]>([]);
 
-  // Filter only Active members for the app views (except DataManagement)
-  const activeMembers = useMemo(() => {
+  // Filter non-deleted members and active members
+  const nonDeletedMembers = useMemo(() => {
     return members.filter(m => {
-      const status = m.status || 'ACTIVE';
-      const coreStatus = status.split(':')[0];
-      return coreStatus !== 'INACTIVE' && coreStatus !== 'TRANSFER' && coreStatus !== 'STUDY_ABROAD' && coreStatus !== 'MILITARY' && coreStatus !== 'DELETED';
+      const status = m?.status || 'ACTIVE';
+      const coreStatus = status.split(':')[0].trim().toUpperCase();
+      return coreStatus !== 'DELETED';
     });
   }, [members]);
+
+  const nonDeletedMemberIds = useMemo(() => {
+    return new Set(nonDeletedMembers.map(m => m.id));
+  }, [nonDeletedMembers]);
+
+  const activeMembers = useMemo(() => {
+    return nonDeletedMembers.filter(m => {
+      const status = m?.status || 'ACTIVE';
+      const coreStatus = status.split(':')[0].trim().toUpperCase();
+      return coreStatus !== 'INACTIVE' && coreStatus !== 'TRANSFER' && coreStatus !== 'STUDY_ABROAD' && coreStatus !== 'MILITARY';
+    });
+  }, [nonDeletedMembers]);
 
   // Function to clean attendance records based on meeting status
   // This ensures that if a meeting is canceled (FALSE in DB), any accidental 'Present' record is ignored.
@@ -65,6 +77,20 @@ const App: React.FC = () => {
       .filter(record => record && Array.isArray(record.types) && record.types.length > 0); // Remove records that became empty
   };
 
+  // Filtered Records (Excluding records for DELETED members)
+  const cleanedAttendanceRecords = useMemo(() => {
+    const cleaned = cleanAttendanceData(records, meetingStatus);
+    return cleaned.filter(r => nonDeletedMemberIds.has(r.memberId));
+  }, [records, meetingStatus, nonDeletedMemberIds]);
+
+  const cleanedPrayerRecords = useMemo(() => {
+    return prayerRecords.filter(p => nonDeletedMemberIds.has(p.memberId));
+  }, [prayerRecords, nonDeletedMemberIds]);
+
+  const cleanedVisitations = useMemo(() => {
+    return visitations.filter(v => nonDeletedMemberIds.has(v.memberId));
+  }, [visitations, nonDeletedMemberIds]);
+
   // Load data function (With SWR: Stale-While-Revalidate caching pattern for instant load)
   const loadData = async () => {
     const cacheKey = 'church_admin_cached_data';
@@ -77,7 +103,7 @@ const App: React.FC = () => {
         const parsed = JSON.parse(cached);
         if (parsed && typeof parsed === 'object') {
           setMembers(parsed.members || []);
-          setMeetingStatus(parsed.meetingStatus || []);
+          setMeetingStatus(sanitizeMeetingStatus(parsed.meetingStatus || []));
           setPrayerRecords(parsed.prayers || []);
           setValidAccessCodes(parsed.accessCodes || []);
           setRecords(parsed.records || []);
@@ -108,7 +134,7 @@ const App: React.FC = () => {
         }
         
         const fetchedMembers = data.members || [];
-        const fetchedMeetingStatus = data.meetingStatus || [];
+        const fetchedMeetingStatus = sanitizeMeetingStatus(data.meetingStatus || []);
         const fetchedRecords = data.attendance || [];
         const fetchedPrayers = data.prayers || [];
         const fetchedAccessCodes = data.accessCodes || [];
@@ -307,6 +333,55 @@ const App: React.FC = () => {
     });
   };
 
+  // Handler to update meeting/session config (hasWorship, hasAssembly, hasWoorl, ministryEvent, manualAssemblyCount)
+  const handleUpdateMeetingStatus = async (date: string, config: { hasWorship: boolean; hasAssembly: boolean; hasWoorl: boolean; ministryEvent: string; manualAssemblyCount?: number }) => {
+    const validCount = (config.manualAssemblyCount && config.manualAssemblyCount > 0) ? config.manualAssemblyCount : undefined;
+    setMeetingStatus(prev => {
+      const filtered = prev.filter(s => s.date !== date);
+      const newItems: MeetingStatus[] = [
+        {
+          date,
+          type: AttendanceType.Worship,
+          isCanceled: !config.hasWorship,
+          event: config.ministryEvent,
+          manualAssemblyCount: validCount
+        },
+        {
+          date,
+          type: AttendanceType.Gathering,
+          isCanceled: !config.hasAssembly,
+          event: config.ministryEvent
+        },
+        {
+          date,
+          type: AttendanceType.Wool,
+          isCanceled: !config.hasWoorl,
+          event: config.ministryEvent
+        }
+      ];
+      const updated = [...filtered, ...newItems];
+      try {
+        const cacheKey = 'church_admin_cached_data';
+        const cached = localStorage.getItem(cacheKey);
+        let parsed = cached ? JSON.parse(cached) : {};
+        parsed.meetingStatus = updated;
+        localStorage.setItem(cacheKey, JSON.stringify(parsed));
+      } catch (e) {
+        console.warn("Failed to cache meetingStatus update:", e);
+      }
+      return updated;
+    });
+
+    await sendAction('UPDATE_SESSION_CONFIG', {
+      date,
+      hasWorship: config.hasWorship,
+      hasAssembly: config.hasAssembly,
+      hasWoorl: config.hasWoorl,
+      ministryEvent: config.ministryEvent,
+      manualAssemblyCount: validCount ?? ""
+    });
+  };
+
   // Helper to safely write visitations to local storage cache under all circumstances
   const saveVisitationsToCache = (updatedVisitations: Visitation[]) => {
     const cacheKey = 'church_admin_cached_data';
@@ -486,13 +561,13 @@ const App: React.FC = () => {
           </div>
         )}
         <Routes>
-          <Route path="/" element={<Dashboard members={activeMembers} records={records} meetingStatus={meetingStatus} />} />
+          <Route path="/" element={<Dashboard members={activeMembers} records={cleanedAttendanceRecords} meetingStatus={meetingStatus} />} />
           <Route 
             path="/attendance" 
             element={
               <AttendanceMatrix 
                 members={activeMembers} 
-                records={records} 
+                records={cleanedAttendanceRecords} 
                 meetingStatus={meetingStatus}
                 availableGroups={groups}
                 onToggleAttendance={toggleAttendance}
@@ -505,7 +580,7 @@ const App: React.FC = () => {
             element={
               <PrayerRequests 
                 members={activeMembers} 
-                prayerRecords={prayerRecords} 
+                prayerRecords={cleanedPrayerRecords} 
                 availableGroups={groups}
               />
             } 
@@ -514,13 +589,13 @@ const App: React.FC = () => {
             path="/profile" 
             element={
               <IndividualProfile 
-                members={members} 
-                records={records} 
-                prayerRecords={prayerRecords}
+                members={nonDeletedMembers} 
+                records={cleanedAttendanceRecords} 
+                prayerRecords={cleanedPrayerRecords}
                 meetingStatus={meetingStatus}
                 availableGroups={groups}
                 isVisitationMode={isVisitationMode}
-                visitations={visitations}
+                visitations={cleanedVisitations}
                 onAddVisitation={handleAddVisitation}
                 onUpdateVisitation={handleUpdateVisitation}
                 onUpdateMember={handleUpdateMember}
@@ -532,8 +607,8 @@ const App: React.FC = () => {
             element={
               isVisitationMode ? (
                 <VisitationManagement 
-                  members={members} 
-                  visitations={visitations} 
+                  members={nonDeletedMembers} 
+                  visitations={cleanedVisitations} 
                   setVisitations={setVisitations}
                   availableGroups={groups}
                   usingMock={usingMock}
@@ -541,9 +616,9 @@ const App: React.FC = () => {
                   onUpdateVisitation={handleUpdateVisitation}
                   onDeleteVisitation={handleDeleteVisitation}
                   onUpdateMember={handleUpdateMember}
-                  records={records}
+                  records={cleanedAttendanceRecords}
                   meetingStatus={meetingStatus}
-                  prayerRecords={prayerRecords}
+                  prayerRecords={cleanedPrayerRecords}
                 />
               ) : (
                 <Navigate to="/" replace />
@@ -555,7 +630,7 @@ const App: React.FC = () => {
             element={
               <OrganizationChart 
                 members={activeMembers} 
-                records={records} 
+                records={cleanedAttendanceRecords} 
                 meetingStatus={meetingStatus}
               />
             } 
@@ -564,15 +639,16 @@ const App: React.FC = () => {
             path="/manage" 
             element={
               <DataManagement 
-                members={members} 
+                members={nonDeletedMembers} 
                 setMembers={setMembers} 
-                records={records}
+                records={cleanedAttendanceRecords}
                 meetingStatus={meetingStatus}
                 availableGroups={groups}
                 onToggleAttendance={toggleAttendance}
+                onUpdateMeetingStatus={handleUpdateMeetingStatus}
                 refreshData={loadData}
                 // @ts-ignore: Prop drilling for export functionality
-                prayerRecords={prayerRecords} 
+                prayerRecords={cleanedPrayerRecords} 
               />
             } 
           />
@@ -581,6 +657,15 @@ const App: React.FC = () => {
       </Layout>
     </HashRouter>
   );
+};
+
+
+const sanitizeMeetingStatus = (statuses: MeetingStatus[]): MeetingStatus[] => {
+  if (!Array.isArray(statuses)) return [];
+  return statuses.map(s => ({
+    ...s,
+    manualAssemblyCount: (s.manualAssemblyCount && s.manualAssemblyCount > 0) ? s.manualAssemblyCount : undefined
+  }));
 };
 
 export default App;

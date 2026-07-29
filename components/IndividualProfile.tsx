@@ -327,7 +327,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
     }
   };
 
-  const VISITATION_TYPES = ['대면심방', '전화심방', '연계심방', 'SNS심방', '가정방문', '병원심방', '기타심방'];
+  const VISITATION_TYPES = ['대면심방', '전화심방', '새가족심방', '연계심방', 'SNS심방', '가정방문', '병원심방', '기타심방'];
 
   const fetchCurrentLocationAddress = () => {
     if (!navigator.geolocation) {
@@ -447,7 +447,10 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
   // 1. Resolve Target Member
   const targetMember = useMemo(() => {
     if (selectedMemberId) {
-      return members.find(m => m.id === selectedMemberId) || null;
+      const found = members.find(m => m.id === selectedMemberId);
+      if (found && (found.status?.split(':')[0] || 'ACTIVE').trim().toUpperCase() !== 'DELETED') {
+        return found;
+      }
     }
     return null;
   }, [selectedMemberId, members]);
@@ -576,7 +579,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
       setSelectedMemberId('');
       
       // Auto-select if perfect match and unique
-      const matched = members.filter(m => String(m.name || '').toLowerCase() === val.toLowerCase());
+      const matched = members.filter(m => String(m.name || '').toLowerCase() === val.toLowerCase() && (m.status?.split(':')[0] || 'ACTIVE').trim().toUpperCase() !== 'DELETED');
       if (matched.length === 1) {
         setSelectedMemberId(matched[0].id);
       }
@@ -729,7 +732,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
           ...editingVisitation,
           date: formDate,
           visitationType: formType,
-          place: formType === '연계심방' ? '' : formPlace,
+          place: (formType === '연계심방' || formType === '새가족심방') ? '' : formPlace,
           details: formDetails,
           prayerRequests: formPrayerRequests
         });
@@ -740,7 +743,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
           date: formDate,
           memberId: targetMember.id,
           visitationType: formType,
-          place: formType === '연계심방' ? '' : formPlace,
+          place: (formType === '연계심방' || formType === '새가족심방') ? '' : formPlace,
           details: formDetails,
           prayerRequests: formPrayerRequests
         });
@@ -1716,7 +1719,13 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                   <select
                     className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-slate-50 focus:ring-rose-500 focus:border-rose-500"
                     value={formType}
-                    onChange={(e) => setFormType(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormType(val);
+                      if (val === '새가족심방' || val === '연계심방') {
+                        setFormPlace('');
+                      }
+                    }}
                   >
                     {VISITATION_TYPES.map(t => (
                       <option key={t} value={t}>{t}</option>
@@ -1729,12 +1738,14 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
               {formType !== '연계심방' && (
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
-                    <label className="block text-xs font-bold text-slate-500">심방 장소</label>
+                    <label className="block text-xs font-bold text-slate-500">
+                      심방 장소 {formType === '새가족심방' && <span className="text-[10px] text-slate-400 font-normal ml-1">(새가족심방은 입력 비활성화)</span>}
+                    </label>
                     <button
                       type="button"
                       onClick={fetchCurrentLocationAddress}
-                      disabled={gpsLoading}
-                      className="text-[10px] text-rose-600 hover:text-rose-800 flex items-center gap-1 font-semibold"
+                      disabled={gpsLoading || formType === '새가족심방'}
+                      className="text-[10px] text-rose-600 hover:text-rose-800 flex items-center gap-1 font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {gpsLoading ? (
                         <>
@@ -1750,10 +1761,11 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                   </div>
                   <input 
                     type="text"
-                    required={formType !== '기타심방'}
-                    placeholder="예: 교회 로비, 만남의 카페, 성도 가정, 전화통화 등 (기타심방은 입력 생략 가능)"
-                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-rose-500 focus:border-rose-500"
-                    value={formPlace}
+                    disabled={formType === '새가족심방'}
+                    required={formType !== '기타심방' && formType !== '연계심방' && formType !== '새가족심방'}
+                    placeholder={formType === '새가족심방' ? '새가족심방은 위치 입력을 하지 않습니다' : '예: 교회 로비, 만남의 카페, 성도 가정, 전화통화 등 (기타/연계/새가족심방은 입력 생략 가능)'}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-rose-500 focus:border-rose-500 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+                    value={formType === '새가족심방' ? '' : formPlace}
                     onChange={(e) => setFormPlace(e.target.value)}
                   />
                 </div>
@@ -1894,11 +1906,12 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                     등반일
                   </label>
                   <input
-                    type="text"
+                    type="date"
                     value={editMemberForm.MemberRegistration}
                     onChange={(e) => setEditMemberForm({ ...editMemberForm, MemberRegistration: e.target.value })}
+                    onClick={(e) => { try { (e.target as HTMLInputElement).showPicker(); } catch {} }}
                     placeholder="YYYY-MM-DD"
-                    className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                    className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 font-medium cursor-pointer"
                   />
                 </div>
               </div>

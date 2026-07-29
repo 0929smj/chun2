@@ -563,7 +563,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
         date: formDate,
         memberId: formMemberId,
         visitationType: formType,
-        place: formType === '연계심방' ? '' : formPlace,
+        place: (formType === '연계심방' || formType === '새가족심방') ? '' : formPlace,
         details: formDetails,
         prayerRequests: formPrayerRequests
       });
@@ -573,7 +573,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
         date: formDate,
         memberId: formMemberId,
         visitationType: formType,
-        place: formType === '연계심방' ? '' : formPlace,
+        place: (formType === '연계심방' || formType === '새가족심방') ? '' : formPlace,
         details: formDetails,
         prayerRequests: formPrayerRequests
       });
@@ -1396,7 +1396,13 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                   <label className="block text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">심방 구분</label>
                   <select
                     value={formType}
-                    onChange={(e) => setFormType(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormType(val);
+                      if (val === '새가족심방' || val === '연계심방') {
+                        setFormPlace('');
+                      }
+                    }}
                     className="w-full h-10 px-2 sm:px-3 py-2 border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 rounded-xl text-[11px] sm:text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none cursor-pointer text-slate-800 dark:text-slate-200 min-w-0"
                   >
                     {VISITATION_TYPES.map(t => (
@@ -1410,12 +1416,14 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
               {formType !== '연계심방' && (
                 <div className="space-y-0.5">
                   <div className="flex justify-between items-center">
-                    <label className="block text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">심방 장소</label>
+                    <label className="block text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                      심방 장소 {formType === '새가족심방' && <span className="text-[10px] text-slate-400 font-normal ml-1 lowercase">(새가족심방은 입력 비활성화)</span>}
+                    </label>
                     <button
                       type="button"
                       onClick={fetchCurrentLocationAddress}
-                      disabled={gpsLoading}
-                      className="text-[9px] sm:text-[10px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 flex items-center gap-1 font-bold bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100/50 dark:border-indigo-900/30 px-2 py-0.5 rounded-full transition-all cursor-pointer shadow-sm active:scale-95"
+                      disabled={gpsLoading || formType === '새가족심방'}
+                      className="text-[9px] sm:text-[10px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 flex items-center gap-1 font-bold bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100/50 dark:border-indigo-900/30 px-2 py-0.5 rounded-full transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {gpsLoading ? (
                         <>
@@ -1431,13 +1439,14 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                   </div>
                   <input
                     type="text"
-                    required={formType !== '기타심방'}
-                    placeholder="예: 강남구 역삼동, 교회 소예배실, 성도 가정 등 (기타심방은 입력 생략 가능)"
-                    value={formPlace}
+                    disabled={formType === '새가족심방'}
+                    required={formType !== '기타심방' && formType !== '연계심방' && formType !== '새가족심방'}
+                    placeholder={formType === '새가족심방' ? '새가족심방은 위치 입력을 하지 않습니다' : '예: 강남구 역삼동, 교회 소예배실, 성도 가정 등 (기타/연계/새가족심방은 입력 생략 가능)'}
+                    value={formType === '새가족심방' ? '' : formPlace}
                     onChange={(e) => setFormPlace(e.target.value)}
-                    className="w-full h-10 px-3 py-2 border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-slate-800 dark:text-slate-200"
+                    className="w-full h-10 px-3 py-2 border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-slate-800 dark:text-slate-200 disabled:bg-slate-200/50 dark:disabled:bg-slate-900/80 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed"
                   />
-                  {gpsError && (
+                  {gpsError && formType !== '새가족심방' && (
                     <p className="text-[9px] text-rose-500 flex items-center gap-1 font-medium mt-0.5 animate-fadeIn">
                       <AlertCircle size={10} className="shrink-0" />
                       <span>{gpsError}가 감지되었습니다. 직접 입력해주셔도 괜찮습니다.</span>
