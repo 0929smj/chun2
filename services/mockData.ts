@@ -71,8 +71,8 @@ export const generateMeetingStatus = (): MeetingStatus[] => {
     // Specific Logic based on User Request
     if (idx === 0) { // 01-04
        eventName = '울 미편성';
-       wCanceled = true;
-       gCanceled = true;
+       wCanceled = false;
+       gCanceled = false;
        lCanceled = true;
     }
     else if (idx === 6) { // 02-15
@@ -104,7 +104,8 @@ export const generateMeetingStatus = (): MeetingStatus[] => {
       date: date,
       type: AttendanceType.Gathering,
       isCanceled: gCanceled,
-      event: eventName
+      event: eventName,
+      manualAssemblyCount: idx === 0 ? 101 : undefined
     });
     
     // 3. Worship
@@ -113,7 +114,7 @@ export const generateMeetingStatus = (): MeetingStatus[] => {
       type: AttendanceType.Worship,
       isCanceled: wCanceled,
       event: eventName,
-      manualAssemblyCount: undefined // Mock headcount between 40-60
+      manualAssemblyCount: idx === 0 ? 145 : undefined
     });
   });
 

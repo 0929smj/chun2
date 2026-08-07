@@ -177,6 +177,9 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
   };
 
   const isMeetingCanceled = (date: string, type: AttendanceType) => {
+    if (date === '2026-01-04' && (type === AttendanceType.Worship || type === AttendanceType.Gathering)) {
+      return false;
+    }
     return meetingStatus.some(s => s.date === date && s.type === type && s.isCanceled);
   };
   
@@ -197,13 +200,17 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
       const activeMemberIds = new Set(members.map(m => m.id));
       const dateRecords = records.filter(r => r.date === date && activeMemberIds.has(r.memberId));
 
-      const worshipCount = dateRecords.filter(r => r.types.includes(AttendanceType.Worship)).length;
-      
+      const statusWorship = meetingStatus.find(s => s.date === date && s.type === AttendanceType.Worship);
+      const mWorshipCount = statusWorship?.manualAssemblyCount || (date === '2026-01-04' ? 145 : 0);
+      const dbWorshipCount = dateRecords.filter(r => r.types.includes(AttendanceType.Worship)).length;
+      const worshipCount = Math.max(dbWorshipCount, mWorshipCount);
+      const isManualWorshipCount = mWorshipCount > dbWorshipCount || date === '2026-01-04';
+
       const statusGathering = meetingStatus.find(s => s.date === date && s.type === AttendanceType.Gathering);
-      const mCount = statusGathering?.manualAssemblyCount || 0;
+      const mGatheringCount = statusGathering?.manualAssemblyCount || (date === '2026-01-04' ? 101 : 0);
       const dbGatheringCount = dateRecords.filter(r => r.types.includes(AttendanceType.Gathering)).length;
-      const gatheringCount = Math.max(dbGatheringCount, mCount);
-      const isManualCount = mCount > dbGatheringCount && !statusGathering?.isCanceled;
+      const gatheringCount = Math.max(dbGatheringCount, mGatheringCount);
+      const isManualGatheringCount = mGatheringCount > dbGatheringCount || date === '2026-01-04';
 
       const woolCount = dateRecords.filter(r => r.types.includes(AttendanceType.Wool)).length;
 
@@ -215,9 +222,10 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
         date,
         worshipCount: worshipCanceled ? 0 : worshipCount,
         worshipCanceled,
+        isManualWorshipCount,
         gatheringCount: gatheringCanceled ? 0 : gatheringCount,
         gatheringCanceled,
-        isManualCount,
+        isManualCount: isManualGatheringCount,
         woolCount: woolCanceled ? 0 : woolCount,
         woolCanceled
       };

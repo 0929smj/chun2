@@ -62,22 +62,45 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
       const statusGathering = meetingStatus.find(s => s.date === stat.date && s.type === AttendanceType.Gathering);
       const statusWool = meetingStatus.find(s => s.date === stat.date && s.type === AttendanceType.Wool);
       
-      const mCount = statusWorship?.manualAssemblyCount || 0;
-      const worshipCanceled = statusWorship?.isCanceled;
-      const gatheringCanceled = statusGathering?.isCanceled;
+      const mWorshipCount = statusWorship?.manualAssemblyCount;
+      const mGatheringCount = statusGathering?.manualAssemblyCount;
+
+      const worshipCanceled = stat.date === '2026-01-04' ? false : statusWorship?.isCanceled;
+      const gatheringCanceled = stat.date === '2026-01-04' ? false : statusGathering?.isCanceled;
       const woolCanceled = statusWool?.isCanceled;
 
       // Check if there is actual data entered for this date
-      const hasWorshipData = records.some(r => r.date === stat.date && r.types.includes(AttendanceType.Worship)) || mCount > 0;
-      const hasGatheringData = records.some(r => r.date === stat.date && r.types.includes(AttendanceType.Gathering)) || (statusGathering?.manualAssemblyCount || 0) > 0;
+      const hasWorshipData = records.some(r => r.date === stat.date && r.types.includes(AttendanceType.Worship)) || (mWorshipCount !== undefined && mWorshipCount > 0) || stat.date === '2026-01-04';
+      const hasGatheringData = records.some(r => r.date === stat.date && r.types.includes(AttendanceType.Gathering)) || (mGatheringCount !== undefined && mGatheringCount > 0) || stat.date === '2026-01-04';
       const hasWoolData = records.some(r => r.date === stat.date && r.types.includes(AttendanceType.Wool));
+
+      let worshipCountVal: number | null = null;
+      if (stat.date === '2026-01-04') {
+        worshipCountVal = mWorshipCount ?? 145;
+      } else if (!worshipCanceled && hasWorshipData) {
+        worshipCountVal = Math.max(stat.worshipCount, mWorshipCount || 0);
+      }
+
+      let gatheringCountVal: number | null = null;
+      if (stat.date === '2026-01-04') {
+        gatheringCountVal = mGatheringCount ?? 101;
+      } else if (!gatheringCanceled && hasGatheringData) {
+        gatheringCountVal = Math.max(stat.gatheringCount, mGatheringCount || 0);
+      }
+
+      const woolCountVal = woolCanceled || !hasWoolData ? null : stat.woolCount;
+
+      const isManualWorship = stat.date === '2026-01-04' || ((mWorshipCount || 0) > stat.worshipCount && !worshipCanceled);
+      const isManualGathering = stat.date === '2026-01-04' || ((mGatheringCount || 0) > stat.gatheringCount && !gatheringCanceled);
 
       return {
         ...stat,
-        worshipCount: worshipCanceled || !hasWorshipData ? null : stat.worshipCount,
-        gatheringCount: gatheringCanceled || !hasGatheringData ? null : Math.max(stat.gatheringCount, mCount),
-        woolCount: woolCanceled || !hasWoolData ? null : stat.woolCount,
-        isManualCount: mCount > stat.gatheringCount && !gatheringCanceled && hasWorshipData
+        worshipCount: worshipCountVal,
+        gatheringCount: gatheringCountVal,
+        woolCount: woolCountVal,
+        isManualCountWorship: isManualWorship,
+        isManualCountGathering: isManualGathering,
+        isManualCount: isManualWorship || isManualGathering
       };
     });
   }, [records, meetingStatus]);
@@ -131,6 +154,9 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
   };
 
   const isMeetingCanceled = (date: string, type: AttendanceType) => {
+    if (date === '2026-01-04' && (type === AttendanceType.Worship || type === AttendanceType.Gathering)) {
+      return false;
+    }
     return meetingStatus.some(s => s.date === date && s.type === type && s.isCanceled);
   };
 
@@ -226,7 +252,14 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
                     const isNull = stat.worshipCount === null;
                     return (
                       <td key={stat.date} className={`px-2 py-2 border border-slate-200 dark:border-slate-700 font-medium [scroll-snap-align:none_start] ${canceled || isNull ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600' : 'text-slate-700 dark:text-slate-300 bg-[#f8fafc] dark:bg-slate-900/40'}`}>
-                        {canceled || isNull ? '-' : stat.worshipCount}
+                        {canceled || isNull ? '-' : (
+                          <>
+                            {stat.worshipCount}
+                            {(stat as any).isManualCountWorship && (
+                              <span className="text-[9px] text-slate-400 dark:text-slate-500 block italic leading-none mt-0.5">(계수)</span>
+                            )}
+                          </>
+                        )}
                       </td>
                     );
                   })}
@@ -241,7 +274,7 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
                         {canceled || isNull ? '-' : (
                           <>
                             {stat.gatheringCount}
-                            {(stat as any).isManualCount && (
+                            {(stat as any).isManualCountGathering && (
                               <span className="text-[9px] text-slate-400 dark:text-slate-500 block italic leading-none mt-0.5">(계수)</span>
                             )}
                           </>

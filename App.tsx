@@ -662,10 +662,45 @@ const App: React.FC = () => {
 
 const sanitizeMeetingStatus = (statuses: MeetingStatus[]): MeetingStatus[] => {
   if (!Array.isArray(statuses)) return [];
-  return statuses.map(s => ({
+  const mapped = statuses.map(s => ({
     ...s,
     manualAssemblyCount: (s.manualAssemblyCount && s.manualAssemblyCount > 0) ? s.manualAssemblyCount : undefined
   }));
+
+  const dateStr = '2026-01-04';
+  let hasJan4Worship = false;
+  let hasJan4Gathering = false;
+  let hasJan4Wool = false;
+
+  const result = mapped.map(s => {
+    if (s.date === dateStr) {
+      if (s.type === AttendanceType.Worship) {
+        hasJan4Worship = true;
+        return { ...s, isCanceled: false, manualAssemblyCount: s.manualAssemblyCount || 145, event: s.event || '울 미편성' };
+      }
+      if (s.type === AttendanceType.Gathering) {
+        hasJan4Gathering = true;
+        return { ...s, isCanceled: false, manualAssemblyCount: s.manualAssemblyCount || 101, event: s.event || '울 미편성' };
+      }
+      if (s.type === AttendanceType.Wool) {
+        hasJan4Wool = true;
+        return { ...s, isCanceled: true, event: s.event || '울 미편성' };
+      }
+    }
+    return s;
+  });
+
+  if (!hasJan4Worship) {
+    result.push({ date: dateStr, type: AttendanceType.Worship, isCanceled: false, manualAssemblyCount: 145, event: '울 미편성' });
+  }
+  if (!hasJan4Gathering) {
+    result.push({ date: dateStr, type: AttendanceType.Gathering, isCanceled: false, manualAssemblyCount: 101, event: '울 미편성' });
+  }
+  if (!hasJan4Wool) {
+    result.push({ date: dateStr, type: AttendanceType.Wool, isCanceled: true, event: '울 미편성' });
+  }
+
+  return result;
 };
 
 export default App;
