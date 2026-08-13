@@ -278,10 +278,12 @@ const App: React.FC = () => {
       setIsAuthenticated(true);
       setIsVisitationMode(true);
       setLoginError('');
+      window.location.hash = '#/org';
     } else if (pw === '18870691' || validAccessCodes.includes(pw)) {
       setIsAuthenticated(true);
       setIsVisitationMode(false);
       setLoginError('');
+      window.location.hash = '#/org';
     } else {
       setLoginError('비밀번호가 올바르지 않습니다.');
     }
@@ -582,6 +584,8 @@ const App: React.FC = () => {
                 members={activeMembers} 
                 prayerRecords={cleanedPrayerRecords} 
                 availableGroups={groups}
+                attendanceRecords={cleanedAttendanceRecords}
+                meetingStatus={meetingStatus}
               />
             } 
           />

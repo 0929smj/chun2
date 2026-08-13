@@ -726,26 +726,33 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
     e.preventDefault();
     if (!targetMember) return;
 
+    const todayLocal = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
+    const finalDate = formDate || todayLocal;
+    const finalType = formType || '대면심방';
+    const finalPlace = (formType === '연계심방' || formType === '새가족심방') ? '' : (formPlace || '');
+    const finalDetails = formDetails || '';
+    const finalPrayerRequests = formPrayerRequests || '';
+
     if (editingVisitation) {
       if (onUpdateVisitation) {
         onUpdateVisitation({
           ...editingVisitation,
-          date: formDate,
-          visitationType: formType,
-          place: (formType === '연계심방' || formType === '새가족심방') ? '' : formPlace,
-          details: formDetails,
-          prayerRequests: formPrayerRequests
+          date: finalDate,
+          visitationType: finalType,
+          place: finalPlace,
+          details: finalDetails,
+          prayerRequests: finalPrayerRequests
         });
       }
     } else {
       if (onAddVisitation) {
         onAddVisitation({
-          date: formDate,
+          date: finalDate,
           memberId: targetMember.id,
-          visitationType: formType,
-          place: (formType === '연계심방' || formType === '새가족심방') ? '' : formPlace,
-          details: formDetails,
-          prayerRequests: formPrayerRequests
+          visitationType: finalType,
+          place: finalPlace,
+          details: finalDetails,
+          prayerRequests: finalPrayerRequests
         });
       }
     }
@@ -1762,8 +1769,7 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
                   <input 
                     type="text"
                     disabled={formType === '새가족심방'}
-                    required={formType !== '기타심방' && formType !== '연계심방' && formType !== '새가족심방'}
-                    placeholder={formType === '새가족심방' ? '새가족심방은 위치 입력을 하지 않습니다' : '예: 교회 로비, 만남의 카페, 성도 가정, 전화통화 등 (기타/연계/새가족심방은 입력 생략 가능)'}
+                    placeholder={formType === '새가족심방' ? '새가족심방은 위치 입력을 하지 않습니다' : '예: 교회 로비, 만남의 카페, 성도 가정, 전화통화 등 (선택 사항 - 나중에 수정 가능)'}
                     className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-rose-500 focus:border-rose-500 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
                     value={formType === '새가족심방' ? '' : formPlace}
                     onChange={(e) => setFormPlace(e.target.value)}
@@ -1773,10 +1779,12 @@ const IndividualProfile: React.FC<IndividualProfileProps> = ({
 
               {/* Details */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">상세 내용 및 나눔</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">
+                  상세 내용 및 나눔 <span className="text-[10px] text-slate-400 font-normal">(선택 사항 - 나중에 수정 가능)</span>
+                </label>
                 <textarea
                   rows={4}
-                  placeholder="심방을 진행하며 나눈 대화, 신앙적 고민, 조언 등을 자세히 기재해 주세요."
+                  placeholder="심방을 진행하며 나눈 대화, 신앙적 고민, 조언 등을 자유롭게 적어주세요. (미입력 시에도 등록 가능하며 나중에 수정할 수 있습니다)"
                   className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-rose-500 focus:border-rose-500 resize-none leading-relaxed"
                   value={formDetails}
                   onChange={(e) => setFormDetails(e.target.value)}

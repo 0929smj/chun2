@@ -552,37 +552,60 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
   // Handle submitting new or edited visitation
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formMemberId) {
+
+    let targetMemberId = formMemberId;
+
+    // Auto-resolve member if user typed name in search query without explicitly clicking dropdown item
+    if (!targetMemberId && memberSearchQuery.trim()) {
+      const trimmedQuery = memberSearchQuery.trim();
+      const exactMatch = members.find(m => {
+        const status = (m.status?.split(':')[0] || 'ACTIVE').toUpperCase();
+        return status !== 'INACTIVE' && status !== 'DELETED' && m.name.trim() === trimmedQuery;
+      });
+      if (exactMatch) {
+        targetMemberId = exactMatch.id;
+      } else if (filteredFormMembersSearch.length === 1) {
+        targetMemberId = filteredFormMembersSearch[0].member.id;
+      }
+    }
+
+    if (!targetMemberId) {
       alert('대상 성도를 선택해주세요.');
       return;
     }
 
+    const todayLocal = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
+    const finalDate = formDate || todayLocal;
+    const finalType = formType || '대면심방';
+    const finalPlace = (formType === '연계심방' || formType === '새가족심방') ? '' : (formPlace || '');
+    const finalDetails = formDetails || '';
+    const finalPrayerRequests = formPrayerRequests || '';
+
     if (editingVisitation) {
       onUpdateVisitation({
         ...editingVisitation,
-        date: formDate,
-        memberId: formMemberId,
-        visitationType: formType,
-        place: (formType === '연계심방' || formType === '새가족심방') ? '' : formPlace,
-        details: formDetails,
-        prayerRequests: formPrayerRequests
+        date: finalDate,
+        memberId: targetMemberId,
+        visitationType: finalType,
+        place: finalPlace,
+        details: finalDetails,
+        prayerRequests: finalPrayerRequests
       });
       alert('심방 기록이 성공적으로 수정되었습니다.');
     } else {
       onAddVisitation({
-        date: formDate,
-        memberId: formMemberId,
-        visitationType: formType,
-        place: (formType === '연계심방' || formType === '새가족심방') ? '' : formPlace,
-        details: formDetails,
-        prayerRequests: formPrayerRequests
+        date: finalDate,
+        memberId: targetMemberId,
+        visitationType: finalType,
+        place: finalPlace,
+        details: finalDetails,
+        prayerRequests: finalPrayerRequests
       });
       alert('심방 기록이 성공적으로 저장되었습니다.');
     }
 
     // Reset and switch to list tab
     setFormMemberId('');
-    const todayLocal = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 10);
     setFormDate(todayLocal);
     setFormType('대면심방');
     setFormPlace('');
@@ -1440,8 +1463,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
                   <input
                     type="text"
                     disabled={formType === '새가족심방'}
-                    required={formType !== '기타심방' && formType !== '연계심방' && formType !== '새가족심방'}
-                    placeholder={formType === '새가족심방' ? '새가족심방은 위치 입력을 하지 않습니다' : '예: 강남구 역삼동, 교회 소예배실, 성도 가정 등 (기타/연계/새가족심방은 입력 생략 가능)'}
+                    placeholder={formType === '새가족심방' ? '새가족심방은 위치 입력을 하지 않습니다' : '예: 강남구 역삼동, 교회 소예배실, 성도 가정 등 (선택 사항 - 나중에 수정 가능)'}
                     value={formType === '새가족심방' ? '' : formPlace}
                     onChange={(e) => setFormPlace(e.target.value)}
                     className="w-full h-10 px-3 py-2 border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-slate-800 dark:text-slate-200 disabled:bg-slate-200/50 dark:disabled:bg-slate-900/80 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed"
@@ -1457,10 +1479,12 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
 
               {/* Details Field */}
               <div className="space-y-0.5">
-                <label className="block text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">심방 상세 내용</label>
+                <label className="block text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  심방 상세 내용 <span className="text-[10px] text-slate-400 font-normal uppercase lowercase">(선택 사항 - 나중에 수정 가능)</span>
+                </label>
                 <textarea
                   rows={3}
-                  placeholder="이야기 나눈 삶의 고민, 신앙 상태 변화 및 양육 내용을 요약 기록해 주세요."
+                  placeholder="이야기 나눈 삶의 고민, 신앙 상태 변화 및 양육 내용을 요약 기록해 주세요. (미입력 시에도 등록 가능하며 나중에 언제든지 수정할 수 있습니다)"
                   value={formDetails}
                   onChange={(e) => setFormDetails(e.target.value)}
                   className="w-full p-2 border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all leading-relaxed"
@@ -1469,10 +1493,12 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
 
               {/* Prayer Requests Field */}
               <div className="space-y-0.5">
-                <label className="block text-[10px] sm:text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">나눈 기도제목 (목록화)</label>
+                <label className="block text-[10px] sm:text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                  나눈 기도제목 (목록화) <span className="text-[10px] text-indigo-400 font-normal uppercase lowercase">(선택 사항)</span>
+                </label>
                 <textarea
                   rows={2}
-                  placeholder="기도제목을 줄을 나누어 적어주세요."
+                  placeholder="기도제목을 줄을 나누어 적어주세요. (선택 사항 - 나중에 수정 가능)"
                   value={formPrayerRequests}
                   onChange={(e) => setFormPrayerRequests(e.target.value)}
                   className="w-full p-2 border border-indigo-100 dark:border-indigo-900 bg-indigo-50/10 dark:bg-indigo-950/10 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-indigo-950 dark:text-indigo-200 font-semibold leading-relaxed"
@@ -1495,28 +1521,28 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
         /* STATISTICS & SEARCHABLE MANAGEMENT LIST VIEW IN PREMIUM HIGH-CONTRAST PC LOOK */
         <div className="space-y-4 sm:space-y-6">
           {/* Interactive Bento Stats Cards with 8 Fully Split Categories */}
-          <div className="grid grid-cols-4 lg:grid-cols-8 gap-1.5 sm:gap-3 shrink-0">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3 shrink-0">
             {/* 1. Total (ALL) */}
             <button
               type="button"
               onClick={() => setSelectedType('ALL')}
-              className={`p-1.5 sm:p-3 rounded-lg sm:rounded-2xl border text-center sm:text-left flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1 sm:gap-3 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer min-w-0 group ${
+              className={`p-2.5 sm:p-3 rounded-2xl border text-left flex items-center justify-start gap-2.5 sm:gap-3 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer min-w-0 group ${
                 selectedType === 'ALL'
-                  ? 'bg-indigo-50/45 dark:bg-indigo-950/20 border-indigo-500 shadow-[0_4px_12px_-4px_rgba(79,70,229,0.15)] sm:shadow-[0_8px_20px_-6px_rgba(79,70,229,0.15)] scale-[1.02]'
-                  : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800/50 hover:border-indigo-200 dark:hover:border-indigo-950 hover:shadow-[0_10px_25px_-8px_rgba(0,0,0,0.03)]'
+                  ? 'bg-indigo-50/45 dark:bg-indigo-950/20 border-indigo-500 shadow-sm scale-[1.02]'
+                  : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800/50 hover:border-indigo-200'
               }`}
             >
-              <div className={`w-6 h-6 sm:w-10 sm:h-10 rounded-md sm:rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 ${
+              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 ${
                 selectedType === 'ALL'
                   ? 'bg-indigo-500 text-white'
                   : 'bg-indigo-50/50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400'
               }`}>
-                <Clipboard size={11} className="sm:w-[17px] sm:h-[17px]" />
+                <Clipboard size={14} className="sm:w-[17px] sm:h-[17px]" />
               </div>
-              <div className="min-w-0 text-center sm:text-left">
-                <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest whitespace-nowrap">총 심방</p>
-                <p className="text-xs sm:text-lg font-black text-slate-900 dark:text-slate-100 mt-0.5 font-sans tracking-tight leading-none">
-                  {stats.total}<span className="text-[8px] sm:text-[11px] font-semibold text-slate-400 ml-0.5">건</span>
+              <div className="min-w-0 text-left">
+                <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tight whitespace-nowrap">총 심방</p>
+                <p className="text-sm sm:text-lg font-black text-slate-900 dark:text-slate-100 mt-0.5 font-sans tracking-tight leading-none">
+                  {stats.total}<span className="text-[10px] sm:text-[11px] font-semibold text-slate-400 ml-0.5">건</span>
                 </p>
               </div>
             </button>
@@ -1525,23 +1551,23 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
             <button
               type="button"
               onClick={() => setSelectedType(selectedType === '대면심방' ? 'ALL' : '대면심방')}
-              className={`p-1.5 sm:p-3 rounded-lg sm:rounded-2xl border text-center sm:text-left flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1 sm:gap-3 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer min-w-0 group ${
+              className={`p-2.5 sm:p-3 rounded-2xl border text-left flex items-center justify-start gap-2.5 sm:gap-3 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer min-w-0 group ${
                 selectedType === '대면심방'
-                  ? 'bg-emerald-50/45 dark:bg-emerald-950/20 border-emerald-500 shadow-[0_4px_12px_-4px_rgba(16,185,129,0.15)] sm:shadow-[0_8px_20px_-6px_rgba(16,185,129,0.15)] scale-[1.02]'
-                  : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800/50 hover:border-emerald-200 dark:hover:border-emerald-950 hover:shadow-[0_10px_25px_-8px_rgba(0,0,0,0.03)]'
+                  ? 'bg-emerald-50/45 dark:bg-emerald-950/20 border-emerald-500 shadow-sm scale-[1.02]'
+                  : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800/50 hover:border-emerald-200'
               }`}
             >
-              <div className={`w-6 h-6 sm:w-10 sm:h-10 rounded-md sm:rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 ${
+              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 ${
                 selectedType === '대면심방'
                   ? 'bg-emerald-500 text-white'
                   : 'bg-emerald-50/50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
               }`}>
-                <Heart size={11} className="sm:w-[17px] sm:h-[17px]" />
+                <Heart size={14} className="sm:w-[17px] sm:h-[17px]" />
               </div>
-              <div className="min-w-0 text-center sm:text-left">
-                <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest whitespace-nowrap">대면 심방</p>
-                <p className="text-xs sm:text-lg font-black text-emerald-600 dark:text-emerald-400 mt-0.5 font-sans tracking-tight leading-none">
-                  {stats.faceToFace}<span className="text-[8px] sm:text-[11px] font-semibold text-slate-400 ml-0.5">건</span>
+              <div className="min-w-0 text-left">
+                <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tight whitespace-nowrap">대면 심방</p>
+                <p className="text-sm sm:text-lg font-black text-emerald-600 dark:text-emerald-400 mt-0.5 font-sans tracking-tight leading-none">
+                  {stats.faceToFace}<span className="text-[10px] sm:text-[11px] font-semibold text-slate-400 ml-0.5">건</span>
                 </p>
               </div>
             </button>
@@ -1550,23 +1576,23 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
             <button
               type="button"
               onClick={() => setSelectedType(selectedType === '가정방문' ? 'ALL' : '가정방문')}
-              className={`p-1.5 sm:p-3 rounded-lg sm:rounded-2xl border text-center sm:text-left flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1 sm:gap-3 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer min-w-0 group ${
+              className={`p-2.5 sm:p-3 rounded-2xl border text-left flex items-center justify-start gap-2.5 sm:gap-3 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer min-w-0 group ${
                 selectedType === '가정방문'
-                  ? 'bg-teal-50/45 dark:bg-teal-950/20 border-teal-500 shadow-[0_4px_12px_-4px_rgba(20,184,166,0.15)] sm:shadow-[0_8px_20px_-6px_rgba(20,184,166,0.15)] scale-[1.02]'
-                  : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800/50 hover:border-teal-200 dark:hover:border-teal-950 hover:shadow-[0_10px_25px_-8px_rgba(0,0,0,0.03)]'
+                  ? 'bg-teal-50/45 dark:bg-teal-950/20 border-teal-500 shadow-sm scale-[1.02]'
+                  : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800/50 hover:border-teal-200'
               }`}
             >
-              <div className={`w-6 h-6 sm:w-10 sm:h-10 rounded-md sm:rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 ${
+              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 ${
                 selectedType === '가정방문'
                   ? 'bg-teal-500 text-white'
                   : 'bg-teal-50/50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400'
               }`}>
-                <Home size={11} className="sm:w-[17px] sm:h-[17px]" />
+                <Home size={14} className="sm:w-[17px] sm:h-[17px]" />
               </div>
-              <div className="min-w-0 text-center sm:text-left">
-                <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest whitespace-nowrap">가정 방문</p>
-                <p className="text-xs sm:text-lg font-black text-teal-600 dark:text-teal-400 mt-0.5 font-sans tracking-tight leading-none">
-                  {stats.homeVisit}<span className="text-[8px] sm:text-[11px] font-semibold text-slate-400 ml-0.5">건</span>
+              <div className="min-w-0 text-left">
+                <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tight whitespace-nowrap">가정 방문</p>
+                <p className="text-sm sm:text-lg font-black text-teal-600 dark:text-teal-400 mt-0.5 font-sans tracking-tight leading-none">
+                  {stats.homeVisit}<span className="text-[10px] sm:text-[11px] font-semibold text-slate-400 ml-0.5">건</span>
                 </p>
               </div>
             </button>
@@ -1575,23 +1601,23 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
             <button
               type="button"
               onClick={() => setSelectedType(selectedType === '전화심방' ? 'ALL' : '전화심방')}
-              className={`p-1.5 sm:p-3 rounded-lg sm:rounded-2xl border text-center sm:text-left flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1 sm:gap-3 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer min-w-0 group ${
+              className={`p-2.5 sm:p-3 rounded-2xl border text-left flex items-center justify-start gap-2.5 sm:gap-3 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer min-w-0 group ${
                 selectedType === '전화심방'
-                  ? 'bg-blue-50/45 dark:bg-blue-950/20 border-blue-500 shadow-[0_4px_12px_-4px_rgba(59,130,246,0.15)] sm:shadow-[0_8px_20px_-6px_rgba(59,130,246,0.15)] scale-[1.02]'
-                  : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800/50 hover:border-blue-200 dark:hover:border-blue-950 hover:shadow-[0_10px_25px_-8px_rgba(0,0,0,0.03)]'
+                  ? 'bg-blue-50/45 dark:bg-blue-950/20 border-blue-500 shadow-sm scale-[1.02]'
+                  : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800/50 hover:border-blue-200'
               }`}
             >
-              <div className={`w-6 h-6 sm:w-10 sm:h-10 rounded-md sm:rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 ${
+              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 ${
                 selectedType === '전화심방'
                   ? 'bg-blue-500 text-white'
                   : 'bg-blue-50/50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400'
               }`}>
-                <Phone size={11} className="sm:w-[17px] sm:h-[17px]" />
+                <Phone size={14} className="sm:w-[17px] sm:h-[17px]" />
               </div>
-              <div className="min-w-0 text-center sm:text-left">
-                <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest whitespace-nowrap">전화 심방</p>
-                <p className="text-xs sm:text-lg font-black text-blue-600 dark:text-blue-400 mt-0.5 font-sans tracking-tight leading-none">
-                  {stats.phone}<span className="text-[8px] sm:text-[11px] font-semibold text-slate-400 ml-0.5">건</span>
+              <div className="min-w-0 text-left">
+                <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tight whitespace-nowrap">전화 심방</p>
+                <p className="text-sm sm:text-lg font-black text-blue-600 dark:text-blue-400 mt-0.5 font-sans tracking-tight leading-none">
+                  {stats.phone}<span className="text-[10px] sm:text-[11px] font-semibold text-slate-400 ml-0.5">건</span>
                 </p>
               </div>
             </button>
@@ -1600,23 +1626,23 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
             <button
               type="button"
               onClick={() => setSelectedType(selectedType === '새가족심방' ? 'ALL' : '새가족심방')}
-              className={`p-1.5 sm:p-3 rounded-lg sm:rounded-2xl border text-center sm:text-left flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1 sm:gap-3 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer min-w-0 group ${
+              className={`p-2.5 sm:p-3 rounded-2xl border text-left flex items-center justify-start gap-2.5 sm:gap-3 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer min-w-0 group ${
                 selectedType === '새가족심방'
-                  ? 'bg-rose-50/45 dark:bg-rose-950/20 border-rose-500 shadow-[0_4px_12px_-4px_rgba(244,63,94,0.15)] sm:shadow-[0_8px_20px_-6px_rgba(244,63,94,0.15)] scale-[1.02]'
-                  : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800/50 hover:border-rose-200 dark:hover:border-rose-950 hover:shadow-[0_10px_25px_-8px_rgba(0,0,0,0.03)]'
+                  ? 'bg-rose-50/45 dark:bg-rose-950/20 border-rose-500 shadow-sm scale-[1.02]'
+                  : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800/50 hover:border-rose-200'
               }`}
             >
-              <div className={`w-6 h-6 sm:w-10 sm:h-10 rounded-md sm:rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 ${
+              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 ${
                 selectedType === '새가족심방'
                   ? 'bg-rose-500 text-white'
                   : 'bg-rose-50/50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'
               }`}>
-                <UserPlus size={11} className="sm:w-[17px] sm:h-[17px]" />
+                <UserPlus size={14} className="sm:w-[17px] sm:h-[17px]" />
               </div>
-              <div className="min-w-0 text-center sm:text-left">
-                <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest whitespace-nowrap">새가족 심방</p>
-                <p className="text-xs sm:text-lg font-black text-rose-600 dark:text-rose-400 mt-0.5 font-sans tracking-tight leading-none">
-                  {stats.newFamily}<span className="text-[8px] sm:text-[11px] font-semibold text-slate-400 ml-0.5">건</span>
+              <div className="min-w-0 text-left">
+                <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tight whitespace-nowrap">새가족 심방</p>
+                <p className="text-sm sm:text-lg font-black text-rose-600 dark:text-rose-400 mt-0.5 font-sans tracking-tight leading-none">
+                  {stats.newFamily}<span className="text-[10px] sm:text-[11px] font-semibold text-slate-400 ml-0.5">건</span>
                 </p>
               </div>
             </button>
@@ -1625,23 +1651,23 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
             <button
               type="button"
               onClick={() => setSelectedType(selectedType === 'SNS심방' ? 'ALL' : 'SNS심방')}
-              className={`p-1.5 sm:p-3 rounded-lg sm:rounded-2xl border text-center sm:text-left flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1 sm:gap-3 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer min-w-0 group ${
+              className={`p-2.5 sm:p-3 rounded-2xl border text-left flex items-center justify-start gap-2.5 sm:gap-3 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer min-w-0 group ${
                 selectedType === 'SNS심방'
-                  ? 'bg-purple-50/45 dark:bg-purple-950/20 border-purple-500 shadow-[0_4px_12px_-4px_rgba(168,85,247,0.15)] sm:shadow-[0_8px_20px_-6px_rgba(168,85,247,0.15)] scale-[1.02]'
-                  : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800/50 hover:border-purple-200 dark:hover:border-purple-950 hover:shadow-[0_10px_25px_-8px_rgba(0,0,0,0.03)]'
+                  ? 'bg-purple-50/45 dark:bg-purple-950/20 border-purple-500 shadow-sm scale-[1.02]'
+                  : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800/50 hover:border-purple-200'
               }`}
             >
-              <div className={`w-6 h-6 sm:w-10 sm:h-10 rounded-md sm:rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 ${
+              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 ${
                 selectedType === 'SNS심방'
                   ? 'bg-purple-500 text-white'
                   : 'bg-purple-50/50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400'
               }`}>
-                <MessageSquare size={11} className="sm:w-[17px] sm:h-[17px]" />
+                <MessageSquare size={14} className="sm:w-[17px] sm:h-[17px]" />
               </div>
-              <div className="min-w-0 text-center sm:text-left">
-                <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest whitespace-nowrap">SNS 심방</p>
-                <p className="text-xs sm:text-lg font-black text-purple-600 dark:text-purple-400 mt-0.5 font-sans tracking-tight leading-none">
-                  {stats.sns}<span className="text-[8px] sm:text-[11px] font-semibold text-slate-400 ml-0.5">건</span>
+              <div className="min-w-0 text-left">
+                <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tight whitespace-nowrap">SNS 심방</p>
+                <p className="text-sm sm:text-lg font-black text-purple-600 dark:text-purple-400 mt-0.5 font-sans tracking-tight leading-none">
+                  {stats.sns}<span className="text-[10px] sm:text-[11px] font-semibold text-slate-400 ml-0.5">건</span>
                 </p>
               </div>
             </button>
@@ -1650,23 +1676,23 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
             <button
               type="button"
               onClick={() => setSelectedType(selectedType === '병원심방' ? 'ALL' : '병원심방')}
-              className={`p-1.5 sm:p-3 rounded-lg sm:rounded-2xl border text-center sm:text-left flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1 sm:gap-3 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer min-w-0 group ${
+              className={`p-2.5 sm:p-3 rounded-2xl border text-left flex items-center justify-start gap-2.5 sm:gap-3 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer min-w-0 group ${
                 selectedType === '병원심방'
-                  ? 'bg-red-50/45 dark:bg-red-950/20 border-red-500 shadow-[0_4px_12px_-4px_rgba(239,68,68,0.15)] sm:shadow-[0_8px_20px_-6px_rgba(239,68,68,0.15)] scale-[1.02]'
-                  : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800/50 hover:border-red-200 dark:hover:border-red-950 hover:shadow-[0_10px_25px_-8px_rgba(0,0,0,0.03)]'
+                  ? 'bg-red-50/45 dark:bg-red-950/20 border-red-500 shadow-sm scale-[1.02]'
+                  : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800/50 hover:border-red-200'
               }`}
             >
-              <div className={`w-6 h-6 sm:w-10 sm:h-10 rounded-md sm:rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 ${
+              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 ${
                 selectedType === '병원심방'
                   ? 'bg-red-500 text-white'
                   : 'bg-red-50/50 dark:bg-red-950/40 text-red-600 dark:text-red-400'
               }`}>
-                <Activity size={11} className="sm:w-[17px] sm:h-[17px]" />
+                <Activity size={14} className="sm:w-[17px] sm:h-[17px]" />
               </div>
-              <div className="min-w-0 text-center sm:text-left">
-                <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest whitespace-nowrap">병원 심방</p>
-                <p className="text-xs sm:text-lg font-black text-red-600 dark:text-red-400 mt-0.5 font-sans tracking-tight leading-none">
-                  {stats.hospital}<span className="text-[8px] sm:text-[11px] font-semibold text-slate-400 ml-0.5">건</span>
+              <div className="min-w-0 text-left">
+                <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tight whitespace-nowrap">병원 심방</p>
+                <p className="text-sm sm:text-lg font-black text-red-600 dark:text-red-400 mt-0.5 font-sans tracking-tight leading-none">
+                  {stats.hospital}<span className="text-[10px] sm:text-[11px] font-semibold text-slate-400 ml-0.5">건</span>
                 </p>
               </div>
             </button>
@@ -1675,23 +1701,23 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
             <button
               type="button"
               onClick={() => setSelectedType(selectedType === '기타심방' ? 'ALL' : '기타심방')}
-              className={`p-1.5 sm:p-3 rounded-lg sm:rounded-2xl border text-center sm:text-left flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1 sm:gap-3 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer min-w-0 group ${
+              className={`p-2.5 sm:p-3 rounded-2xl border text-left flex items-center justify-start gap-2.5 sm:gap-3 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer min-w-0 group ${
                 selectedType === '기타심방'
-                  ? 'bg-amber-50/45 dark:bg-amber-950/20 border-amber-500 shadow-[0_4px_12px_-4px_rgba(245,158,11,0.15)] sm:shadow-[0_8px_20px_-6px_rgba(245,158,11,0.15)] scale-[1.02]'
-                  : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800/50 hover:border-amber-200 dark:hover:border-amber-950 hover:shadow-[0_10px_25px_-8px_rgba(0,0,0,0.03)]'
+                  ? 'bg-amber-50/45 dark:bg-amber-950/20 border-amber-500 shadow-sm scale-[1.02]'
+                  : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800/50 hover:border-amber-200'
               }`}
             >
-              <div className={`w-6 h-6 sm:w-10 sm:h-10 rounded-md sm:rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 ${
+              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 ${
                 selectedType === '기타심방'
                   ? 'bg-amber-500 text-white'
                   : 'bg-amber-50/50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
               }`}>
-                <Sparkles size={11} className="sm:w-[17px] sm:h-[17px]" />
+                <Sparkles size={14} className="sm:w-[17px] sm:h-[17px]" />
               </div>
-              <div className="min-w-0 text-center sm:text-left">
-                <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest whitespace-nowrap">기타 심방</p>
-                <p className="text-xs sm:text-lg font-black text-amber-600 dark:text-amber-400 mt-0.5 font-sans tracking-tight leading-none">
-                  {stats.other}<span className="text-[8px] sm:text-[11px] font-semibold text-slate-400 ml-0.5">건</span>
+              <div className="min-w-0 text-left">
+                <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tight whitespace-nowrap">기타 심방</p>
+                <p className="text-sm sm:text-lg font-black text-amber-600 dark:text-amber-400 mt-0.5 font-sans tracking-tight leading-none">
+                  {stats.other}<span className="text-[10px] sm:text-[11px] font-semibold text-slate-400 ml-0.5">건</span>
                 </p>
               </div>
             </button>
@@ -1710,12 +1736,12 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
               />
             </div>
             
-            <div className="flex flex-wrap gap-2 w-full md:w-auto justify-start sm:justify-end shrink-0">
-              <div className="relative flex-1 sm:flex-initial">
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full md:w-auto justify-start sm:justify-end shrink-0">
+              <div className="relative col-span-2 sm:col-span-1">
                 <button
                   type="button"
                   onClick={() => setIsCalendarFilterOpen(!isCalendarFilterOpen)}
-                  className={`w-full sm:w-auto px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`w-full sm:w-auto px-3 h-9 rounded-xl text-xs sm:text-sm font-bold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     selectedFilterDate 
                       ? 'bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-950/30 dark:border-rose-900/40 dark:text-rose-400' 
                       : isCalendarFilterOpen
@@ -1841,7 +1867,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
               <select
                 value={selectedGroup}
                 onChange={(e) => setSelectedGroup(e.target.value)}
-                className="flex-1 sm:flex-initial border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 text-[11px] sm:text-xs text-slate-700 dark:text-slate-300 outline-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700"
+                className="w-full sm:w-auto border border-slate-200/80 dark:border-slate-800 rounded-xl px-2.5 h-9 bg-slate-50/80 dark:bg-slate-800 text-xs sm:text-sm text-slate-700 dark:text-slate-300 outline-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors font-medium"
               >
                 <option value="ALL">모든 소그룹</option>
                 {availableGroups.map(g => (
@@ -1852,7 +1878,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
               <select
                 value={selectedType}
                 onChange={(e) => setSelectedType(e.target.value)}
-                className="flex-1 sm:flex-initial border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 text-[11px] sm:text-xs text-slate-700 dark:text-slate-300 outline-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700"
+                className="w-full sm:w-auto border border-slate-200/80 dark:border-slate-800 rounded-xl px-2.5 h-9 bg-slate-50/80 dark:bg-slate-800 text-xs sm:text-sm text-slate-700 dark:text-slate-300 outline-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors font-medium"
               >
                 <option value="ALL">모든 심방구분</option>
                 {VISITATION_TYPES.map(t => (
@@ -1864,7 +1890,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="flex-1 sm:flex-initial border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 text-[11px] sm:text-xs text-slate-700 dark:text-slate-300 outline-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 font-bold"
+                className="w-full sm:w-auto border border-slate-200/80 dark:border-slate-800 rounded-xl px-2.5 h-9 bg-slate-50/80 dark:bg-slate-800 text-xs sm:text-sm text-slate-700 dark:text-slate-300 outline-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors font-bold"
               >
                 <option value="latest">최신 등록순</option>
                 <option value="oldest">과거 등록순</option>
@@ -1875,7 +1901,7 @@ const VisitationManagement: React.FC<VisitationManagementProps> = ({
               <select
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value as any)}
-                className="flex-1 sm:flex-initial border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 text-[11px] sm:text-xs text-slate-700 dark:text-slate-300 outline-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700"
+                className="w-full sm:w-auto border border-slate-200/80 dark:border-slate-800 rounded-xl px-2.5 h-9 bg-slate-50/80 dark:bg-slate-800 text-xs sm:text-sm text-slate-700 dark:text-slate-300 outline-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors font-medium"
               >
                 <option value="ALL">모든 우선순위 상태</option>
                 <option value="consecutive3">🚨 3주 연속 결석</option>

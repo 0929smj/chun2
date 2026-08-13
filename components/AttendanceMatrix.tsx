@@ -298,15 +298,15 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
         </div>
         
         {/* Modern & Compact Filters Layout */}
-        <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           {/* Compact Name Search */}
           <div className="relative flex-1 min-w-[120px] sm:flex-initial sm:w-36">
-            <div className="absolute inset-y-0 left-0 flex items-center pl-2 pointer-events-none">
-              <Search size={12} className="text-slate-400 dark:text-slate-500" />
+            <div className="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none">
+              <Search size={13} className="text-slate-400 dark:text-slate-500" />
             </div>
             <input 
               type="text" 
-              className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 border border-slate-200/60 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-[11px] rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-2 h-8 transition-all outline-none" 
+              className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 border border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium rounded-xl focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-8 pr-2.5 h-9 transition-all outline-none" 
               placeholder="이름 검색" 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -314,9 +314,9 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
           </div>
 
           {/* Compact Month Select */}
-          <div className="w-[80px] sm:w-20">
+          <div className="w-[88px] sm:w-24">
             <select
-              className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-[11px] rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full px-1.5 h-8 transition-all cursor-pointer outline-none"
+              className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium rounded-xl focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full px-2 h-9 transition-all cursor-pointer outline-none"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
             >
@@ -328,9 +328,9 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
           </div>
 
           {/* Compact Group Select */}
-          <div className="flex-1 min-w-[110px] sm:flex-initial sm:w-32">
+          <div className="flex-1 min-w-[120px] sm:flex-initial sm:w-36">
             <select
-              className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-[11px] rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full px-1.5 h-8 truncate transition-all cursor-pointer outline-none"
+              className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium rounded-xl focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full px-2 h-9 truncate transition-all cursor-pointer outline-none"
               value={filterGroup}
               onChange={(e) => setFilterGroup(e.target.value)}
             >
@@ -343,9 +343,9 @@ const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
 
           {/* Compact Sort Select */}
           {isVisitationMode && (
-            <div className="w-[100px] sm:w-28">
+            <div className="w-[110px] sm:w-32">
               <select
-                className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-[11px] rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full px-1.5 h-8 transition-all cursor-pointer outline-none"
+                className="bg-slate-50 dark:bg-slate-900 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium rounded-xl focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full px-2 h-9 transition-all cursor-pointer outline-none"
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as 'group' | 'attendance' | 'age')}
               >

@@ -357,93 +357,106 @@ const Dashboard: React.FC<DashboardProps> = ({ members, records, meetingStatus =
       </div>
     </div>
 
-      {/* Monthly Average Chart */}
-      <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-200/50 dark:border-slate-800/80 shadow-[0_1px_4px_rgba(0,0,0,0.015)]">
-        <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-3">월별 평균 출석 현황</h3>
-        <div className="h-52 sm:h-64 w-full mb-4">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={monthlyStats} margin={{ top: 10, right: 0, left: -25, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200/50 dark:text-slate-800/50" />
-              <XAxis dataKey="month" stroke="currentColor" className="text-slate-400 dark:text-slate-600" fontSize={9} interval={0} />
-              <YAxis stroke="currentColor" className="text-slate-400 dark:text-slate-600" fontSize={9} />
-              <Tooltip 
-                cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
-                contentStyle={{ borderRadius: '6px', border: 'none', boxShadow: '0 2px 4px -1px rgb(0 0 0 / 0.05)', fontSize: '11px' }}
-              />
-              <Legend wrapperStyle={{fontSize: '11px', paddingTop: '5px'}} />
-              <Bar dataKey="worshipAverage" name="예배" fill="#3b82f6" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="gatheringAverage" name="집회" fill="#6366f1" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="woolAverage" name="울모임" fill="#10b981" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+      {/* Bottom Section: Monthly Average & Group Comparison Grid on PC */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-5">
+        {/* Monthly Average Chart */}
+        <div className="bg-white dark:bg-slate-900 p-3.5 sm:p-5 rounded-2xl border border-slate-200/60 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+          <div>
+            <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 mb-3 flex items-center gap-1.5">
+              <span className="w-1.5 h-3.5 bg-indigo-500 rounded-full inline-block"></span>
+              월별 평균 출석 현황
+            </h3>
+            <div className="h-56 sm:h-64 w-full mb-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyStats} margin={{ top: 10, right: 0, left: -25, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200/50 dark:text-slate-800/50" />
+                  <XAxis dataKey="month" stroke="currentColor" className="text-slate-400 dark:text-slate-600" fontSize={9} interval={0} />
+                  <YAxis stroke="currentColor" className="text-slate-400 dark:text-slate-600" fontSize={9} />
+                  <Tooltip 
+                    cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '11px' }}
+                  />
+                  <Legend wrapperStyle={{fontSize: '11px', paddingTop: '5px'}} />
+                  <Bar dataKey="worshipAverage" name="예배" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="gatheringAverage" name="집회" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="woolAverage" name="울모임" fill="#10b981" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          
+          {/* Monthly Stats Table */}
+          <div className="overflow-x-auto custom-scrollbar border-t border-slate-100 dark:border-slate-800/60 pt-3.5">
+            <h4 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2">월별 상세 데이터 (평균)</h4>
+            <table className="w-full text-xs text-center text-slate-500 dark:text-slate-400 border-collapse border border-slate-200/60 dark:border-slate-800 rounded-xl overflow-hidden">
+              <thead className="text-[10px] text-slate-700 dark:text-slate-300 uppercase bg-slate-50 dark:bg-slate-800/80">
+                <tr>
+                  <th scope="col" className="px-1.5 py-1.5 border border-slate-200 dark:border-slate-800 sticky left-0 bg-slate-50 dark:bg-slate-800 z-20 min-w-[50px] font-bold">구분</th>
+                  {monthlyStats.map(stat => (
+                    <th key={stat.month} scope="col" className="px-1 py-1.5 border border-slate-200 dark:border-slate-800 font-semibold min-w-[32px]">
+                      {stat.month}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800">
+                  <td className="px-1.5 py-1.5 font-bold text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-800 sticky left-0 bg-slate-50 dark:bg-slate-800 z-10 whitespace-nowrap">예배</td>
+                  {monthlyStats.map(stat => (
+                    <td key={stat.month} className="px-1 py-1.5 border border-slate-200/60 dark:border-slate-800 font-medium">{Math.ceil(stat.worshipAverage)}</td>
+                  ))}
+                </tr>
+                <tr className="bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800">
+                  <td className="px-1.5 py-1.5 font-bold text-indigo-600 dark:text-indigo-400 border border-slate-200 dark:border-slate-800 sticky left-0 bg-slate-50 dark:bg-slate-800 z-10 whitespace-nowrap">집회</td>
+                  {monthlyStats.map(stat => (
+                    <td key={stat.month} className="px-1 py-1.5 border border-slate-200/60 dark:border-slate-800 font-medium">{Math.ceil(stat.gatheringAverage)}</td>
+                  ))}
+                </tr>
+                <tr className="bg-white dark:bg-slate-900">
+                  <td className="px-1.5 py-1.5 font-bold text-emerald-600 dark:text-emerald-400 border border-slate-200 dark:border-slate-800 sticky left-0 bg-slate-50 dark:bg-slate-800 z-10 whitespace-nowrap">울모임</td>
+                  {monthlyStats.map(stat => (
+                    <td key={stat.month} className="px-1 py-1.5 border border-slate-200/60 dark:border-slate-800 font-medium">{Math.ceil(stat.woolAverage)}</td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-        
-        {/* Monthly Stats Table */}
-        <div className="overflow-x-auto custom-scrollbar border-t border-slate-100 dark:border-slate-800/60 pt-4">
-          <h4 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2">월별 상세 데이터 (평균)</h4>
-          <table className="w-full text-xs text-center text-slate-500 dark:text-slate-400 border-collapse border border-slate-200/60 dark:border-slate-800 rounded-lg">
-            <thead className="text-[10px] text-slate-700 dark:text-slate-300 uppercase bg-slate-50 dark:bg-slate-800/80">
-              <tr>
-                <th scope="col" className="px-1.5 py-1.5 border border-slate-200 dark:border-slate-800 sticky left-0 bg-slate-50 dark:bg-slate-800 z-20 min-w-[50px] font-semibold">구분</th>
-                {monthlyStats.map(stat => (
-                  <th key={stat.month} scope="col" className="px-1 py-1.5 border border-slate-200 dark:border-slate-800 font-semibold min-w-[35px]">
-                    {stat.month}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-                <td className="px-1.5 py-1.5 font-bold text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-800 sticky left-0 bg-slate-50 dark:bg-slate-800 z-10 whitespace-nowrap">예배</td>
-                {monthlyStats.map(stat => (
-                  <td key={stat.month} className="px-1 py-1.5 border border-slate-200 dark:border-slate-800">{Math.ceil(stat.worshipAverage)}</td>
-                ))}
-              </tr>
-              <tr className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-                <td className="px-1.5 py-1.5 font-bold text-indigo-600 dark:text-indigo-400 border border-slate-200 dark:border-slate-800 sticky left-0 bg-slate-50 dark:bg-slate-800 z-10 whitespace-nowrap">집회</td>
-                {monthlyStats.map(stat => (
-                  <td key={stat.month} className="px-1 py-1.5 border border-slate-200 dark:border-slate-800">{Math.ceil(stat.gatheringAverage)}</td>
-                ))}
-              </tr>
-              <tr className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-                <td className="px-1.5 py-1.5 font-bold text-emerald-600 dark:text-emerald-400 border border-slate-200 dark:border-slate-800 sticky left-0 bg-slate-50 dark:bg-slate-800 z-10 whitespace-nowrap">울모임</td>
-                {monthlyStats.map(stat => (
-                  <td key={stat.month} className="px-1 py-1.5 border border-slate-200 dark:border-slate-800">{Math.ceil(stat.woolAverage)}</td>
-                ))}
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
 
-      {/* Group Comparison Chart */}
-      <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-200/50 dark:border-slate-800/80 shadow-[0_1px_4px_rgba(0,0,0,0.015)]">
-        <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-3">소그룹별 누적 참여 현황</h3>
-        <div className="h-52 sm:h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={groupStats} margin={{ top: 10, right: 0, left: -25, bottom: 25 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200/50 dark:text-slate-800/50" />
-              <XAxis 
-                dataKey="groupName" 
-                stroke="currentColor" 
-                className="text-slate-400 dark:text-slate-600"
-                fontSize={9} 
-                interval={0}
-                angle={-30}
-                textAnchor="end"
-                height={40}
-              />
-              <YAxis stroke="currentColor" className="text-slate-400 dark:text-slate-600" fontSize={9} />
-              <Tooltip 
-                cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
-                contentStyle={{ borderRadius: '6px', border: 'none', boxShadow: '0 2px 4px -1px rgb(0 0 0 / 0.05)', fontSize: '11px' }}
-              />
-              <Legend wrapperStyle={{fontSize: '11px', paddingTop: '5px'}} />
-              <Bar dataKey="totalWorship" name="예배" fill="#3b82f6" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="totalGathering" name="집회" fill="#6366f1" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="totalWool" name="울모임" fill="#10b981" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+        {/* Group Comparison Chart */}
+        <div className="bg-white dark:bg-slate-900 p-3.5 sm:p-5 rounded-2xl border border-slate-200/60 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+          <div>
+            <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 mb-3 flex items-center gap-1.5">
+              <span className="w-1.5 h-3.5 bg-emerald-500 rounded-full inline-block"></span>
+              소그룹별 누적 참여 현황
+            </h3>
+            <div className="h-64 sm:h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={groupStats} margin={{ top: 10, right: 0, left: -25, bottom: 25 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200/50 dark:text-slate-800/50" />
+                  <XAxis 
+                    dataKey="groupName" 
+                    stroke="currentColor" 
+                    className="text-slate-400 dark:text-slate-600"
+                    fontSize={10} 
+                    interval={0}
+                    angle={-30}
+                    textAnchor="end"
+                    height={40}
+                  />
+                  <YAxis stroke="currentColor" className="text-slate-400 dark:text-slate-600" fontSize={10} />
+                  <Tooltip 
+                    cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '11px' }}
+                  />
+                  <Legend wrapperStyle={{fontSize: '11px', paddingTop: '5px'}} />
+                  <Bar dataKey="totalWorship" name="예배" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="totalGathering" name="집회" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="totalWool" name="울모임" fill="#10b981" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         </div>
       </div>
     </div>

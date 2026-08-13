@@ -200,12 +200,44 @@ const Layout: React.FC<LayoutProps> = ({ children, isVisitationMode = false }) =
 
         <div className={`mx-auto w-full flex-1 flex flex-col ${
           isOrgPage 
-            ? 'max-w-none p-3 lg:p-4 overflow-hidden' 
-            : 'p-3 sm:p-4 lg:p-5 max-w-none gap-4'
+            ? 'max-w-none p-2.5 sm:p-3 lg:p-4 overflow-hidden pb-16 lg:pb-0' 
+            : 'p-3 sm:p-4 lg:p-5 max-w-none gap-3.5 pb-20 lg:pb-5'
         }`}>
           {children}
         </div>
       </main>
+
+      {/* Mobile Bottom Navigation Bar */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 px-1 py-1 flex items-center justify-around shadow-lg">
+        {[
+          { to: '/org', icon: Network, label: '조직도' },
+          { to: '/attendance', icon: CalendarDays, label: '출석부' },
+          { to: '/prayer', icon: BookOpen, label: '기도제목' },
+          ...(isVisitationMode ? [{ to: '/visitation', icon: Heart, label: '심방' }] : [{ to: '/profile', icon: UserSearch, label: '개인현황' }]),
+          { to: '/manage', icon: Users, label: '관리' },
+        ].map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) =>
+              `flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all ${
+                isActive
+                  ? 'text-indigo-600 dark:text-indigo-400 font-bold'
+                  : 'text-slate-500 dark:text-slate-400 font-medium hover:text-slate-800 dark:hover:text-slate-200'
+              }`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <div className={`p-1 rounded-xl transition-colors ${isActive ? 'bg-indigo-50 dark:bg-indigo-950/60' : ''}`}>
+                  <item.icon size={20} className={isActive ? 'stroke-[2.5]' : 'stroke-[1.8]'} />
+                </div>
+                <span className="text-[10px] mt-0.5 tracking-tight">{item.label}</span>
+              </>
+            )}
+          </NavLink>
+        ))}
+      </nav>
       
       {/* Overlay for mobile sidebar */}
       {isSidebarOpen && (

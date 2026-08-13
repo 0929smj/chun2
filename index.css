@@ -7,6 +7,25 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+/* Clean, modern input base defaults */
+input[type="text"],
+input[type="search"],
+input[type="date"],
+select,
+textarea {
+  font-size: 13px;
+  line-height: 1.4;
+}
+@media (min-width: 640px) {
+  input[type="text"],
+  input[type="search"],
+  input[type="date"],
+  select,
+  textarea {
+    font-size: 14px;
+  }
+}
+
 body {
   font-family: var(--font-sans);
   background-color: #fafbfc;
